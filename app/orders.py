@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Optional
 
@@ -91,3 +92,44 @@ def roster_candidates(session: Session, owner_id: str) -> list[tuple[User, str]]
         out.append((user, _line_for(sd)))
     out.sort(key=lambda pair: pair[0].display_name.lower())
     return out
+
+
+# ---------------------------------------------------------------------------
+# Till summary — collapses identical drinks into "Nx <line>" entries.
+# ---------------------------------------------------------------------------
+
+
+def till_summary(rows: list[OrderRow]) -> list[str]:
+    """Group order rows into till-ready lines.
+
+    Drinks with free-text notes never merge — each is its own line. Drinks
+    without notes group by every ordered option (base, size, milk, shots,
+    strength, temp, sweetener, length) per the coffee-taxonomy skill.
+    """
+    groups: "OrderedDict[tuple, dict]" = OrderedDict()
+    standalone: list[str] = []
+
+    for row in rows:
+        sd = row.saved
+        if sd is None:
+            continue
+        if sd.notes:
+            standalone.append(row.line)
+            continue
+        key = (
+            sd.base_id,
+            sd.size,
+            sd.milk,
+            sd.shots,
+            sd.strength,
+            sd.temp,
+            sd.sweetener,
+            sd.length,
+        )
+        if key not in groups:
+            groups[key] = {"count": 0, "line": row.line}
+        groups[key]["count"] += 1
+
+    lines = [f"{g['count']}x {g['line']}" for g in groups.values()]
+    lines.extend(f"1x {line}" for line in standalone)
+    return lines

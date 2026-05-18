@@ -32,6 +32,7 @@ from app.orders import (
     order_rows,
     remove_from_order,
     roster_candidates,
+    till_summary,
 )
 from app.users import get_current_user
 
@@ -91,9 +92,11 @@ def _drink_form_ctx(saved: SavedDrink | None) -> dict:
 
 
 def _order_section_ctx(session: Session, user: User, *, oob: bool = False) -> dict:
+    rows = order_rows(session, user.id)
     return {
-        "rows": order_rows(session, user.id),
+        "rows": rows,
         "roster": roster_candidates(session, user.id),
+        "till_lines": till_summary(rows),
         "oob": oob,
     }
 

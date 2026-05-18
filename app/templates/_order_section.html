@@ -24,6 +24,27 @@
     {% endif %}
   </article>
 
+  <article x-data="{ copied: false }">
+    <header><h2>For the till</h2></header>
+    {% if till_lines %}
+      <textarea
+        readonly
+        rows="{{ till_lines | length }}"
+        x-ref="tillText"
+        style="font-family: ui-monospace, monospace;"
+      >{{ till_lines | join('\n') }}</textarea>
+      <button
+        type="button"
+        x-on:click="navigator.clipboard.writeText($refs.tillText.value).then(() => { copied = true; setTimeout(() => copied = false, 1500); })"
+      >
+        <span x-show="!copied">Copy for the till</span>
+        <span x-show="copied" x-cloak>Copied ✓</span>
+      </button>
+    {% else %}
+      <p><em>Your order is empty.</em></p>
+    {% endif %}
+  </article>
+
   <article>
     <header><h2>Add to your order</h2></header>
     {% if not roster %}
