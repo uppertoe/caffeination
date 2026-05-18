@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local SQLite data
+data/
+*.db
+*.db-journal
+
+# Editors
+.idea/
+.vscode/
+.DS_Store
