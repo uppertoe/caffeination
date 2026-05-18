@@ -18,7 +18,9 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/install/bin:${PATH}" \
     PYTHONPATH="/install/lib/python3.12/site-packages"
 
-RUN useradd --create-home --uid 1000 app
+RUN useradd --create-home --uid 1000 app \
+ && mkdir -p /data \
+ && chown app:app /data
 
 COPY --from=builder /install /install
 WORKDIR /app
