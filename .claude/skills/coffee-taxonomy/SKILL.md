@@ -19,10 +19,11 @@ that apply depend on the base. The axes are:
 | ----------- | --------------------------------------------------------- |
 | `temp`      | `hot`, `iced`                                              |
 | `size`      | `small` (~240 ml), `regular` (~350 ml), `large` (~450 ml)  |
-| `milk`      | `full_cream`, `skim`, `oat`, `soy`, `almond`, `lactose_free` |
+| `milk`      | `full_cream`, `skinny`, `oat`, `soy`, `almond`, `lactose_free` |
 | `shots`     | `1`, `2`, `3` (rare)                                      |
-| `sweetener` | `none`, `one_sugar`, `two_sugar`, `raw`, `honey`           |
+| `sweetener` | `none`, `one_sugar`, `two_sugar`, `honey`                  |
 | `strength`  | `regular`, `weak`, `extra_shot`, `decaf`, `half_caf`       |
+| `length`    | `short`, `long` — **macchiato only**; determines milk volume, not shot count |
 | `notes`     | free text (≤80 chars)                                     |
 
 ## The drinks
@@ -30,7 +31,7 @@ that apply depend on the base. The axes are:
 | Id              | Display name      | Family    | Has milk? | Sized? | Shot-adjustable? | Notes |
 | --------------- | ----------------- | --------- | --------- | ------ | ---------------- | ----- |
 | `espresso`      | Espresso          | espresso  | no        | no     | yes (1 or 2)     | "Double" = 2 shots. No size. No milk. |
-| `macchiato`     | Macchiato         | espresso  | dash      | no     | yes (1 or 2)     | Short (1 shot) or long (2 shots, served in a taller glass). The shot count *is* the size — never render a separate size selector. Naming: render as `short macchiato` / `long macchiato`, not "double macchiato". |
+| `macchiato`     | Macchiato         | espresso  | dash      | no     | 1 only           | Has a `length` axis unique to this drink — `short` (1 shot, dash of milk in a 90 ml glass) or `long` (1 shot, more milk in a ~200 ml glass, sometimes topped with hot water). **Length = milk volume, not shot count.** Render the option as a segmented `short ⇄ long` control; never expose shots, size, or strength. Naming: `short macchiato` / `long macchiato`. |
 | `piccolo`       | Piccolo (latte)   | espresso  | yes       | no     | 1 only           | Ristretto + steamed milk in a 90 ml glass. No size; no shot adjust. |
 | `long_black`    | Long black        | black     | no        | yes    | yes              | Hot water + 2 shots. No milk. Sized. |
 | `latte`         | Latte             | milk      | yes       | yes    | yes              | The default group-order workhorse. |
