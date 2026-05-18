@@ -1,4 +1,3 @@
-import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -34,7 +33,12 @@ from app.orders import (
     roster_candidates,
     till_summary,
 )
-from app.users import get_current_user
+from app.users import (
+    claim_user,
+    find_user_by_display_name,
+    get_current_user,
+    named_users_with_lines,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -60,6 +64,10 @@ class IdentityMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
+def _onboard_ctx(session: Session) -> dict:
+    return {"named_users": named_users_with_lines(session)}
+
+
 def _drink_card_ctx(session: Session, user: User) -> dict:
     saved = get_saved_drink(session, user.id)
     till_line = None
@@ -82,7 +90,7 @@ def _drink_form_ctx(saved: SavedDrink | None) -> dict:
         "notes": saved.notes if saved else "",
     }
     return {
-        "rules_json": json.dumps(rules_for_template()),
+        "rules": rules_for_template(),
         "initial": initial,
         "drinks": DRINKS,
         "milk_options": list(MILK_LABELS.items()),
@@ -121,11 +129,35 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
         session: Session = Depends(get_session),
     ):
-        ctx = {"app_name": settings.app_name, "user": user}
+        ctx: dict = {"app_name": settings.app_name, "user": user}
         if user.display_name:
             ctx.update(_drink_card_ctx(session, user))
             ctx.update(_order_section_ctx(session, user))
+        else:
+            ctx.update(_onboard_ctx(session))
         return templates.TemplateResponse(request, "index.html", ctx)
+
+    @app.post("/onboard/claim/{user_id}", response_class=HTMLResponse)
+    def onboard_claim(
+        user_id: str,
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        claimed = claim_user(session, request, user, user_id)
+        if claimed is None:
+            return templates.TemplateResponse(
+                request,
+                "_onboard.html",
+                {**_onboard_ctx(session), "error": "That user doesn't exist."},
+                status_code=404,
+            )
+        ctx = {
+            "user": claimed,
+            **_drink_card_ctx(session, claimed),
+            **_order_section_ctx(session, claimed),
+        }
+        return templates.TemplateResponse(request, "_dashboard.html", ctx)
 
     @app.post("/me/name", response_class=HTMLResponse)
     def set_name(
@@ -138,9 +170,25 @@ def create_app() -> FastAPI:
         if not (1 <= len(name) <= 40):
             return templates.TemplateResponse(
                 request,
-                "_name_form.html",
-                {"error": "Name must be 1–40 characters.", "submitted": name},
+                "_onboard.html",
+                {
+                    **_onboard_ctx(session),
+                    "error": "Name must be 1–40 characters.",
+                    "submitted": name,
+                },
                 status_code=422,
+            )
+        existing = find_user_by_display_name(session, name)
+        if existing is not None and existing.id != user.id:
+            return templates.TemplateResponse(
+                request,
+                "_onboard.html",
+                {
+                    **_onboard_ctx(session),
+                    "error": f"That name's already taken. Pick '{existing.display_name}' from the list to claim it.",
+                    "submitted": name,
+                },
+                status_code=409,
             )
         user.display_name = name
         session.add(user)
@@ -202,7 +250,6 @@ def create_app() -> FastAPI:
                 status_code=422,
             )
         upsert_saved_drink(session, user.id, normalized)
-        # Update the drink card (hx-target) and the order section out-of-band.
         card_html = _render("_drink_card.html", _drink_card_ctx(session, user))
         order_html = _render(
             "_order_section.html", _order_section_ctx(session, user, oob=True)

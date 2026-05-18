@@ -7,7 +7,7 @@
     hx-target="#drink-section"
     hx-swap="outerHTML"
     x-data='{
-      rules: {{ rules_json | safe }},
+      rules: {{ rules | tojson }},
       baseId: {{ initial.base_id | tojson }},
       temp: {{ (initial.temp or "hot") | tojson }},
       size: {{ (initial.size or "regular") | tojson }},
@@ -30,7 +30,7 @@
         if (!r.allowsStrength) this.strength = "regular";
       }
     }'
-    x-init="$watch('baseId', () => onBaseChange())"
+    x-init='$watch("baseId", () => onBaseChange())'
   >
     <label>
       Base drink

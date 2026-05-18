@@ -1,0 +1,66 @@
+<article
+  x-data='{
+    query: {{ (submitted or "") | tojson }},
+    users: {{ named_users | tojson }},
+    get q() { return this.query.trim(); },
+    get filtered() {
+      const needle = this.q.toLowerCase();
+      if (!needle) return this.users;
+      return this.users.filter(u => u.display_name.toLowerCase().includes(needle));
+    },
+    get hasExact() {
+      const needle = this.q.toLowerCase();
+      return this.users.some(u => u.display_name.toLowerCase() === needle);
+    },
+    claim(id) {
+      htmx.ajax("POST", "/onboard/claim/" + id, { target: "#app", swap: "innerHTML" });
+    }
+  }'
+>
+  <header>
+    <h1>Welcome to coffee-rch</h1>
+    <p>Find yourself on the list, or type a new name to add yourself.</p>
+  </header>
+
+  {% if error %}<p role="alert" class="muted"><small>{{ error }}</small></p>{% endif %}
+
+  <label>
+    <input
+      type="search"
+      placeholder="Type your name..."
+      autocomplete="off"
+      autofocus
+      x-model="query"
+    />
+  </label>
+
+  <ul x-show="filtered.length > 0" class="onboard-list">
+    <template x-for="u in filtered" :key="u.id">
+      <li>
+        <strong x-text="u.display_name"></strong>
+        <span x-text="u.drink_line ? ' — ' + u.drink_line : ''"></span>
+        <button type="button" @click="claim(u.id)">That&apos;s me</button>
+      </li>
+    </template>
+  </ul>
+
+  <p x-show="q && filtered.length === 0 && users.length > 0" class="muted">
+    <small>No matches for &ldquo;<span x-text="q"></span>&rdquo;.</small>
+  </p>
+
+  <form
+    x-show="q && !hasExact"
+    hx-post="/me/name"
+    hx-target="#app"
+    hx-swap="innerHTML"
+  >
+    <input type="hidden" name="display_name" :value="q" />
+    <button type="submit">
+      Create new: &ldquo;<span x-text="q"></span>&rdquo;
+    </button>
+  </form>
+
+  <p x-show="!q && users.length === 0" class="muted">
+    <small>No one&apos;s added a coffee yet. Type your name to get started.</small>
+  </p>
+</article>

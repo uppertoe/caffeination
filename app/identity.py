@@ -35,10 +35,15 @@ def read_identity(request: Request) -> str | None:
         return None
 
 
+def set_identity(request: Request, user_id: str) -> None:
+    """Stash a signed cookie value for the identity middleware to write."""
+    setattr(request.state, _FRESH_TOKEN_ATTR, _serializer().dumps(user_id))
+
+
 def mint_identity(request: Request) -> str:
     """Generate a new identity and stash the signed token for the middleware."""
     user_id = secrets.token_urlsafe(12)
-    setattr(request.state, _FRESH_TOKEN_ATTR, _serializer().dumps(user_id))
+    set_identity(request, user_id)
     return user_id
 
 
