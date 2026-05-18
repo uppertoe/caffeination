@@ -43,15 +43,19 @@ pytest
 
 ## Deploy
 
-CI builds and pushes the image to `ghcr.io/<owner>/<repo>:latest` (and `sha-<short>`)
-on every push to `main`. Pull and run it on any Docker host:
+CI builds and pushes the image to GHCR on every branch push:
+
+- `main` → `:latest`, `:main`, `:sha-<short>`
+- any other branch (e.g. `live-build`) → `:<branch>`, `:sha-<short>`
+
+Pull and run on any Docker host:
 
 ```bash
 docker run --rm -p 8000:8000 \
   -e SECRET_KEY=<a-real-secret> \
   -e DATABASE_URL=sqlite:////data/coffee.db \
   -v coffee-data:/data \
-  ghcr.io/<owner>/<repo>:latest
+  ghcr.io/uppertoe/caffeination:latest          # or :live-build for the MVP build
 ```
 
 ## Where things live
@@ -69,3 +73,9 @@ tests/            pytest + TestClient
 ```
 
 See [`CLAUDE.md`](./CLAUDE.md) for conventions and the live-build plan.
+
+## Running this as a live demo
+
+- [`LIVE_BUILD_PROMPT.md`](./LIVE_BUILD_PROMPT.md) — the prompt to paste into a fresh Claude Code session to reproduce the build, with demo cadence + recovery notes.
+- [`PLAN_B.md`](./PLAN_B.md) — the merge-and-ship fallback if the live build runs over.
+- `live-build` branch — the finished MVP, with 35 tests passing. Pre-validated as a clean merge into `main`.

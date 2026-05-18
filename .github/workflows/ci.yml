@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 
 permissions:
@@ -34,7 +34,9 @@ jobs:
 
   build-and-push:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Build on every branch push so each branch gets its own tag on GHCR.
+    # PRs only run the test job — they don't push images.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,8 +55,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Tag rules:
+          #   - :<branch>  for every branch push (e.g. :main, :live-build)
+          #   - :latest    only on the default branch
+          #   - :sha-<7>   every push, so a specific build is always pullable
           tags: |
-            type=raw,value=latest
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-
 
       - name: Build and push
