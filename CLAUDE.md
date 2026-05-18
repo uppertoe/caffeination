@@ -83,6 +83,22 @@ docker compose up --build       # containerised
 - `.claude/skills/coffee-taxonomy/` — Melbourne drink rules, sizes, shot
   semantics, milk options, naming conventions, and the constraint matrix
   for the drink-builder UX.
+- `.claude/skills/live-build-playbook/` — the phase plan for going from the
+  scaffold to a working group-order app, including the up-front decisions
+  to confirm, what to defer, and the three pre-flight scaffold fixes.
+- `.claude/skills/stack-patterns/` — concrete patterns for cookie-via-middleware,
+  lazy SQLite engine, JSON-in-attribute quoting, OOB swaps, server-side
+  normalization, and multi-user TestClient tests.
+
+If the user asks for the live build, lean on **live-build-playbook**; if
+you're writing new HTMX/Alpine code or a new model/route, **stack-patterns**
+has the recipes that avoid the time-sinks the first build hit.
+
+## See also
+
+- `LIVE_BUILD_PROMPT.md` — the prompt that, given this scaffold, reproduces
+  the build the playbook describes. Use it as a starting point if you're
+  invoking Claude Code fresh from a clone.
 
 ## Things to push back on
 
