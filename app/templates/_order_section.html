@@ -1,0 +1,47 @@
+<section id="order-section"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <article>
+    <header><h2>Your order</h2></header>
+    {% if not rows %}
+      <p><em>Save your usual above, then add other people from the roster.</em></p>
+    {% else %}
+      <ul class="order-list">
+        {% for row in rows %}
+        <li>
+          {% if row.is_self %}<small>(you)</small> {% endif %}
+          <strong>{{ row.user.display_name }}</strong> — {{ row.line }}
+          {% if not row.is_self %}
+          <button
+            type="button"
+            class="secondary outline"
+            hx-post="/order/remove/{{ row.user.id }}"
+            hx-target="#order-section"
+            hx-swap="outerHTML"
+          >Remove</button>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </article>
+
+  <article>
+    <header><h2>Add to your order</h2></header>
+    {% if not roster %}
+      <p><em>No one else has saved a drink yet.</em></p>
+    {% else %}
+      <ul class="roster-list">
+        {% for u, line in roster %}
+        <li>
+          <strong>{{ u.display_name }}</strong> — {{ line }}
+          <button
+            type="button"
+            hx-post="/order/add/{{ u.id }}"
+            hx-target="#order-section"
+            hx-swap="outerHTML"
+          >Add</button>
+        </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </article>
+</section>

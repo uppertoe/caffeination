@@ -28,3 +28,15 @@ class SavedDrink(SQLModel, table=True):
     length: Optional[str] = None  # macchiato-only "short" | "long"
     notes: Optional[str] = None
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class OrderItem(SQLModel, table=True):
+    """An open order is just the set of OrderItems for a given owner.
+
+    No separate Order row yet — when we add a notion of closed/till-confirmed
+    orders we'll introduce one.
+    """
+
+    owner_id: str = Field(primary_key=True, foreign_key="user.id")
+    target_user_id: str = Field(primary_key=True, foreign_key="user.id")
+    added_at: datetime = Field(default_factory=utcnow)

@@ -27,6 +27,12 @@ from app.menu import (
     rules_for_template,
 )
 from app.models import SavedDrink, User
+from app.orders import (
+    add_to_order,
+    order_rows,
+    remove_from_order,
+    roster_candidates,
+)
 from app.users import get_current_user
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -46,6 +52,11 @@ class IdentityMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         apply_fresh_identity(request, response)
         return response
+
+
+# ---------------------------------------------------------------------------
+# Template context builders
+# ---------------------------------------------------------------------------
 
 
 def _drink_card_ctx(session: Session, user: User) -> dict:
@@ -79,6 +90,18 @@ def _drink_form_ctx(saved: SavedDrink | None) -> dict:
     }
 
 
+def _order_section_ctx(session: Session, user: User, *, oob: bool = False) -> dict:
+    return {
+        "rows": order_rows(session, user.id),
+        "roster": roster_candidates(session, user.id),
+        "oob": oob,
+    }
+
+
+def _render(name: str, ctx: dict) -> str:
+    return templates.get_template(name).render(ctx)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -98,6 +121,7 @@ def create_app() -> FastAPI:
         ctx = {"app_name": settings.app_name, "user": user}
         if user.display_name:
             ctx.update(_drink_card_ctx(session, user))
+            ctx.update(_order_section_ctx(session, user))
         return templates.TemplateResponse(request, "index.html", ctx)
 
     @app.post("/me/name", response_class=HTMLResponse)
@@ -119,7 +143,11 @@ def create_app() -> FastAPI:
         session.add(user)
         session.commit()
         session.refresh(user)
-        ctx = {"user": user, **_drink_card_ctx(session, user)}
+        ctx = {
+            "user": user,
+            **_drink_card_ctx(session, user),
+            **_order_section_ctx(session, user),
+        }
         return templates.TemplateResponse(request, "_dashboard.html", ctx)
 
     @app.get("/me/drink", response_class=HTMLResponse)
@@ -171,8 +199,35 @@ def create_app() -> FastAPI:
                 status_code=422,
             )
         upsert_saved_drink(session, user.id, normalized)
+        # Update the drink card (hx-target) and the order section out-of-band.
+        card_html = _render("_drink_card.html", _drink_card_ctx(session, user))
+        order_html = _render(
+            "_order_section.html", _order_section_ctx(session, user, oob=True)
+        )
+        return HTMLResponse(card_html + order_html)
+
+    @app.post("/order/add/{target_id}", response_class=HTMLResponse)
+    def order_add(
+        target_id: str,
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        add_to_order(session, user.id, target_id)
         return templates.TemplateResponse(
-            request, "_drink_card.html", _drink_card_ctx(session, user)
+            request, "_order_section.html", _order_section_ctx(session, user)
+        )
+
+    @app.post("/order/remove/{target_id}", response_class=HTMLResponse)
+    def order_remove(
+        target_id: str,
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        remove_from_order(session, user.id, target_id)
+        return templates.TemplateResponse(
+            request, "_order_section.html", _order_section_ctx(session, user)
         )
 
     return app
