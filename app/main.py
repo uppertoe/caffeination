@@ -1,3 +1,4 @@
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,8 +11,22 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
 from app.db import get_session, init_db
+from app.drinks import (
+    format_drink,
+    get_saved_drink,
+    normalize,
+    upsert_saved_drink,
+)
 from app.identity import apply_fresh_identity
-from app.models import User
+from app.menu import (
+    DRINKS,
+    MILK_LABELS,
+    STRENGTH_LABELS,
+    SWEETENER_LABELS,
+    get_drink,
+    rules_for_template,
+)
+from app.models import SavedDrink, User
 from app.users import get_current_user
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -33,6 +48,37 @@ class IdentityMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _drink_card_ctx(session: Session, user: User) -> dict:
+    saved = get_saved_drink(session, user.id)
+    till_line = None
+    if saved is not None:
+        drink = get_drink(saved.base_id)
+        till_line = format_drink(drink, saved) if drink else saved.base_id
+    return {"saved": saved, "till_line": till_line}
+
+
+def _drink_form_ctx(saved: SavedDrink | None) -> dict:
+    initial = {
+        "base_id": saved.base_id if saved else DRINKS[0].id,
+        "temp": saved.temp if saved else "hot",
+        "size": saved.size if saved and saved.size else "regular",
+        "milk": saved.milk if saved and saved.milk else "full_cream",
+        "shots": saved.shots if saved else DRINKS[0].default_shots,
+        "strength": saved.strength if saved else "regular",
+        "sweetener": saved.sweetener if saved else "none",
+        "length": saved.length if saved and saved.length else "short",
+        "notes": saved.notes if saved else "",
+    }
+    return {
+        "rules_json": json.dumps(rules_for_template()),
+        "initial": initial,
+        "drinks": DRINKS,
+        "milk_options": list(MILK_LABELS.items()),
+        "strength_options": list(STRENGTH_LABELS.items()),
+        "sweetener_options": list(SWEETENER_LABELS.items()),
+    }
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -44,12 +90,15 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/", response_class=HTMLResponse)
-    def index(request: Request, user: User = Depends(get_current_user)):
-        return templates.TemplateResponse(
-            request,
-            "index.html",
-            {"app_name": settings.app_name, "user": user},
-        )
+    def index(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        ctx = {"app_name": settings.app_name, "user": user}
+        if user.display_name:
+            ctx.update(_drink_card_ctx(session, user))
+        return templates.TemplateResponse(request, "index.html", ctx)
 
     @app.post("/me/name", response_class=HTMLResponse)
     def set_name(
@@ -70,8 +119,60 @@ def create_app() -> FastAPI:
         session.add(user)
         session.commit()
         session.refresh(user)
+        ctx = {"user": user, **_drink_card_ctx(session, user)}
+        return templates.TemplateResponse(request, "_dashboard.html", ctx)
+
+    @app.get("/me/drink", response_class=HTMLResponse)
+    def drink_card(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
         return templates.TemplateResponse(
-            request, "_dashboard.html", {"user": user}
+            request, "_drink_card.html", _drink_card_ctx(session, user)
+        )
+
+    @app.get("/me/drink/cancel", response_class=HTMLResponse)
+    def drink_card_cancel(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        return templates.TemplateResponse(
+            request, "_drink_card.html", _drink_card_ctx(session, user)
+        )
+
+    @app.get("/me/drink/edit", response_class=HTMLResponse)
+    def drink_form(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        saved = get_saved_drink(session, user.id)
+        return templates.TemplateResponse(
+            request, "_drink_form.html", _drink_form_ctx(saved)
+        )
+
+    @app.post("/me/drink", response_class=HTMLResponse)
+    async def save_drink(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        form = await request.form()
+        base_id = form.get("base_id", "")
+        normalized = normalize(base_id, dict(form))
+        if normalized is None:
+            saved = get_saved_drink(session, user.id)
+            return templates.TemplateResponse(
+                request,
+                "_drink_form.html",
+                {**_drink_form_ctx(saved), "error": "Unknown drink."},
+                status_code=422,
+            )
+        upsert_saved_drink(session, user.id, normalized)
+        return templates.TemplateResponse(
+            request, "_drink_card.html", _drink_card_ctx(session, user)
         )
 
     return app

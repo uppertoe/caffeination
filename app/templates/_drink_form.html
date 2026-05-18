@@ -1,0 +1,128 @@
+<section id="drink-section">
+  <header>
+    <h2>Your usual</h2>
+  </header>
+  <form
+    hx-post="/me/drink"
+    hx-target="#drink-section"
+    hx-swap="outerHTML"
+    x-data='{
+      rules: {{ rules_json | safe }},
+      baseId: {{ initial.base_id | tojson }},
+      temp: {{ (initial.temp or "hot") | tojson }},
+      size: {{ (initial.size or "regular") | tojson }},
+      milk: {{ (initial.milk or "full_cream") | tojson }},
+      shots: {{ initial.shots or 1 }},
+      strength: {{ (initial.strength or "regular") | tojson }},
+      sweetener: {{ (initial.sweetener or "none") | tojson }},
+      length: {{ (initial.length or "short") | tojson }},
+      notes: {{ (initial.notes or "") | tojson }},
+      get rule() { return this.rules[this.baseId]; },
+      onBaseChange() {
+        const r = this.rule;
+        if (r.shotChoices.length && !r.shotChoices.includes(this.shots)) {
+          this.shots = r.defaultShots;
+        }
+        if (r.sized && r.defaultSize && ["small","regular","large"].indexOf(this.size) === -1) {
+          this.size = r.defaultSize;
+        }
+        if (!r.allowsIced) this.temp = "hot";
+        if (!r.allowsStrength) this.strength = "regular";
+      }
+    }'
+    x-init="$watch('baseId', () => onBaseChange())"
+  >
+    <label>
+      Base drink
+      <select name="base_id" x-model="baseId">
+        {% for d in drinks %}
+        <option value="{{ d.id }}">{{ d.display }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <fieldset x-show="rule.allowsIced">
+      <legend>Temperature</legend>
+      <label><input type="radio" name="temp" value="hot" x-model="temp"> Hot</label>
+      <label><input type="radio" name="temp" value="iced" x-model="temp"> Iced</label>
+    </fieldset>
+
+    <fieldset x-show="rule.sized">
+      <legend>Size</legend>
+      <label><input type="radio" name="size" value="small" x-model="size"> Small</label>
+      <label><input type="radio" name="size" value="regular" x-model="size"> Regular</label>
+      <label><input type="radio" name="size" value="large" x-model="size"> Large</label>
+    </fieldset>
+
+    <label x-show="rule.milkPolicy === 'required'">
+      Milk
+      <select name="milk" x-model="milk">
+        {% for value, label in milk_options %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <fieldset x-show="rule.shotChoices.length > 0">
+      <legend>Shots</legend>
+      <template x-for="n in rule.shotChoices" :key="n">
+        <label>
+          <input type="radio" name="shots" :value="n" x-model.number="shots">
+          <span x-text="n"></span>
+        </label>
+      </template>
+    </fieldset>
+
+    <fieldset x-show="rule.hasLength">
+      <legend>Length</legend>
+      <label><input type="radio" name="length" value="short" x-model="length"> Short</label>
+      <label><input type="radio" name="length" value="long" x-model="length"> Long</label>
+    </fieldset>
+
+    <label x-show="rule.allowsStrength">
+      Strength
+      <select name="strength" x-model="strength">
+        {% for value, label in strength_options %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      Sweetener
+      <select name="sweetener" x-model="sweetener">
+        {% for value, label in sweetener_options %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      Notes
+      <input
+        type="text"
+        name="notes"
+        maxlength="80"
+        x-model="notes"
+        placeholder="e.g. extra hot, light foam"
+      />
+    </label>
+
+    <p x-show="rule.servedNote" class="muted">
+      <small x-text="rule.servedNote"></small>
+    </p>
+
+    <div class="grid">
+      <button type="submit">Save</button>
+      <button
+        type="button"
+        hx-get="/me/drink/cancel"
+        hx-target="#drink-section"
+        hx-swap="outerHTML"
+        class="secondary outline"
+      >
+        Cancel
+      </button>
+    </div>
+  </form>
+</section>
