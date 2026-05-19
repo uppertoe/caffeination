@@ -11,8 +11,12 @@ def _isolated_sqlite(monkeypatch):
         db_path = os.path.join(tmp, "test.db")
         monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
         monkeypatch.setenv("SECRET_KEY", "test-secret")
-        # Drop the cached settings so the env vars are picked up.
+
         from app.config import get_settings
+        from app.db import get_engine
+
         get_settings.cache_clear()
+        get_engine.cache_clear()
         yield
         get_settings.cache_clear()
+        get_engine.cache_clear()

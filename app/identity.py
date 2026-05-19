@@ -1,8 +1,12 @@
 """Cookie-backed identity.
 
-We hand out a signed, opaque user id on first visit and use it to look up
-(or create) a user row. No passwords. Future work: wire to a User model and
-let the user set a display name on the next request.
+A signed, opaque user id is set on first visit. The dependency
+`get_current_user` reads it (or mints a new one); a middleware on the
+response side actually writes the Set-Cookie header.
+
+We use the middleware split because FastAPI does NOT merge cookies set on
+a dependency-injected `Response` into a returned `TemplateResponse` — the
+temporal response is discarded when the handler returns its own Response.
 """
 
 from __future__ import annotations
@@ -13,6 +17,8 @@ from fastapi import Request, Response
 from itsdangerous import BadSignature, URLSafeSerializer
 
 from app.config import get_settings
+
+_FRESH_TOKEN_ATTR = "fresh_identity_token"
 
 
 def _serializer() -> URLSafeSerializer:
@@ -29,15 +35,30 @@ def read_identity(request: Request) -> str | None:
         return None
 
 
-def issue_identity(response: Response) -> str:
-    settings = get_settings()
+def set_identity(request: Request, user_id: str) -> None:
+    """Stash a signed cookie value for the identity middleware to write."""
+    setattr(request.state, _FRESH_TOKEN_ATTR, _serializer().dumps(user_id))
+
+
+def mint_identity(request: Request) -> str:
+    """Generate a new identity and stash the signed token for the middleware."""
     user_id = secrets.token_urlsafe(12)
+    set_identity(request, user_id)
+    return user_id
+
+
+def apply_fresh_identity(request: Request, response: Response) -> None:
+    token = getattr(request.state, _FRESH_TOKEN_ATTR, None)
+    if not token:
+        return
+    settings = get_settings()
     response.set_cookie(
         key=settings.cookie_name,
-        value=_serializer().dumps(user_id),
+        value=token,
         max_age=settings.cookie_max_age,
         httponly=True,
         samesite="lax",
-        secure=not settings.debug,
+        # Only mark Secure when actually served over HTTPS so local http
+        # development and the test client (http://testserver) still work.
+        secure=request.url.scheme == "https",
     )
-    return user_id

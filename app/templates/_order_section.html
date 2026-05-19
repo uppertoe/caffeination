@@ -1,0 +1,91 @@
+<section id="order-section"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <article>
+    <header><h2>Your order</h2></header>
+    {% if not rows %}
+      <p><em>Save your usual above, then add other people from the roster.</em></p>
+    {% else %}
+      <ul class="order-list">
+        {% for row in rows %}
+        <li>
+          {% if row.is_self %}<small>(you)</small> {% endif %}
+          <strong>{{ row.user.display_name }}</strong> — {{ row.line }}
+          {% if not row.is_self %}
+          <button
+            type="button"
+            class="secondary outline"
+            hx-post="/order/remove/{{ row.user.id }}"
+            hx-target="#order-section"
+            hx-swap="outerHTML"
+          >Remove</button>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </article>
+
+  <article x-data="{ copied: false }">
+    <header><h2>For the till</h2></header>
+    {% if till_lines %}
+      <textarea
+        readonly
+        rows="{{ till_lines | length }}"
+        x-ref="tillText"
+        style="font-family: ui-monospace, monospace;"
+      >{{ till_lines | join('\n') }}</textarea>
+      <button
+        type="button"
+        x-on:click="navigator.clipboard.writeText($refs.tillText.value).then(() => { copied = true; setTimeout(() => copied = false, 1500); })"
+      >
+        <span x-show="!copied">Copy for the till</span>
+        <span x-show="copied" x-cloak>Copied ✓</span>
+      </button>
+    {% else %}
+      <p><em>Your order is empty.</em></p>
+    {% endif %}
+  </article>
+
+  <article x-data='{
+    q: "",
+    names: {{ roster | map(attribute=0) | map(attribute="display_name") | map("lower") | list | tojson }},
+    matches(name) {
+      const needle = this.q.trim().toLowerCase();
+      return !needle || name.toLowerCase().includes(needle);
+    },
+    get noMatches() {
+      const needle = this.q.trim().toLowerCase();
+      return needle && this.names.every(n => !n.includes(needle));
+    }
+  }'>
+    <header><h2>Add to your order</h2></header>
+    {% if not roster %}
+      <p><em>No one else has saved a drink yet.</em></p>
+    {% else %}
+      <label>
+        <input
+          type="search"
+          placeholder="Filter by name..."
+          autocomplete="off"
+          x-model="q"
+          aria-label="Filter roster"
+        />
+      </label>
+      <ul class="roster-list">
+        {% for u, line in roster %}
+        <li x-show='matches({{ u.display_name | tojson }})'>
+          <strong>{{ u.display_name }}</strong> — {{ line }}
+          <button
+            type="button"
+            hx-post="/order/add/{{ u.id }}"
+            hx-target="#order-section"
+            hx-swap="outerHTML"
+          >Add</button>
+        </li>
+        {% endfor %}
+      </ul>
+      <p x-show="noMatches" class="muted">
+        <small>No matches for &ldquo;<span x-text="q"></span>&rdquo;.</small>
+      </p>
+    {% endif %}
+  </article>
+</section>

@@ -1,19 +1,11 @@
 {% extends "base.html" %}
 
 {% block content %}
-<article>
-  <header>
-    <h1>{{ app_name }}</h1>
-    <p>Group coffee orders for the office.</p>
-  </header>
-  <p>
-    The scaffold is up. We'll build the drink-builder, user list, and order
-    summary on top of this.
-  </p>
-  <footer>
-    <small>
-      Stack: FastAPI · Jinja2 · HTMX · Alpine.js · PicoCSS · SQLModel/SQLite
-    </small>
-  </footer>
-</article>
+<div id="app">
+  {% if user.display_name %}
+    {% include "_dashboard.html" %}
+  {% else %}
+    {% include "_onboard.html" %}
+  {% endif %}
+</div>
 {% endblock %}

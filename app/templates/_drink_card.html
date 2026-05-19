@@ -1,0 +1,17 @@
+<section id="drink-section">
+  <header>
+    <h2>Your usual</h2>
+  </header>
+  {% if saved %}
+    <p><strong>{{ till_line }}</strong></p>
+  {% else %}
+    <p><em>You haven't saved a drink yet.</em></p>
+  {% endif %}
+  <button
+    hx-get="/me/drink/edit"
+    hx-target="#drink-section"
+    hx-swap="outerHTML"
+  >
+    {% if saved %}Edit drink{% else %}Set up your drink{% endif %}
+  </button>
+</section>
