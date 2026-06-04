@@ -48,7 +48,6 @@ class Strength(str, Enum):
     WEAK = "weak"
     EXTRA_SHOT = "extra_shot"
     DECAF = "decaf"
-    HALF_CAF = "half_caf"
 
 
 class Sweetener(str, Enum):
@@ -82,7 +81,6 @@ STRENGTH_LABELS: dict[str, str] = {
     Strength.WEAK.value: "Weak",
     Strength.EXTRA_SHOT.value: "Extra shot",
     Strength.DECAF.value: "Decaf",
-    Strength.HALF_CAF.value: "Half-caf",
 }
 
 SWEETENER_LABELS: dict[str, str] = {
@@ -106,11 +104,9 @@ class Drink:
     family: Family
     milk_policy: MilkPolicy
     sized: bool
-    shot_choices: tuple[int, ...]
     has_length: bool
     allows_strength: bool
     allows_iced: bool
-    default_shots: int
     default_size: Optional[Size] = None
     # Friendly note shown under the form when an axis is hidden by rule
     served_note: Optional[str] = None
@@ -120,11 +116,9 @@ class Drink:
         return {
             "sized": self.sized,
             "milkPolicy": self.milk_policy.value,
-            "shotChoices": list(self.shot_choices),
             "hasLength": self.has_length,
             "allowsStrength": self.allows_strength,
             "allowsIced": self.allows_iced,
-            "defaultShots": self.default_shots,
             "defaultSize": self.default_size.value if self.default_size else None,
             "servedNote": self.served_note,
         }
@@ -140,12 +134,10 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.MILK,
         milk_policy=MilkPolicy.REQUIRED,
         sized=True,
-        shot_choices=(1, 2, 3),
         has_length=False,
         allows_strength=True,
         allows_iced=True,
-        default_shots=1,
-        default_size=Size.REGULAR,
+        default_size=Size.SMALL,
     ),
     Drink(
         id="flat_white",
@@ -153,12 +145,10 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.MILK,
         milk_policy=MilkPolicy.REQUIRED,
         sized=True,
-        shot_choices=(1, 2, 3),
         has_length=False,
         allows_strength=True,
         allows_iced=False,
-        default_shots=1,
-        default_size=Size.REGULAR,
+        default_size=Size.SMALL,
     ),
     Drink(
         id="cappuccino",
@@ -166,12 +156,10 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.MILK,
         milk_policy=MilkPolicy.REQUIRED,
         sized=True,
-        shot_choices=(1, 2, 3),
         has_length=False,
         allows_strength=True,
         allows_iced=False,
-        default_shots=1,
-        default_size=Size.REGULAR,
+        default_size=Size.SMALL,
     ),
     Drink(
         id="magic",
@@ -179,11 +167,9 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.MILK,
         milk_policy=MilkPolicy.REQUIRED,
         sized=False,
-        shot_choices=(),
         has_length=False,
         allows_strength=False,
         allows_iced=False,
-        default_shots=2,
         served_note="Served as a 150 ml double ristretto + steamed milk. Fixed size.",
     ),
     Drink(
@@ -192,11 +178,9 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.ESPRESSO,
         milk_policy=MilkPolicy.REQUIRED,
         sized=False,
-        shot_choices=(),
         has_length=False,
         allows_strength=False,
         allows_iced=False,
-        default_shots=2,
         served_note="A double ristretto with steamed milk in a 90 ml glass.",
     ),
     Drink(
@@ -205,12 +189,10 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.ESPRESSO,
         milk_policy=MilkPolicy.NONE,
         sized=False,
-        shot_choices=(1, 2),
         has_length=False,
         allows_strength=False,
         allows_iced=False,
-        default_shots=1,
-        served_note="Served black, no size.",
+        served_note="Served black, no size. Note shot count in the notes field.",
     ),
     Drink(
         id="macchiato",
@@ -218,12 +200,10 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.ESPRESSO,
         milk_policy=MilkPolicy.DASH,
         sized=False,
-        shot_choices=(),
         has_length=True,
         allows_strength=False,
         allows_iced=False,
-        default_shots=1,
-        served_note="Long has more milk than short; both are single-shot.",
+        served_note="Long has more milk than short.",
     ),
     Drink(
         id="long_black",
@@ -231,12 +211,10 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.BLACK,
         milk_policy=MilkPolicy.NONE,
         sized=True,
-        shot_choices=(1, 2),
         has_length=False,
         allows_strength=True,
         allows_iced=True,
-        default_shots=2,
-        default_size=Size.REGULAR,
+        default_size=Size.SMALL,
         served_note="Served black.",
     ),
     Drink(
@@ -245,12 +223,10 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.MILK_CHOC,
         milk_policy=MilkPolicy.REQUIRED,
         sized=True,
-        shot_choices=(1, 2),
         has_length=False,
         allows_strength=True,
         allows_iced=True,
-        default_shots=1,
-        default_size=Size.REGULAR,
+        default_size=Size.SMALL,
     ),
     Drink(
         id="hot_chocolate",
@@ -258,12 +234,10 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.CHOC,
         milk_policy=MilkPolicy.REQUIRED,
         sized=True,
-        shot_choices=(),
         has_length=False,
         allows_strength=False,
         allows_iced=True,
-        default_shots=0,
-        default_size=Size.REGULAR,
+        default_size=Size.SMALL,
     ),
     Drink(
         id="chai_latte",
@@ -271,12 +245,10 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.SPICE,
         milk_policy=MilkPolicy.REQUIRED,
         sized=True,
-        shot_choices=(),
         has_length=False,
         allows_strength=False,
         allows_iced=True,
-        default_shots=0,
-        default_size=Size.REGULAR,
+        default_size=Size.SMALL,
     ),
     Drink(
         id="dirty_chai",
@@ -284,12 +256,10 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.SPICE_ESP,
         milk_policy=MilkPolicy.REQUIRED,
         sized=True,
-        shot_choices=(1, 2),
         has_length=False,
         allows_strength=True,
         allows_iced=True,
-        default_shots=1,
-        default_size=Size.REGULAR,
+        default_size=Size.SMALL,
     ),
     Drink(
         id="matcha_latte",
@@ -297,12 +267,10 @@ DRINKS: tuple[Drink, ...] = (
         family=Family.TEA,
         milk_policy=MilkPolicy.REQUIRED,
         sized=True,
-        shot_choices=(),
         has_length=False,
         allows_strength=False,
         allows_iced=True,
-        default_shots=0,
-        default_size=Size.REGULAR,
+        default_size=Size.SMALL,
     ),
 )
 

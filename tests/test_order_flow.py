@@ -56,13 +56,13 @@ def test_add_then_remove_target_from_order():
             size="large",
             milk="oat",
         )
-        _onboard(bob, "Bob", base_id="espresso", shots="2")
+        _onboard(bob, "Bob", base_id="espresso")
         alice_id = _user_id_by_name("Alice")
 
         r = bob.post(f"/order/add/{alice_id}")
         assert r.status_code == 200
         # Bob's order now lists both their drink and Alice's drink.
-        assert "double espresso" in r.text
+        assert "espresso" in r.text
         assert "large oat flat white" in r.text
 
         r = bob.post(f"/order/remove/{alice_id}")
@@ -96,9 +96,8 @@ def test_owner_cant_add_self_to_order_via_add_endpoint():
         alice_id = _user_id_by_name("Alice")
         r = alice.post(f"/order/add/{alice_id}")
         assert r.status_code == 200
-        # Alice still appears once — as (you) — and there should be no Remove button on her row.
+        # Alice still appears once (the owner row); self-add is a no-op.
         assert r.text.count("Alice") == 1
-        assert "(you)" in r.text
 
 
 def test_adding_unknown_target_is_noop():

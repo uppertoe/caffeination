@@ -8,9 +8,8 @@ def _row(display_name, **overrides):
         user_id=display_name.lower(),
         base_id="latte",
         temp="hot",
-        size="regular",
+        size="small",
         milk="full_cream",
-        shots=1,
         strength="regular",
         sweetener="none",
         length=None,
@@ -37,7 +36,8 @@ def test_summary_does_not_collapse_when_size_differs():
 
     a = _row("Alice", base_id="latte", size="small")
     b = _row("Bob", base_id="latte", size="large")
-    assert sorted(till_summary([a, b])) == sorted(["1x small latte", "1x large latte"])
+    # small is the default and isn't spelled out; large is.
+    assert sorted(till_summary([a, b])) == sorted(["1x latte", "1x large latte"])
 
 
 def test_summary_does_not_collapse_when_milk_differs():
@@ -77,7 +77,7 @@ def test_summary_orders_groups_by_first_seen():
 
     rows = [
         _row("Alice", base_id="latte"),
-        _row("Bob", base_id="espresso", shots=2, size=None, milk=None),
+        _row("Bob", base_id="espresso", size=None, milk=None),
         _row("Cat", base_id="latte"),
     ]
-    assert till_summary(rows) == ["2x latte", "1x double espresso"]
+    assert till_summary(rows) == ["2x latte", "1x espresso"]

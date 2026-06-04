@@ -1,0 +1,52 @@
+{#
+  Inline editor for a person you created, swapped in over #order-section.
+  Save → POST /people/{id}/drink (re-renders the order section). Cancel →
+  GET /order (re-renders it unchanged). Context: the drink-form ctx + person.
+#}
+<section id="order-section">
+  <article>
+    <header><h2>Editing {{ person.display_name }}&rsquo;s order</h2></header>
+    {% if error %}<p role="alert" class="form-error"><small>{{ error }}</small></p>{% endif %}
+    <form
+      hx-post="/people/{{ person.id }}/drink"
+      hx-target="#order-section"
+      hx-swap="outerHTML"
+      x-data='{
+        rules: {{ rules | tojson }},
+        baseId: {{ initial.base_id | tojson }},
+        temp: {{ (initial.temp or "hot") | tojson }},
+        size: {{ (initial.size or "small") | tojson }},
+        milk: {{ (initial.milk or "full_cream") | tojson }},
+        strength: {{ (initial.strength or "regular") | tojson }},
+        sweetener: {{ (initial.sweetener or "none") | tojson }},
+        length: {{ (initial.length or "short") | tojson }},
+        notes: {{ (initial.notes or "") | tojson }},
+        get rule() { return this.rules[this.baseId]; },
+        onBaseChange() {
+          const r = this.rule;
+          if (r.sized && r.defaultSize && ["small","regular","large"].indexOf(this.size) === -1) {
+            this.size = r.defaultSize;
+          }
+          if (!r.allowsIced) this.temp = "hot";
+          if (!r.allowsStrength) this.strength = "regular";
+        }
+      }'
+      x-init='$watch("baseId", () => onBaseChange())'
+    >
+      {% include "_drink_fields.html" %}
+
+      <div class="grid">
+        <button type="submit">Save changes</button>
+        <button
+          type="button"
+          class="secondary outline"
+          hx-get="/order"
+          hx-target="#order-section"
+          hx-swap="outerHTML"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  </article>
+</section>

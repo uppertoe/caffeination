@@ -1,23 +1,44 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#231c07" />
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
+
+    <!-- Icons & PWA manifest -->
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/static/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+    <link rel="manifest" href="/static/site.webmanifest" />
+
+    <!-- Display type -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&display=swap"
+      rel="stylesheet"
+    />
+
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
     />
+    <link rel="stylesheet" href="/static/coffee.css" />
     <script src="https://unpkg.com/htmx.org@2.0.3"></script>
     <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
   </head>
   <body>
     <main class="container">
-      <nav>
-        <ul>
-          <li><strong>{{ app_name }}</strong></li>
-        </ul>
-      </nav>
+      <header class="brand">
+        <img class="brand-mark" src="/static/brand-mark.svg" alt="" aria-hidden="true" width="48" height="48" />
+        <div>
+          {% set _name = app_name.split('@') %}
+          <p class="brand-title">{{ _name[0] }}{% if _name|length > 1 %}<span class="brand-at">@</span><span class="brand-domain">{{ _name[1] }}</span>{% endif %}</p>
+          <p class="brand-tagline">Enabling safe and smooth anaesthesia since 2026</p>
+        </div>
+      </header>
       {% block content %}{% endblock %}
     </main>
   </body>

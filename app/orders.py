@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from app.drinks import format_drink, get_saved_drink
 from app.menu import get_drink
 from app.models import OrderItem, SavedDrink, User
+from app.users import can_edit_person
 
 
 @dataclass
@@ -19,6 +20,7 @@ class OrderRow:
     saved: Optional[SavedDrink]
     line: str
     is_self: bool
+    can_edit: bool = False
 
 
 def add_to_order(session: Session, owner_id: str, target_user_id: str) -> None:
@@ -37,6 +39,15 @@ def remove_from_order(session: Session, owner_id: str, target_user_id: str) -> N
     item = session.get(OrderItem, (owner_id, target_user_id))
     if item is not None:
         session.delete(item)
+        session.commit()
+    # A one-off only ever lives in its creator's order, so removing it should
+    # delete the throwaway person + drink rather than orphan them.
+    target = session.get(User, target_user_id)
+    if target is not None and target.one_off and target.created_by == owner_id:
+        sd = session.get(SavedDrink, target_user_id)
+        if sd is not None:
+            session.delete(sd)
+        session.delete(target)
         session.commit()
 
 
@@ -63,7 +74,9 @@ def order_rows(session: Session, owner_id: str) -> list[OrderRow]:
         if u is None:
             continue
         sd = get_saved_drink(session, u.id)
-        rows.append(OrderRow(u, sd, _line_for(sd), False))
+        rows.append(
+            OrderRow(u, sd, _line_for(sd), False, can_edit_person(owner_id, u))
+        )
     return rows
 
 
@@ -77,7 +90,11 @@ def roster_candidates(session: Session, owner_id: str) -> list[tuple[User, str]]
     }
     excluded = in_order | {owner_id}
 
-    users_by_id = {u.id: u for u in session.exec(select(User)).all() if u.display_name}
+    users_by_id = {
+        u.id: u
+        for u in session.exec(select(User)).all()
+        if u.display_name and not u.one_off
+    }
     drinks_by_user = {
         sd.user_id: sd for sd in session.exec(select(SavedDrink)).all()
     }
@@ -103,7 +120,7 @@ def till_summary(rows: list[OrderRow]) -> list[str]:
     """Group order rows into till-ready lines.
 
     Drinks with free-text notes never merge — each is its own line. Drinks
-    without notes group by every ordered option (base, size, milk, shots,
+    without notes group by every ordered option (base, size, milk,
     strength, temp, sweetener, length) per the coffee-taxonomy skill.
     """
     groups: "OrderedDict[tuple, dict]" = OrderedDict()
@@ -120,7 +137,6 @@ def till_summary(rows: list[OrderRow]) -> list[str]:
             sd.base_id,
             sd.size,
             sd.milk,
-            sd.shots,
             sd.strength,
             sd.temp,
             sd.sweetener,

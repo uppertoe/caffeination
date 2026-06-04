@@ -7,16 +7,26 @@
       <ul class="order-list">
         {% for row in rows %}
         <li>
-          {% if row.is_self %}<small>(you)</small> {% endif %}
-          <strong>{{ row.user.display_name }}</strong> — {{ row.line }}
+          <span class="who"><strong>{{ row.user.display_name }}</strong> — {{ row.line }}{% if row.user.one_off %} <small class="tag">one-off</small>{% endif %}</span>
           {% if not row.is_self %}
-          <button
-            type="button"
-            class="secondary outline"
-            hx-post="/order/remove/{{ row.user.id }}"
-            hx-target="#order-section"
-            hx-swap="outerHTML"
-          >Remove</button>
+          <span class="row-actions">
+            {% if row.can_edit %}
+            <button
+              type="button"
+              class="secondary outline row-action"
+              hx-get="/people/{{ row.user.id }}/edit"
+              hx-target="#order-section"
+              hx-swap="outerHTML"
+            >Edit</button>
+            {% endif %}
+            <button
+              type="button"
+              class="secondary outline row-action"
+              hx-post="/order/remove/{{ row.user.id }}"
+              hx-target="#order-section"
+              hx-swap="outerHTML"
+            >Remove</button>
+          </span>
           {% endif %}
         </li>
         {% endfor %}
@@ -25,7 +35,7 @@
   </article>
 
   <article x-data="{ copied: false }">
-    <header><h2>For the till</h2></header>
+    <header><h2>This order:</h2></header>
     {% if till_lines %}
       <textarea
         readonly
@@ -37,7 +47,7 @@
         type="button"
         x-on:click="navigator.clipboard.writeText($refs.tillText.value).then(() => { copied = true; setTimeout(() => copied = false, 1500); })"
       >
-        <span x-show="!copied">Copy for the till</span>
+        <span x-show="!copied">Copy this order</span>
         <span x-show="copied" x-cloak>Copied ✓</span>
       </button>
     {% else %}
@@ -73,13 +83,16 @@
       <ul class="roster-list">
         {% for u, line in roster %}
         <li x-show='matches({{ u.display_name | tojson }})'>
-          <strong>{{ u.display_name }}</strong> — {{ line }}
-          <button
-            type="button"
-            hx-post="/order/add/{{ u.id }}"
-            hx-target="#order-section"
-            hx-swap="outerHTML"
-          >Add</button>
+          <span class="who"><strong>{{ u.display_name }}</strong> — {{ line }}</span>
+          <span class="row-actions">
+            <button
+              type="button"
+              class="row-action"
+              hx-post="/order/add/{{ u.id }}"
+              hx-target="#order-section"
+              hx-swap="outerHTML"
+            >Add</button>
+          </span>
         </li>
         {% endfor %}
       </ul>

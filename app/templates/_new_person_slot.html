@@ -1,0 +1,108 @@
+{#
+  Inner content of <section id="new-person-slot">. Toggles between a collapsed
+  button and the "create a person + their drink" form. Posts to /people, which
+  re-renders this slot (in-band) plus the order section (OOB). Context:
+  rules, initial, drinks, *_options (from the drink-form ctx), existing_names,
+  and on error: error, open, submitted_name.
+#}
+<article
+  class="new-person"
+  x-data='{
+    open: {{ (open or false) | tojson }},
+    name: {{ (submitted_name or "") | tojson }},
+    oneOff: {{ (submitted_one_off or false) | tojson }},
+    existing: {{ existing_names | tojson }},
+    rules: {{ rules | tojson }},
+    baseId: {{ initial.base_id | tojson }},
+    temp: {{ (initial.temp or "hot") | tojson }},
+    size: {{ (initial.size or "small") | tojson }},
+    milk: {{ (initial.milk or "full_cream") | tojson }},
+    strength: {{ (initial.strength or "regular") | tojson }},
+    sweetener: {{ (initial.sweetener or "none") | tojson }},
+    length: {{ (initial.length or "short") | tojson }},
+    notes: {{ (initial.notes or "") | tojson }},
+    get rule() { return this.rules[this.baseId]; },
+    get cleanName() { return this.name.trim(); },
+    get nameTaken() {
+      if (this.oneOff) return false;
+      const n = this.cleanName.toLowerCase();
+      return !!n && this.existing.includes(n);
+    },
+    onBaseChange() {
+      const r = this.rule;
+      if (r.sized && r.defaultSize && ["small","regular","large"].indexOf(this.size) === -1) {
+        this.size = r.defaultSize;
+      }
+      if (!r.allowsIced) this.temp = "hot";
+      if (!r.allowsStrength) this.strength = "regular";
+    }
+  }'
+  x-init='$watch("baseId", () => onBaseChange())'
+>
+  <header><h2>Order for someone else</h2></header>
+
+  <p x-show="!open" class="muted">
+    <small>Add a colleague who isn't here yet — record their name and usual,
+    and they'll join the roster.</small>
+  </p>
+
+  <button
+    type="button"
+    class="secondary"
+    x-show="!open"
+    @click="open = true"
+  >
+    + Add someone new
+  </button>
+
+  <form
+    x-show="open"
+    x-cloak
+    hx-post="/people"
+    hx-target="#new-person-slot"
+    hx-swap="innerHTML"
+  >
+    {% if error %}<p role="alert" class="form-error"><small>{{ error }}</small></p>{% endif %}
+
+    <label>
+      Their name
+      <input
+        type="text"
+        name="display_name"
+        maxlength="40"
+        autocomplete="off"
+        placeholder="e.g. Priya"
+        x-model="name"
+        :aria-invalid="nameTaken ? 'true' : null"
+      />
+    </label>
+    <p x-show="nameTaken" class="form-error" x-cloak>
+      <small>&ldquo;<span x-text="cleanName"></span>&rdquo; is already on the
+      list — pick a different name.</small>
+    </p>
+
+    <label class="oneoff-toggle">
+      <input type="checkbox" name="one_off" value="1" x-model="oneOff" />
+      One-off &mdash; don&rsquo;t save to the roster
+    </label>
+    <p class="muted" x-show="oneOff" x-cloak>
+      <small>A guest order for this round only. Won&rsquo;t appear in the
+      roster or name search, and duplicate names are fine.</small>
+    </p>
+
+    {% include "_drink_fields.html" %}
+
+    <div class="grid">
+      <button type="submit" :disabled="!cleanName || nameTaken">
+        Save &amp; add to order
+      </button>
+      <button
+        type="button"
+        class="secondary outline"
+        @click="open = false"
+      >
+        Cancel
+      </button>
+    </div>
+  </form>
+</article>

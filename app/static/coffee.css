@@ -1,0 +1,319 @@
+/* coffee-rch — coffee-house theme over PicoCSS.
+   Palette: #231c07 #392a16 #634133 #b86f52 #f78764
+   Cream / muted tones are derived for legible text on the dark roast. */
+
+:root {
+  --espresso: #231c07;
+  --bean: #392a16;
+  --mocha: #634133;
+  --caramel: #b86f52;
+  --coral: #f78764;
+  --cream: #f5ecdd;
+  --cream-dim: #c9b49a;
+  --crema: #e7c9a8;
+  /* Warm, relaxed display serif for headings + wordmark. */
+  --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino,
+    "Book Antiqua", Georgia, serif;
+}
+
+/* Hide Alpine-managed elements until Alpine initialises. */
+[x-cloak] { display: none !important; }
+
+/* ---- Pico variable overrides (dark roast) ------------------------------- */
+[data-theme="dark"] {
+  --pico-background-color: var(--espresso);
+  --pico-color: var(--cream);
+  --pico-text-selection-color: rgba(247, 135, 100, 0.3);
+  --pico-muted-color: var(--cream-dim);
+  --pico-muted-border-color: rgba(99, 65, 51, 0.45);
+  --pico-border-radius: 0.75rem;
+
+  --pico-h1-color: var(--coral);
+  --pico-h2-color: var(--crema);
+  --pico-h3-color: var(--crema);
+  --pico-h4-color: var(--crema);
+  --pico-h5-color: var(--crema);
+  --pico-h6-color: var(--crema);
+
+  /* Cards */
+  --pico-card-background-color: var(--bean);
+  --pico-card-border-color: rgba(99, 65, 51, 0.6);
+  --pico-card-box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.35);
+  --pico-card-sectioning-background-color: rgba(99, 65, 51, 0.22);
+
+  /* Primary (caramel → coral) */
+  --pico-primary: var(--espresso);
+  --pico-primary-background: var(--caramel);
+  --pico-primary-border: var(--caramel);
+  --pico-primary-hover: var(--espresso);
+  --pico-primary-hover-background: var(--coral);
+  --pico-primary-hover-border: var(--coral);
+  --pico-primary-focus: rgba(247, 135, 100, 0.4);
+  --pico-primary-inverse: var(--espresso);
+
+  /* Secondary (muted mocha) */
+  --pico-secondary: var(--cream);
+  --pico-secondary-background: var(--mocha);
+  --pico-secondary-border: var(--mocha);
+  --pico-secondary-hover: var(--cream);
+  --pico-secondary-hover-background: #76503d;
+  --pico-secondary-hover-border: #76503d;
+  --pico-secondary-focus: rgba(99, 65, 51, 0.45);
+  --pico-secondary-inverse: var(--cream);
+
+  /* Links */
+  --pico-link-color: var(--coral);
+  --pico-link-hover-color: var(--crema);
+
+  /* Form elements */
+  --pico-form-element-background-color: rgba(35, 28, 7, 0.6);
+  --pico-form-element-border-color: var(--mocha);
+  --pico-form-element-color: var(--cream);
+  --pico-form-element-placeholder-color: var(--cream-dim);
+  --pico-form-element-active-background-color: rgba(35, 28, 7, 0.8);
+  --pico-form-element-active-border-color: var(--caramel);
+  --pico-form-element-focus-color: rgba(247, 135, 100, 0.35);
+}
+
+/* ---- Base canvas -------------------------------------------------------- */
+html {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #2c2109 0%, var(--espresso) 60%);
+  min-height: 100%;
+}
+
+body { position: relative; }
+
+/* Ambient coffee glyphs — fixed, faint, behind everything. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: url("/static/coffee-pattern.svg");
+  background-repeat: repeat;
+  background-size: 260px 260px;
+  opacity: 0.05;
+  pointer-events: none;
+}
+
+/* Heading character — Fraunces, larger and relaxed. */
+h1, h2, h3, .brand-title {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.12;
+}
+h1 {
+  font-size: clamp(2.15rem, 6vw, 2.8rem);
+  font-weight: 600;
+  line-height: 1.08;
+  margin-bottom: 0.5rem;
+}
+h2 {
+  font-size: clamp(1.5rem, 3.5vw, 1.85rem);
+  margin-bottom: 0.4rem;
+}
+h3 { font-size: 1.3rem; }
+
+main.container { max-width: 46rem; }
+
+/* ---- Top bar ------------------------------------------------------------ */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 1.2rem 0 0.4rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.brand-mark {
+  flex: 0 0 auto;
+  width: 2.9rem;
+  height: 2.9rem;
+  display: block;
+}
+.brand-title {
+  margin: 0;
+  font-size: 1.85rem;
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  color: var(--crema);
+}
+.brand-at {
+  color: var(--caramel);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 400;
+  letter-spacing: 0;
+  margin: 0 0.03em;
+}
+.brand-domain {
+  color: var(--coral);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.brand-tagline {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 0.95rem;
+  color: var(--cream-dim);
+}
+
+/* ---- Cards & spacing ---------------------------------------------------- */
+article { margin-block: 1.1rem; }
+article > header { margin-bottom: 0.6rem; }
+article > header :is(h1, h2, h3) { margin-bottom: 0; }
+#order-section > article:first-child { margin-top: 0; }
+
+/* ---- Selectable pill rows (temp / size / length) ----------------------- */
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+}
+.pill-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--pico-form-element-border-color);
+  border-radius: 2rem;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.pill-row label:hover { border-color: var(--caramel); }
+.pill-row input { margin: 0; }
+.pill-row label:has(input:checked) {
+  border-color: var(--coral);
+  background: rgba(247, 135, 100, 0.16);
+  color: var(--cream);
+}
+
+/* ---- Lists: order / roster / onboard ------------------------------------ */
+.order-list, .roster-list, .onboard-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.order-list li, .roster-list li, .onboard-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--pico-card-border-color);
+  border-radius: var(--pico-border-radius);
+  background: rgba(99, 65, 51, 0.16);
+}
+.order-list li strong, .roster-list li strong, .onboard-list li strong {
+  color: var(--crema);
+}
+/* Name + drink text shrinks/wraps; the action buttons never shrink. */
+.who {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.row-actions {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+}
+.row-action {
+  width: auto;
+  margin: 0;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.85rem;
+}
+/* "one-off" inline tag on ephemeral order rows. */
+.tag {
+  display: inline-block;
+  margin-left: 0.15rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 1rem;
+  background: rgba(184, 111, 82, 0.22);
+  color: var(--crema);
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+/* Roster/onboard search input sits a touch above its list. */
+.roster-list, .onboard-list { margin-top: 0.6rem; }
+
+/* ---- Till summary ------------------------------------------------------- */
+#order-section textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: rgba(35, 28, 7, 0.75);
+  border-color: var(--mocha);
+  color: var(--crema);
+  resize: vertical;
+}
+
+/* ---- New-person slot ---------------------------------------------------- */
+.new-person { border: 1px dashed var(--mocha); }
+
+/* ---- Dashboard header (greeting + log out) ------------------------------ */
+.dash-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 0.9rem;
+  flex-wrap: wrap;
+}
+.dash-header h1 { margin: 0; }
+.logout {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+/* Long rosters/name lists stay contained and scroll in place. */
+.onboard-list, .roster-list {
+  max-height: 21rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+/* ---- Misc --------------------------------------------------------------- */
+.muted { color: var(--cream-dim); }
+.form-error { color: var(--coral); margin: 0.2rem 0 0.4rem; }
+[role="alert"].form-error { font-weight: 500; }
+
+/* Buttons that submit a whole form (Save / Save & add) stay roomy; the
+   paired Cancel sits beside it via Pico's .grid. */
+form .grid button { width: 100%; }
+
+/* Slightly tighter form field rhythm inside cards. */
+article form > label,
+article form > fieldset { margin-bottom: 0.85rem; }
+article form > fieldset { border: 0; padding: 0; }
+article form legend {
+  padding: 0;
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+  color: var(--crema);
+}
+
+/* ---- Mobile ------------------------------------------------------------- */
+@media (max-width: 480px) {
+  main.container { padding-inline: 0.9rem; }
+  .brand-title { font-size: 1.35rem; }
+  /* On the narrowest screens, let very long drink lines drop the action
+     button to its own line rather than squeezing the text to shreds. */
+  .order-list li, .roster-list li, .onboard-list li { flex-wrap: wrap; }
+  .row-action { margin-left: auto; }
+}
