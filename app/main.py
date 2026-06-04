@@ -34,7 +34,10 @@ from app.orders import (
     till_summary,
 )
 from app.users import (
+    can_edit_person,
     claim_user,
+    create_named_user,
+    existing_names_lower,
     find_user_by_display_name,
     get_current_user,
     named_users_with_lines,
@@ -65,7 +68,10 @@ class IdentityMiddleware(BaseHTTPMiddleware):
 
 
 def _onboard_ctx(session: Session) -> dict:
-    return {"named_users": named_users_with_lines(session)}
+    return {
+        "app_name": get_settings().app_name,
+        "named_users": named_users_with_lines(session),
+    }
 
 
 def _drink_card_ctx(session: Session, user: User) -> dict:
@@ -81,9 +87,8 @@ def _drink_form_ctx(saved: SavedDrink | None) -> dict:
     initial = {
         "base_id": saved.base_id if saved else DRINKS[0].id,
         "temp": saved.temp if saved else "hot",
-        "size": saved.size if saved and saved.size else "regular",
+        "size": saved.size if saved and saved.size else "small",
         "milk": saved.milk if saved and saved.milk else "full_cream",
-        "shots": saved.shots if saved else DRINKS[0].default_shots,
         "strength": saved.strength if saved else "regular",
         "sweetener": saved.sweetener if saved else "none",
         "length": saved.length if saved and saved.length else "short",
@@ -109,6 +114,24 @@ def _order_section_ctx(session: Session, user: User, *, oob: bool = False) -> di
     }
 
 
+def _new_person_ctx(session: Session) -> dict:
+    """Context for the 'order for someone else' slot: a blank drink-builder
+    plus the set of names already taken (for the client-side dup check)."""
+    return {
+        **_drink_form_ctx(None),
+        "existing_names": existing_names_lower(session),
+    }
+
+
+def _dashboard_ctx(session: Session, user: User) -> dict:
+    return {
+        "user": user,
+        **_drink_card_ctx(session, user),
+        **_order_section_ctx(session, user),
+        **_new_person_ctx(session),
+    }
+
+
 def _render(name: str, ctx: dict) -> str:
     return templates.get_template(name).render(ctx)
 
@@ -131,11 +154,24 @@ def create_app() -> FastAPI:
     ):
         ctx: dict = {"app_name": settings.app_name, "user": user}
         if user.display_name:
-            ctx.update(_drink_card_ctx(session, user))
-            ctx.update(_order_section_ctx(session, user))
+            ctx.update(_dashboard_ctx(session, user))
         else:
             ctx.update(_onboard_ctx(session))
         return templates.TemplateResponse(request, "index.html", ctx)
+
+    @app.post("/logout", response_class=HTMLResponse)
+    def logout(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        """Unbind the identity cookie and drop back to onboarding. The user
+        row (and their saved drink) stays put so they can claim it again."""
+        response = templates.TemplateResponse(
+            request, "_onboard.html", _onboard_ctx(session)
+        )
+        response.delete_cookie(settings.cookie_name, path="/")
+        return response
 
     @app.post("/onboard/claim/{user_id}", response_class=HTMLResponse)
     def onboard_claim(
@@ -152,12 +188,9 @@ def create_app() -> FastAPI:
                 {**_onboard_ctx(session), "error": "That user doesn't exist."},
                 status_code=404,
             )
-        ctx = {
-            "user": claimed,
-            **_drink_card_ctx(session, claimed),
-            **_order_section_ctx(session, claimed),
-        }
-        return templates.TemplateResponse(request, "_dashboard.html", ctx)
+        return templates.TemplateResponse(
+            request, "_dashboard.html", _dashboard_ctx(session, claimed)
+        )
 
     @app.post("/me/name", response_class=HTMLResponse)
     def set_name(
@@ -194,12 +227,9 @@ def create_app() -> FastAPI:
         session.add(user)
         session.commit()
         session.refresh(user)
-        ctx = {
-            "user": user,
-            **_drink_card_ctx(session, user),
-            **_order_section_ctx(session, user),
-        }
-        return templates.TemplateResponse(request, "_dashboard.html", ctx)
+        return templates.TemplateResponse(
+            request, "_dashboard.html", _dashboard_ctx(session, user)
+        )
 
     @app.get("/me/drink", response_class=HTMLResponse)
     def drink_card(
@@ -255,6 +285,110 @@ def create_app() -> FastAPI:
             "_order_section.html", _order_section_ctx(session, user, oob=True)
         )
         return HTMLResponse(card_html + order_html)
+
+    @app.post("/people", response_class=HTMLResponse)
+    async def create_person(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        """Create a person + their usual on someone else's behalf, then add
+        them to the current user's order. Roster people need a globally unique
+        name; one-off ("guest") entries are ephemeral and may share names."""
+        form = await request.form()
+        name = (form.get("display_name") or "").strip()
+        one_off = bool(form.get("one_off"))
+
+        def _err(message: str, status: int):
+            ctx = {
+                **_new_person_ctx(session),
+                "error": message,
+                "open": True,
+                "submitted_name": name,
+                "submitted_one_off": one_off,
+            }
+            return templates.TemplateResponse(
+                request, "_new_person_slot.html", ctx, status_code=status
+            )
+
+        if not (1 <= len(name) <= 40):
+            return _err("Name must be 1–40 characters.", 422)
+        if not one_off and find_user_by_display_name(session, name) is not None:
+            return _err(f"“{name}” is already on the list — pick another name.", 409)
+
+        normalized = normalize(form.get("base_id", ""), dict(form))
+        if normalized is None:
+            return _err("Unknown drink.", 422)
+
+        new_user = create_named_user(
+            session, name, created_by=user.id, one_off=one_off
+        )
+        upsert_saved_drink(session, new_user.id, normalized)
+        add_to_order(session, user.id, new_user.id)
+
+        slot_html = _render("_new_person_slot.html", _new_person_ctx(session))
+        order_html = _render(
+            "_order_section.html", _order_section_ctx(session, user, oob=True)
+        )
+        return HTMLResponse(slot_html + order_html)
+
+    @app.get("/order", response_class=HTMLResponse)
+    def order_section(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        """Re-render the order section in-band (used to cancel an inline edit)."""
+        return templates.TemplateResponse(
+            request, "_order_section.html", _order_section_ctx(session, user)
+        )
+
+    @app.get("/people/{person_id}/edit", response_class=HTMLResponse)
+    def edit_person_form(
+        person_id: str,
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        target = session.get(User, person_id)
+        if not can_edit_person(user.id, target):
+            return templates.TemplateResponse(
+                request, "_order_section.html", _order_section_ctx(session, user)
+            )
+        saved = get_saved_drink(session, person_id)
+        return templates.TemplateResponse(
+            request, "_person_edit.html", {**_drink_form_ctx(saved), "person": target}
+        )
+
+    @app.post("/people/{person_id}/drink", response_class=HTMLResponse)
+    async def edit_person_drink(
+        person_id: str,
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        target = session.get(User, person_id)
+        if not can_edit_person(user.id, target):
+            return templates.TemplateResponse(
+                request,
+                "_order_section.html",
+                _order_section_ctx(session, user),
+                status_code=403,
+            )
+        form = await request.form()
+        normalized = normalize(form.get("base_id", ""), dict(form))
+        if normalized is None:
+            saved = get_saved_drink(session, person_id)
+            return templates.TemplateResponse(
+                request,
+                "_person_edit.html",
+                {**_drink_form_ctx(saved), "person": target, "error": "Unknown drink."},
+                status_code=422,
+            )
+        upsert_saved_drink(session, person_id, normalized)
+        return templates.TemplateResponse(
+            request, "_order_section.html", _order_section_ctx(session, user)
+        )
 
     @app.post("/order/add/{target_id}", response_class=HTMLResponse)
     def order_add(

@@ -12,6 +12,13 @@ class User(SQLModel, table=True):
     id: str = Field(primary_key=True)
     display_name: Optional[str] = None
     created_at: datetime = Field(default_factory=utcnow)
+    # Who created this person on someone else's behalf (None = self-onboarded).
+    # The creator may edit a roster person for a window after creation, and may
+    # always edit/remove their own one-off entries. See app.users.can_edit_person.
+    created_by: Optional[str] = Field(default=None, foreign_key="user.id")
+    # One-off ("guest") entries live only in their creator's order: excluded
+    # from the roster + name search, duplicate names allowed, deleted on removal.
+    one_off: bool = False
 
 
 class SavedDrink(SQLModel, table=True):
@@ -22,7 +29,6 @@ class SavedDrink(SQLModel, table=True):
     temp: str = "hot"
     size: Optional[str] = None
     milk: Optional[str] = None
-    shots: int = 1
     strength: str = "regular"
     sweetener: str = "none"
     length: Optional[str] = None  # macchiato-only "short" | "long"

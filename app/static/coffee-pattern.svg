@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260" viewBox="0 0 260 260" fill="none">
+  <g stroke="#b86f52" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- coffee cup + saucer -->
+    <path d="M58 96 h64 a6 6 0 0 1 6 6 v20 a38 38 0 0 1 -38 38 h0 a38 38 0 0 1 -38 -38 v-20 a6 6 0 0 1 6 -6 z"/>
+    <path d="M128 104 h14 a16 16 0 0 1 0 32 h-7"/>
+    <path d="M52 168 h84" stroke-width="2.6"/>
+    <!-- steam -->
+    <path d="M78 84 c-6 -8 6 -14 0 -22" stroke-width="1.8"/>
+    <path d="M96 84 c-6 -8 6 -14 0 -22" stroke-width="1.8"/>
+    <path d="M114 84 c-6 -8 6 -14 0 -22" stroke-width="1.8"/>
+
+    <!-- scattered beans -->
+    <g transform="translate(206 56) rotate(28)">
+      <ellipse cx="0" cy="0" rx="15" ry="9.5"/>
+      <path d="M-11 -5 C -3 -2, -3 2, -11 5"/>
+    </g>
+    <g transform="translate(38 222) rotate(-18)">
+      <ellipse cx="0" cy="0" rx="15" ry="9.5"/>
+      <path d="M-11 -5 C -3 -2, -3 2, -11 5"/>
+    </g>
+    <g transform="translate(214 196) rotate(52)">
+      <ellipse cx="0" cy="0" rx="15" ry="9.5"/>
+      <path d="M-11 -5 C -3 -2, -3 2, -11 5"/>
+    </g>
+  </g>
+</svg>

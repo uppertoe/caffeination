@@ -1,0 +1,81 @@
+{#
+  Shared drink-builder controls. The parent <form> owns the Alpine x-data
+  with: rules, baseId, temp, size, milk, strength, sweetener, length,
+  notes, rule() and onBaseChange(). The render context must provide: drinks,
+  milk_options, strength_options, sweetener_options.
+#}
+<label>
+  Base drink
+  <select name="base_id" x-model="baseId">
+    {% for d in drinks %}
+    <option value="{{ d.id }}">{{ d.display }}</option>
+    {% endfor %}
+  </select>
+</label>
+
+<fieldset x-show="rule.allowsIced">
+  <legend>Temperature</legend>
+  <div class="pill-row">
+    <label><input type="radio" name="temp" value="hot" x-model="temp"> Hot</label>
+    <label><input type="radio" name="temp" value="iced" x-model="temp"> Iced</label>
+  </div>
+</fieldset>
+
+<fieldset x-show="rule.sized">
+  <legend>Size</legend>
+  <div class="pill-row">
+    <label><input type="radio" name="size" value="small" x-model="size"> Small</label>
+    <label><input type="radio" name="size" value="regular" x-model="size"> Regular</label>
+    <label><input type="radio" name="size" value="large" x-model="size"> Large</label>
+  </div>
+</fieldset>
+
+<label x-show="rule.milkPolicy === 'required'">
+  Milk
+  <select name="milk" x-model="milk">
+    {% for value, label in milk_options %}
+    <option value="{{ value }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+</label>
+
+<fieldset x-show="rule.hasLength">
+  <legend>Length</legend>
+  <div class="pill-row">
+    <label><input type="radio" name="length" value="short" x-model="length"> Short</label>
+    <label><input type="radio" name="length" value="long" x-model="length"> Long</label>
+  </div>
+</fieldset>
+
+<label x-show="rule.allowsStrength">
+  Strength
+  <select name="strength" x-model="strength">
+    {% for value, label in strength_options %}
+    <option value="{{ value }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+</label>
+
+<label>
+  Sweetener
+  <select name="sweetener" x-model="sweetener">
+    {% for value, label in sweetener_options %}
+    <option value="{{ value }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+</label>
+
+<label>
+  Notes
+  <input
+    type="text"
+    name="notes"
+    maxlength="80"
+    x-model="notes"
+    placeholder="e.g. double shot, extra hot, light foam"
+  />
+</label>
+
+<p x-show="rule.servedNote" class="muted">
+  <small x-text="rule.servedNote"></small>
+</p>

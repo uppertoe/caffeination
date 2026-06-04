@@ -11,7 +11,7 @@ def test_first_visit_shows_onboarding():
     with _client() as client:
         r = client.get("/")
     assert r.status_code == 200
-    assert "Welcome to coffee-rch" in r.text
+    assert "Welcome to caffeine@RCH" in r.text
 
 
 def test_set_name_then_dashboard_shows_greeting():
@@ -25,7 +25,7 @@ def test_set_name_then_dashboard_shows_greeting():
         # A fresh GET / now skips the onboarding view.
         r = client.get("/")
         assert r.status_code == 200
-        assert "Welcome to coffee-rch" not in r.text
+        assert "Welcome to caffeine@RCH" not in r.text
         assert "Hi, Sam" in r.text
 
 
@@ -35,6 +35,25 @@ def test_blank_name_rejected():
         r = client.post("/me/name", data={"display_name": "   "})
         assert r.status_code == 422
         assert "Name must be" in r.text
+
+
+def test_logout_returns_to_onboarding():
+    with _client() as client:
+        client.get("/")
+        client.post("/me/name", data={"display_name": "Sam"})
+        client.post("/me/drink", data={"base_id": "latte", "size": "regular", "milk": "oat"})
+
+        r = client.post("/logout")
+        assert r.status_code == 200
+        assert "Welcome to caffeine@RCH" in r.text
+
+        # Cookie cleared → a fresh GET / starts a new (unnamed) session...
+        r = client.get("/")
+        assert "Welcome to caffeine@RCH" in r.text
+        assert "Hi, Sam" not in r.text
+
+        # ...but Sam's row survives, so they're still claimable from the list.
+        assert "Sam" in r.text
 
 
 def test_duplicate_name_rejected_case_insensitive():

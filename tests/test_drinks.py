@@ -19,9 +19,8 @@ def _make_saved(**overrides):
         user_id="u1",
         base_id="latte",
         temp="hot",
-        size="regular",
+        size="small",
         milk="full_cream",
-        shots=1,
         strength="regular",
         sweetener="none",
         length=None,
@@ -31,12 +30,20 @@ def _make_saved(**overrides):
     return SavedDrink(**defaults)
 
 
-def test_format_regular_latte_omits_defaults():
+def test_format_default_latte_omits_defaults():
     from app.drinks import format_drink
     from app.menu import get_drink
 
+    # small is the default size, so it is not spelled out.
     line = format_drink(get_drink("latte"), _make_saved())
     assert line == "latte"
+
+
+def test_format_regular_size_is_spelled_out():
+    from app.drinks import format_drink
+    from app.menu import get_drink
+
+    assert format_drink(get_drink("latte"), _make_saved(size="regular")) == "regular latte"
 
 
 def test_format_large_oat_flat_white():
@@ -47,12 +54,12 @@ def test_format_large_oat_flat_white():
     assert format_drink(get_drink("flat_white"), sd) == "large oat flat white"
 
 
-def test_format_double_espresso():
+def test_format_espresso():
     from app.drinks import format_drink
     from app.menu import get_drink
 
-    sd = _make_saved(base_id="espresso", size=None, milk=None, shots=2)
-    assert format_drink(get_drink("espresso"), sd) == "double espresso"
+    sd = _make_saved(base_id="espresso", size=None, milk=None)
+    assert format_drink(get_drink("espresso"), sd) == "espresso"
 
 
 def test_format_macchiato_long_short():
@@ -72,7 +79,7 @@ def test_format_iced_soy_mocha_with_extras():
     sd = _make_saved(
         base_id="mocha",
         temp="iced",
-        size="regular",
+        size="small",
         milk="soy",
         sweetener="one_sugar",
         notes="light ice",
@@ -88,7 +95,7 @@ def test_format_magic_is_just_magic():
     from app.drinks import format_drink
     from app.menu import get_drink
 
-    sd = _make_saved(base_id="magic", size=None, milk="full_cream", shots=2)
+    sd = _make_saved(base_id="magic", size=None, milk="full_cream")
     assert format_drink(get_drink("magic"), sd) == "magic"
 
 
@@ -100,26 +107,18 @@ def test_format_magic_is_just_magic():
 def test_normalize_strips_size_for_espresso():
     from app.drinks import normalize
 
-    out = normalize("espresso", {"size": "large", "milk": "oat", "shots": "2"})
+    out = normalize("espresso", {"size": "large", "milk": "oat"})
     assert out["size"] is None
     assert out["milk"] is None
-    assert out["shots"] == 2
+    assert "shots" not in out  # shots is no longer a structured axis
 
 
-def test_normalize_clamps_invalid_shots_to_default():
+def test_normalize_macchiato_has_length_no_size():
     from app.drinks import normalize
 
-    out = normalize("espresso", {"shots": "5"})
-    assert out["shots"] == 1  # espresso default
-
-
-def test_normalize_macchiato_has_length_no_size_no_shots():
-    from app.drinks import normalize
-
-    out = normalize("macchiato", {"length": "long", "shots": "2"})
+    out = normalize("macchiato", {"length": "long"})
     assert out["length"] == "long"
     assert out["size"] is None
-    assert out["shots"] == 1  # not adjustable
 
 
 def test_normalize_unknown_drink_returns_none():
@@ -156,7 +155,6 @@ def test_save_drink_then_card_shows_till_line():
                 "base_id": "flat_white",
                 "size": "large",
                 "milk": "oat",
-                "shots": "1",
                 "strength": "regular",
                 "sweetener": "none",
                 "temp": "hot",
@@ -187,9 +185,9 @@ def test_cancel_returns_card_without_persisting_form_values():
         # Save a known drink first.
         client.post(
             "/me/drink",
-            data={"base_id": "espresso", "shots": "2"},
+            data={"base_id": "espresso", "notes": "double shot"},
         )
         # Cancel returns the existing card, unchanged.
         r = client.get("/me/drink/cancel")
     assert r.status_code == 200
-    assert "double espresso" in r.text
+    assert "espresso (double shot)" in r.text

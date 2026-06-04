@@ -68,14 +68,6 @@ def normalize(base_id: str, form: dict) -> Optional[dict]:
         if drink.milk_policy == MilkPolicy.REQUIRED
         else None
     )
-    if drink.shot_choices:
-        try:
-            n = int(form.get("shots", drink.default_shots))
-        except (TypeError, ValueError):
-            n = drink.default_shots
-        out["shots"] = n if n in drink.shot_choices else drink.default_shots
-    else:
-        out["shots"] = drink.default_shots
     out["strength"] = (
         _pick("strength", VALID_STRENGTHS, Strength.REGULAR.value)
         if drink.allows_strength
@@ -115,19 +107,10 @@ def get_saved_drink(session: Session, user_id: str) -> Optional[SavedDrink]:
 # Till-summary line formatting
 # ---------------------------------------------------------------------------
 
-# Espresso family: 2 shots reads as "double" rather than "2-shot espresso".
-_SHOT_WORDS = {1: "single", 2: "double", 3: "triple"}
-
 
 def format_drink(drink: Drink, sd: SavedDrink) -> str:
     """Render one till-summary line — lowercase, ordered like a barista call."""
     parts: list[str] = []
-
-    # Shots-as-prefix for espresso family. Only mention shots when non-default.
-    if drink.id == "espresso":
-        parts.append(_SHOT_WORDS.get(sd.shots, f"{sd.shots}-shot"))
-    elif drink.shot_choices and sd.shots != drink.default_shots:
-        parts.append(f"{sd.shots}-shot")
 
     # Macchiato length comes before the drink name: "short macchiato".
     if drink.has_length and sd.length:

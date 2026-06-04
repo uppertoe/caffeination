@@ -19,5 +19,5 @@ def test_index_renders_and_sets_cookie():
     with _client() as client:
         r = client.get("/")
     assert r.status_code == 200
-    assert "coffee-rch" in r.text
+    assert "caffeine@RCH" in r.text
     assert "coffee_rch_id" in r.cookies

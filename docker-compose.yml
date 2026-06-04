@@ -1,16 +1,16 @@
 services:
   web:
     build: .
-    image: coffee-rch:dev
+    image: caffeine-rch:dev
     ports:
       - "8000:8000"
     environment:
       DEBUG: "true"
       SECRET_KEY: "dev-only-change-me"
-      DATABASE_URL: "sqlite:////data/coffee.db"
+      DATABASE_URL: "sqlite:////data/caffeine.db"
     volumes:
-      - coffee-data:/data
+      - caffeine-data:/data
     restart: unless-stopped
 
 volumes:
-  coffee-data:
+  caffeine-data:

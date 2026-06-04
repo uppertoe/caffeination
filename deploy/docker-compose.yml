@@ -1,0 +1,47 @@
+services:
+  caffeine:
+    # Built + pushed by this repo's CI to GHCR. In the server repo, pin to a
+    # released tag by digest -- Renovate's pinDigests does this automatically.
+    image: ghcr.io/uppertoe/caffeination:latest
+    restart: unless-stopped
+    # CIS Docker §5 runtime hardening. The app needs no extra capabilities and
+    # binds only an internal port behind Caddy. The image already runs as the
+    # unprivileged "app" user (uid 1000).
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - path: ./.env
+        required: false # keep `docker compose config` valid in CI without a real .env
+    environment:
+      - DOMAIN=${DOMAIN}
+      # State lives on the mounted volume; debug off in production.
+      - DATABASE_URL=sqlite:////data/caffeine.db
+      - DEBUG=false
+    volumes:
+      - caffeine_data:/data
+    networks:
+      - caddy
+    # Root filesystem is read-only; the app writes only to the data volume
+    # (SQLite) and to /tmp.
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 256m
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  caffeine_data:
+
+networks:
+  caddy:
+    external: true
+    name: caddy

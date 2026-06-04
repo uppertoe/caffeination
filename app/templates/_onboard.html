@@ -18,11 +18,11 @@
   }'
 >
   <header>
-    <h1>Welcome to coffee-rch</h1>
+    <h1>Welcome to {{ app_name }}</h1>
     <p>Find yourself on the list, or type a new name to add yourself.</p>
   </header>
 
-  {% if error %}<p role="alert" class="muted"><small>{{ error }}</small></p>{% endif %}
+  {% if error %}<p role="alert" class="form-error"><small>{{ error }}</small></p>{% endif %}
 
   <label>
     <input
@@ -37,9 +37,10 @@
   <ul x-show="filtered.length > 0" class="onboard-list">
     <template x-for="u in filtered" :key="u.id">
       <li>
-        <strong x-text="u.display_name"></strong>
-        <span x-text="u.drink_line ? ' — ' + u.drink_line : ''"></span>
-        <button type="button" @click="claim(u.id)">That&apos;s me</button>
+        <span class="who"><strong x-text="u.display_name"></strong><span x-text="u.drink_line ? ' — ' + u.drink_line : ''"></span></span>
+        <span class="row-actions">
+          <button type="button" class="row-action" @click="claim(u.id)">That&apos;s me</button>
+        </span>
       </li>
     </template>
   </ul>
