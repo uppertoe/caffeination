@@ -7,7 +7,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    # Per-deployment branding. Override with the APP_NAME / TAGLINE env vars.
+    # app_name renders as "name@domain" in the header (split on the first @).
     app_name: str = "caffeine@RCH"
+    tagline: str = "Enabling safe and smooth anaesthesia since 2026"
     debug: bool = False
 
     # Where the SQLite file lives. Override with DATABASE_URL in prod.

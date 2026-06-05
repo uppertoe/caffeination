@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
@@ -146,13 +146,39 @@ def create_app() -> FastAPI:
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/site.webmanifest", include_in_schema=False)
+    def site_webmanifest() -> JSONResponse:
+        """PWA manifest. Served from a route (not /static) so the install name
+        tracks the per-deployment APP_NAME. Icons/colours stay shared."""
+        return JSONResponse(
+            {
+                "name": settings.app_name,
+                "short_name": settings.app_name,
+                "description": "Sort the office coffee run.",
+                "start_url": "/",
+                "display": "standalone",
+                "background_color": "#231c07",
+                "theme_color": "#231c07",
+                "icons": [
+                    {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+                    {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+                    {"src": "/static/favicon.svg", "type": "image/svg+xml", "sizes": "any"},
+                ],
+            },
+            media_type="application/manifest+json",
+        )
+
     @app.get("/", response_class=HTMLResponse)
     def index(
         request: Request,
         user: User = Depends(get_current_user),
         session: Session = Depends(get_session),
     ):
-        ctx: dict = {"app_name": settings.app_name, "user": user}
+        ctx: dict = {
+            "app_name": settings.app_name,
+            "tagline": settings.tagline,
+            "user": user,
+        }
         if user.display_name:
             ctx.update(_dashboard_ctx(session, user))
         else:

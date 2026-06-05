@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/static/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
-    <link rel="manifest" href="/static/site.webmanifest" />
+    <link rel="manifest" href="/site.webmanifest" />
 
     <!-- Display type -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -36,7 +36,7 @@
         <div>
           {% set _name = app_name.split('@') %}
           <p class="brand-title">{{ _name[0] }}{% if _name|length > 1 %}<span class="brand-at">@</span><span class="brand-domain">{{ _name[1] }}</span>{% endif %}</p>
-          <p class="brand-tagline">Enabling safe and smooth anaesthesia since 2026</p>
+          <p class="brand-tagline">{{ tagline }}</p>
         </div>
       </header>
       {% block content %}{% endblock %}

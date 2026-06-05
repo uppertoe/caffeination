@@ -21,3 +21,17 @@ def test_index_renders_and_sets_cookie():
     assert r.status_code == 200
     assert "caffeine@RCH" in r.text
     assert "coffee_rch_id" in r.cookies
+
+
+def test_webmanifest_uses_app_name(monkeypatch):
+    monkeypatch.setenv("APP_NAME", "caffeine@Monash")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    with _client() as client:
+        r = client.get("/site.webmanifest")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/manifest+json"
+    body = r.json()
+    assert body["name"] == "caffeine@Monash"
+    assert body["short_name"] == "caffeine@Monash"
