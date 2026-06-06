@@ -2,6 +2,53 @@
    Palette: #231c07 #392a16 #634133 #b86f52 #f78764
    Cream / muted tones are derived for legible text on the dark roast. */
 
+/* ---- Self-hosted display face (Fraunces, variable) ---------------------- *
+   Vendored under /static/vendor so no external CDN is hit (hospital networks
+   often block them). font-display: optional means the browser uses the serif
+   fallback if Fraunces isn't ready at first paint and never swaps mid-load —
+   so the wordmark/headings never reflow. The latin face is preloaded in
+   base.html so it's almost always ready in time. */
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: optional;
+  src: url("/static/vendor/fraunces-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: optional;
+  src: url("/static/vendor/fraunces-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Fraunces";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: optional;
+  src: url("/static/vendor/fraunces-italic-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Fraunces";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: optional;
+  src: url("/static/vendor/fraunces-italic-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
   --espresso: #231c07;
   --bean: #392a16;
@@ -11,9 +58,11 @@
   --cream: #f5ecdd;
   --cream-dim: #c9b49a;
   --crema: #e7c9a8;
-  /* Warm, relaxed display serif for headings + wordmark. */
-  --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino,
-    "Book Antiqua", Georgia, serif;
+  /* Warm, relaxed display serif for headings + wordmark. Fraunces is
+     self-hosted; the fallbacks are deliberately limited to base fonts that
+     every platform exposes, so Firefox's font-visibility guard doesn't block
+     (and log) lookups for OS-specific faces while Fraunces loads. */
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
 }
 
 /* Hide Alpine-managed elements until Alpine initialises. */

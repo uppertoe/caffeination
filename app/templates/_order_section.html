@@ -96,7 +96,7 @@
         </li>
         {% endfor %}
       </ul>
-      <p x-show="noMatches" class="muted">
+      <p x-show="noMatches" x-cloak class="muted">
         <small>No matches for &ldquo;<span x-text="q"></span>&rdquo;.</small>
       </p>
     {% endif %}

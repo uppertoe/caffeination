@@ -92,6 +92,11 @@
 
     {% include "_drink_fields.html" %}
 
+    <p class="muted">
+      <small>Please make sure this person is happy to have their name and
+      order saved to the shared list.</small>
+    </p>
+
     <div class="grid">
       <button type="submit" :disabled="!cleanName || nameTaken">
         Save &amp; add to order

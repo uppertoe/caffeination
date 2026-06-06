@@ -13,7 +13,7 @@
   </select>
 </label>
 
-<fieldset x-show="rule.allowsIced">
+<fieldset x-show="rule.allowsIced" x-cloak>
   <legend>Temperature</legend>
   <div class="pill-row">
     <label><input type="radio" name="temp" value="hot" x-model="temp"> Hot</label>
@@ -21,7 +21,7 @@
   </div>
 </fieldset>
 
-<fieldset x-show="rule.sized">
+<fieldset x-show="rule.sized" x-cloak>
   <legend>Size</legend>
   <div class="pill-row">
     <label><input type="radio" name="size" value="small" x-model="size"> Small</label>
@@ -30,7 +30,7 @@
   </div>
 </fieldset>
 
-<label x-show="rule.milkPolicy === 'required'">
+<label x-show="rule.milkPolicy === 'required'" x-cloak>
   Milk
   <select name="milk" x-model="milk">
     {% for value, label in milk_options %}
@@ -39,7 +39,7 @@
   </select>
 </label>
 
-<fieldset x-show="rule.hasLength">
+<fieldset x-show="rule.hasLength" x-cloak>
   <legend>Length</legend>
   <div class="pill-row">
     <label><input type="radio" name="length" value="short" x-model="length"> Short</label>
@@ -47,7 +47,7 @@
   </div>
 </fieldset>
 
-<label x-show="rule.allowsStrength">
+<label x-show="rule.allowsStrength" x-cloak>
   Strength
   <select name="strength" x-model="strength">
     {% for value, label in strength_options %}
@@ -76,6 +76,6 @@
   />
 </label>
 
-<p x-show="rule.servedNote" class="muted">
+<p x-show="rule.servedNote" x-cloak class="muted">
   <small x-text="rule.servedNote"></small>
 </p>
