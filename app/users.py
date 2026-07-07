@@ -9,7 +9,7 @@ from app.db import get_session
 from app.drinks import format_drink, get_saved_drink
 from app.identity import mint_identity, read_identity, set_identity
 from app.menu import get_drink
-from app.models import SavedDrink, User
+from app.models import OrderItem, SavedDrink, User
 
 # How long after creating a roster person you may still edit their usual.
 EDIT_WINDOW = timedelta(hours=2)
@@ -118,6 +118,35 @@ def named_users_with_lines(session: Session) -> list[dict]:
         out.append({"id": u.id, "display_name": u.display_name, "drink_line": line})
     out.sort(key=lambda x: x["display_name"].lower())
     return out
+
+
+def delete_user(session: Session, user_id: str) -> None:
+    """Remove a user and everything hanging off them.
+
+    Their own open order (including any one-off guests it spawned), their
+    presence in other people's orders, and their saved drink all go; people
+    they created stay on the roster with `created_by` detached.
+    """
+    from app.orders import clear_order  # function-local: orders imports us
+
+    user = session.get(User, user_id)
+    if user is None:
+        return
+    clear_order(session, user_id)
+    for item in session.exec(
+        select(OrderItem).where(OrderItem.target_user_id == user_id)
+    ).all():
+        session.delete(item)
+    for created in session.exec(
+        select(User).where(User.created_by == user_id)
+    ).all():
+        created.created_by = None
+        session.add(created)
+    saved = session.get(SavedDrink, user_id)
+    if saved is not None:
+        session.delete(saved)
+    session.delete(user)
+    session.commit()
 
 
 def claim_user(

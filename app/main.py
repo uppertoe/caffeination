@@ -28,6 +28,7 @@ from app.menu import (
 from app.models import SavedDrink, User
 from app.orders import (
     add_to_order,
+    clear_order,
     order_rows,
     remove_from_order,
     roster_candidates,
@@ -37,6 +38,7 @@ from app.users import (
     can_edit_person,
     claim_user,
     create_named_user,
+    delete_user,
     existing_names_lower,
     find_user_by_display_name,
     get_current_user,
@@ -257,6 +259,77 @@ def create_app() -> FastAPI:
             request, "_dashboard.html", _dashboard_ctx(session, user)
         )
 
+    @app.get("/me/header", response_class=HTMLResponse)
+    def dash_header(
+        request: Request,
+        user: User = Depends(get_current_user),
+    ):
+        """Re-render the dashboard header (used to cancel a name edit)."""
+        return templates.TemplateResponse(
+            request, "_dash_header.html", {"user": user}
+        )
+
+    @app.get("/me/name/edit", response_class=HTMLResponse)
+    def name_edit_form(
+        request: Request,
+        user: User = Depends(get_current_user),
+    ):
+        return templates.TemplateResponse(
+            request, "_name_edit.html", {"user": user}
+        )
+
+    @app.post("/me/rename", response_class=HTMLResponse)
+    def rename(
+        request: Request,
+        display_name: str = Form(...),
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        name = display_name.strip()
+        if not (1 <= len(name) <= 40):
+            return templates.TemplateResponse(
+                request,
+                "_name_edit.html",
+                {"user": user, "error": "Name must be 1–40 characters.", "submitted": name},
+                status_code=422,
+            )
+        existing = find_user_by_display_name(session, name)
+        if existing is not None and existing.id != user.id:
+            return templates.TemplateResponse(
+                request,
+                "_name_edit.html",
+                {
+                    "user": user,
+                    "error": f"“{existing.display_name}” is already taken — pick another name.",
+                    "submitted": name,
+                },
+                status_code=409,
+            )
+        user.display_name = name
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        # The owner's name also shows on their own order row — refresh it OOB.
+        header_html = _render("_dash_header.html", {"user": user})
+        order_html = _render(
+            "_order_section.html", _order_section_ctx(session, user, oob=True)
+        )
+        return HTMLResponse(header_html + order_html)
+
+    @app.post("/me/delete", response_class=HTMLResponse)
+    def delete_me(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        """Delete the claimed user entirely and drop back to onboarding."""
+        delete_user(session, user.id)
+        response = templates.TemplateResponse(
+            request, "_onboard.html", _onboard_ctx(session)
+        )
+        response.delete_cookie(settings.cookie_name, path="/")
+        return response
+
     @app.get("/me/drink", response_class=HTMLResponse)
     def drink_card(
         request: Request,
@@ -424,6 +497,17 @@ def create_app() -> FastAPI:
         session: Session = Depends(get_session),
     ):
         add_to_order(session, user.id, target_id)
+        return templates.TemplateResponse(
+            request, "_order_section.html", _order_section_ctx(session, user)
+        )
+
+    @app.post("/order/clear", response_class=HTMLResponse)
+    def order_clear(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        clear_order(session, user.id)
         return templates.TemplateResponse(
             request, "_order_section.html", _order_section_ctx(session, user)
         )

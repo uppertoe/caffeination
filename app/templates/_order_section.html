@@ -31,6 +31,17 @@
         </li>
         {% endfor %}
       </ul>
+      {% if rows | rejectattr("is_self") | list %}
+      <footer>
+        <button
+          type="button"
+          class="secondary outline row-action"
+          hx-post="/order/clear"
+          hx-target="#order-section"
+          hx-swap="outerHTML"
+        >Clear order</button>
+      </footer>
+      {% endif %}
     {% endif %}
   </article>
 
@@ -80,22 +91,39 @@
           aria-label="Filter roster"
         />
       </label>
-      <ul class="roster-list">
-        {% for u, line in roster %}
-        <li x-show='matches({{ u.display_name | tojson }})'>
-          <span class="who"><strong>{{ u.display_name }}</strong> — {{ line }}</span>
-          <span class="row-actions">
-            <button
-              type="button"
-              class="row-action"
-              hx-post="/order/add/{{ u.id }}"
-              hx-target="#order-section"
-              hx-swap="outerHTML"
-            >Add</button>
-          </span>
-        </li>
-        {% endfor %}
-      </ul>
+      <div
+        class="scroll-shadow"
+        x-data="{
+          moreAbove: false,
+          moreBelow: false,
+          update() {
+            const el = $refs.list;
+            if (!el) return;
+            this.moreAbove = el.scrollTop > 4;
+            this.moreBelow = el.scrollTop + el.clientHeight < el.scrollHeight - 4;
+          }
+        }"
+        x-effect="q; $nextTick(() => update())"
+        @resize.window="update()"
+        :class="{ 'fade-top': moreAbove, 'fade-bottom': moreBelow }"
+      >
+        <ul class="roster-list" x-ref="list" @scroll="update()">
+          {% for u, line in roster %}
+          <li x-show='matches({{ u.display_name | tojson }})'>
+            <span class="who"><strong>{{ u.display_name }}</strong> — {{ line }}</span>
+            <span class="row-actions">
+              <button
+                type="button"
+                class="row-action"
+                hx-post="/order/add/{{ u.id }}"
+                hx-target="#order-section"
+                hx-swap="outerHTML"
+              >Add</button>
+            </span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
       <p x-show="noMatches" x-cloak class="muted">
         <small>No matches for &ldquo;<span x-text="q"></span>&rdquo;.</small>
       </p>

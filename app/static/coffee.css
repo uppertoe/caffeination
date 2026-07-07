@@ -299,7 +299,7 @@ article > header :is(h1, h2, h3) { margin-bottom: 0; }
 }
 
 /* Roster/onboard search input sits a touch above its list. */
-.roster-list, .onboard-list { margin-top: 0.6rem; }
+.scroll-shadow { margin-top: 0.6rem; }
 
 /* ---- Till summary ------------------------------------------------------- */
 #order-section textarea {
@@ -322,12 +322,45 @@ article > header :is(h1, h2, h3) { margin-bottom: 0; }
   flex-wrap: wrap;
 }
 .dash-header h1 { margin: 0; }
-.logout {
+.logout,
+.header-action {
   flex: 0 0 auto;
   width: auto;
   margin: 0;
   padding: 0.3rem 0.85rem;
   font-size: 0.85rem;
+}
+.header-action.danger {
+  --pico-color: var(--coral);
+  border-color: var(--coral);
+  color: var(--coral);
+}
+
+/* Inline name-edit form swapped into the dashboard header. */
+.name-edit {
+  flex: 1 1 100%;
+  margin: 0;
+}
+.name-edit fieldset[role="group"] { margin-bottom: 0; }
+
+/* Confirmation modal (Pico <dialog>). */
+dialog article { max-width: 26rem; }
+dialog article footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+dialog article footer button {
+  width: auto;
+  margin: 0;
+}
+.danger-solid {
+  --pico-background-color: var(--coral);
+  --pico-border-color: var(--coral);
+  --pico-color: #231c07;
+  background: var(--coral);
+  border-color: var(--coral);
+  color: #231c07;
 }
 
 /* Long rosters/name lists stay contained and scroll in place. */
@@ -335,7 +368,43 @@ article > header :is(h1, h2, h3) { margin-bottom: 0; }
   max-height: 21rem;
   overflow-y: auto;
   padding-right: 0.25rem;
+  margin-block: 0;
+  /* Reaching the end of the list shouldn't start scrolling the page. */
+  overscroll-behavior: contain;
+  /* macOS/iOS overlay scrollbars are invisible until touched; keep a thin
+     visible one so a capped list doesn't just look cut off. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--mocha) transparent;
 }
+
+/* Scroll-edge fades: gradients appear only while content actually continues
+   past that edge (Alpine toggles the classes on scroll/filter). */
+.scroll-shadow {
+  position: relative;
+  margin-bottom: var(--pico-spacing, 1rem);
+}
+.scroll-shadow::before,
+.scroll-shadow::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2.25rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 1;
+}
+.scroll-shadow::before {
+  top: 0;
+  background: linear-gradient(to bottom, var(--bean), transparent);
+}
+.scroll-shadow::after {
+  bottom: 0;
+  background: linear-gradient(to top, var(--bean), transparent);
+}
+.scroll-shadow.fade-top::before { opacity: 1; }
+.scroll-shadow.fade-bottom::after { opacity: 1; }
 
 /* ---- Misc --------------------------------------------------------------- */
 .muted { color: var(--cream-dim); }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlmodel import Session, select
@@ -11,7 +12,12 @@ from sqlmodel import Session, select
 from app.drinks import format_drink, get_saved_drink
 from app.menu import get_drink
 from app.models import OrderItem, SavedDrink, User
-from app.users import can_edit_person
+from app.users import _as_naive_utc, can_edit_person
+
+# An open order goes stale this long after its FIRST item was added; the
+# whole thing is cleared lazily on the next render. Coffee runs are a
+# same-morning affair — yesterday's order shouldn't greet you today.
+ORDER_TTL = timedelta(hours=12)
 
 
 @dataclass
@@ -51,6 +57,29 @@ def remove_from_order(session: Session, owner_id: str, target_user_id: str) -> N
         session.commit()
 
 
+def clear_order(session: Session, owner_id: str) -> None:
+    """Empty the owner's open order, cleaning up one-off people with it."""
+    items = session.exec(
+        select(OrderItem).where(OrderItem.owner_id == owner_id)
+    ).all()
+    for item in items:
+        remove_from_order(session, owner_id, item.target_user_id)
+
+
+def purge_expired_order(
+    session: Session, owner_id: str, now: Optional[datetime] = None
+) -> None:
+    items = session.exec(
+        select(OrderItem).where(OrderItem.owner_id == owner_id)
+    ).all()
+    if not items:
+        return
+    now = now or datetime.now(timezone.utc)
+    oldest = min(_as_naive_utc(item.added_at) for item in items)
+    if _as_naive_utc(now) - oldest >= ORDER_TTL:
+        clear_order(session, owner_id)
+
+
 def _line_for(saved: Optional[SavedDrink]) -> str:
     if saved is None:
         return "(no drink saved yet)"
@@ -59,7 +88,12 @@ def _line_for(saved: Optional[SavedDrink]) -> str:
 
 
 def order_rows(session: Session, owner_id: str) -> list[OrderRow]:
-    """Owner (if they have a drink) followed by each added user."""
+    """Owner (if they have a drink) followed by each added user.
+
+    Stale orders are purged here so every render (page load or HTMX
+    fragment) sees at most a 12-hour-old order.
+    """
+    purge_expired_order(session, owner_id)
     rows: list[OrderRow] = []
     owner = session.get(User, owner_id)
     owner_drink = get_saved_drink(session, owner_id)

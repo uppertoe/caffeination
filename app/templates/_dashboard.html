@@ -1,14 +1,5 @@
 <article>
-  <header class="dash-header">
-    <h1>Hi, {{ user.display_name }}</h1>
-    <button
-      type="button"
-      class="logout secondary outline"
-      hx-post="/logout"
-      hx-target="#app"
-      hx-swap="innerHTML"
-    >Log out</button>
-  </header>
+  {% include "_dash_header.html" %}
 
   {% include "_drink_card.html" %}
 </article>

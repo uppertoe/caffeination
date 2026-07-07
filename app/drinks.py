@@ -142,7 +142,9 @@ def format_drink(drink: Drink, sd: SavedDrink) -> str:
     if sd.sweetener and sd.sweetener != Sweetener.NONE.value:
         extras.append(SWEETENER_LABELS[sd.sweetener].lower())
     if sd.notes:
-        extras.append(sd.notes)
+        # Notes are free text; lowercase at display time so the till line
+        # stays uniformly lowercase (the stored note keeps the user's typing).
+        extras.append(sd.notes.lower())
     if extras:
         line += " (" + ", ".join(extras) + ")"
     return line

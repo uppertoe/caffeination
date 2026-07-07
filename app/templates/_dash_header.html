@@ -1,0 +1,54 @@
+<header
+  class="dash-header"
+  id="dash-header"
+  x-data="{ confirmingDelete: false }"
+  @keydown.escape.window="confirmingDelete = false"
+>
+  <h1>Hi, {{ user.display_name }}</h1>
+  <span class="row-actions">
+    <button
+      type="button"
+      class="secondary outline header-action"
+      hx-get="/me/name/edit"
+      hx-target="#dash-header"
+      hx-swap="outerHTML"
+    >Change name</button>
+    <button
+      type="button"
+      class="secondary outline header-action"
+      hx-post="/logout"
+      hx-target="#app"
+      hx-swap="innerHTML"
+    >Log out</button>
+    <button
+      type="button"
+      class="secondary outline header-action danger"
+      @click="confirmingDelete = true"
+    >Delete</button>
+  </span>
+
+  <dialog :open="confirmingDelete">
+    <article>
+      <header><strong>Delete {{ user.display_name }}?</strong></header>
+      <p>
+        This removes {{ user.display_name }} and their saved drink from the
+        shared list for everyone, and takes them out of any open orders.
+        It can't be undone.
+      </p>
+      <footer>
+        <button
+          type="button"
+          class="secondary outline"
+          @click="confirmingDelete = false"
+        >Cancel</button>
+        <button
+          type="button"
+          class="danger-solid"
+          hx-post="/me/delete"
+          hx-target="#app"
+          hx-swap="innerHTML"
+        >Delete</button>
+      </footer>
+    </article>
+  </dialog>
+</header>

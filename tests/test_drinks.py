@@ -90,6 +90,16 @@ def test_format_iced_soy_mocha_with_extras():
     )
 
 
+def test_format_lowercases_notes():
+    """Free-text notes join the line lowercased so the till summary stays
+    uniformly lowercase whatever the user typed."""
+    from app.drinks import format_drink
+    from app.menu import get_drink
+
+    sd = _make_saved(base_id="latte", notes="EXTRA Hot Please")
+    assert format_drink(get_drink("latte"), sd) == "latte (extra hot please)"
+
+
 def test_format_magic_is_just_magic():
     """Magic is fixed-size, fixed-shots, so the line drops all axes."""
     from app.drinks import format_drink

@@ -1,0 +1,29 @@
+<header class="dash-header" id="dash-header">
+  <form
+    class="name-edit"
+    hx-post="/me/rename"
+    hx-target="#dash-header"
+    hx-swap="outerHTML"
+  >
+    <fieldset role="group">
+      <input
+        name="display_name"
+        value="{{ submitted if submitted is defined else user.display_name }}"
+        maxlength="40"
+        required
+        autofocus
+        autocomplete="off"
+        aria-label="Your name"
+      />
+      <button type="submit">Save</button>
+      <button
+        type="button"
+        class="secondary outline"
+        hx-get="/me/header"
+        hx-target="#dash-header"
+        hx-swap="outerHTML"
+      >Cancel</button>
+    </fieldset>
+    {% if error %}<p role="alert" class="form-error"><small>{{ error }}</small></p>{% endif %}
+  </form>
+</header>
