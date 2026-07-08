@@ -85,7 +85,7 @@ jobs:
       - name: Smoke test — image boots and serves /healthz
         run: |
           set -e
-          docker run -d --name caffeination-smoke -p 8899:8000 -e SECRET_KEY=ci-dummy-secret -e DOMAIN=example.com caffeination:ci
+          docker run -d --name caffeination-smoke -p 8899:8000 -e SECRET_KEY=ci-dummy-secret -e DOMAIN=example.com -e DATABASE_URL=sqlite:////tmp/coffee.db caffeination:ci
           code=000
           for i in $(seq 1 40); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8899/healthz || true)
