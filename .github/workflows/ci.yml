@@ -4,6 +4,11 @@ on:
   push:
     branches: ['**']
   pull_request:
+  schedule:
+    # Weekly rebuild so base-image security fixes are picked up even when no
+    # code changes; the digest pin on the server repo follows.
+    - cron: "30 17 * * 0" # Sun 17:30 UTC (Mon 03:30 AEST)
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -36,7 +41,7 @@ jobs:
     needs: test
     # Build on every branch push so each branch gets its own tag on GHCR.
     # PRs only run the test job — they don't push images.
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
