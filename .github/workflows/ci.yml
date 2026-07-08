@@ -69,6 +69,37 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-
 
+
+      # Build once and LOAD into the runner's docker: the image must boot and
+      # serve /healthz before anything is pushed (unit tests can pass while
+      # the packaged image is broken).
+      - name: Build image (load for smoke test)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: caffeination:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test — image boots and serves /healthz
+        run: |
+          set -e
+          docker run -d --name caffeination-smoke -p 8899:8000 -e SECRET_KEY=ci-dummy-secret -e DOMAIN=example.com caffeination:ci
+          code=000
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8899/healthz || true)
+            [ "$code" = "200" ] && break
+            sleep 1
+          done
+          echo "GET /healthz -> $code (after ${i}s)"
+          docker logs caffeination-smoke || true
+          docker rm -f caffeination-smoke >/dev/null 2>&1 || true
+          if [ "$code" != "200" ]; then
+            echo "::error::boot smoke failed — image does not serve /healthz"
+            exit 1
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
