@@ -1,6 +1,6 @@
 /* coffee-rch — coffee-house theme over PicoCSS.
-   Palette: #231c07 #392a16 #634133 #b86f52 #f78764
-   Cream / muted tones are derived for legible text on the dark roast. */
+   Palette (flat white): #FFF8F0 #C08552 #8C5A3C #4B2E2B
+   Rust danger tone and warm card tints are derived for legible text on milk. */
 
 /* ---- Self-hosted display face (Fraunces, variable) ---------------------- *
    Vendored under /static/vendor so no external CDN is hit (hospital networks
@@ -50,14 +50,12 @@
 }
 
 :root {
-  --espresso: #231c07;
-  --bean: #392a16;
-  --mocha: #634133;
-  --caramel: #b86f52;
-  --coral: #f78764;
-  --cream: #f5ecdd;
-  --cream-dim: #c9b49a;
-  --crema: #e7c9a8;
+  --milk: #fff8f0;      /* page background */
+  --card: #fffdfa;      /* card surface, a touch brighter than the page */
+  --caramel: #c08552;   /* primary actions, warm accents */
+  --mocha: #8c5a3c;     /* secondary text, borders, links */
+  --espresso: #4b2e2b;  /* body text, headings, darkest ink */
+  --rust: #a9472a;      /* danger/error accent derived from the palette */
   /* Warm, relaxed display serif for headings + wordmark. Fraunces is
      self-hosted; the fallbacks are deliberately limited to base fonts that
      every platform exposes, so Firefox's font-visibility guard doesn't block
@@ -68,66 +66,68 @@
 /* Hide Alpine-managed elements until Alpine initialises. */
 [x-cloak] { display: none !important; }
 
-/* ---- Pico variable overrides (dark roast) ------------------------------- */
-[data-theme="dark"] {
-  --pico-background-color: var(--espresso);
-  --pico-color: var(--cream);
-  --pico-text-selection-color: rgba(247, 135, 100, 0.3);
-  --pico-muted-color: var(--cream-dim);
-  --pico-muted-border-color: rgba(99, 65, 51, 0.45);
+/* ---- Pico variable overrides (flat white) -------------------------------- *
+   :root[data-theme] rather than bare [data-theme]: Pico's own light block is
+   `:root:not([data-theme=dark])`, which outranks a lone attribute selector. */
+:root[data-theme="light"] {
+  --pico-background-color: var(--milk);
+  --pico-color: var(--espresso);
+  --pico-text-selection-color: rgba(192, 133, 82, 0.25);
+  --pico-muted-color: var(--mocha);
+  --pico-muted-border-color: rgba(140, 90, 60, 0.28);
   --pico-border-radius: 0.75rem;
 
-  --pico-h1-color: var(--coral);
-  --pico-h2-color: var(--crema);
-  --pico-h3-color: var(--crema);
-  --pico-h4-color: var(--crema);
-  --pico-h5-color: var(--crema);
-  --pico-h6-color: var(--crema);
+  --pico-h1-color: var(--espresso);
+  --pico-h2-color: var(--mocha);
+  --pico-h3-color: var(--mocha);
+  --pico-h4-color: var(--mocha);
+  --pico-h5-color: var(--mocha);
+  --pico-h6-color: var(--mocha);
 
   /* Cards */
-  --pico-card-background-color: var(--bean);
-  --pico-card-border-color: rgba(99, 65, 51, 0.6);
-  --pico-card-box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.35);
-  --pico-card-sectioning-background-color: rgba(99, 65, 51, 0.22);
+  --pico-card-background-color: var(--card);
+  --pico-card-border-color: rgba(140, 90, 60, 0.3);
+  --pico-card-box-shadow: 0 0.5rem 1.4rem rgba(75, 46, 43, 0.08);
+  --pico-card-sectioning-background-color: rgba(192, 133, 82, 0.08);
 
-  /* Primary (caramel → coral) */
+  /* Primary (caramel → mocha) */
   --pico-primary: var(--espresso);
   --pico-primary-background: var(--caramel);
   --pico-primary-border: var(--caramel);
-  --pico-primary-hover: var(--espresso);
-  --pico-primary-hover-background: var(--coral);
-  --pico-primary-hover-border: var(--coral);
-  --pico-primary-focus: rgba(247, 135, 100, 0.4);
+  --pico-primary-hover: var(--milk);
+  --pico-primary-hover-background: var(--mocha);
+  --pico-primary-hover-border: var(--mocha);
+  --pico-primary-focus: rgba(192, 133, 82, 0.4);
   --pico-primary-inverse: var(--espresso);
 
-  /* Secondary (muted mocha) */
-  --pico-secondary: var(--cream);
+  /* Secondary (mocha outline) */
+  --pico-secondary: var(--mocha);
   --pico-secondary-background: var(--mocha);
   --pico-secondary-border: var(--mocha);
-  --pico-secondary-hover: var(--cream);
+  --pico-secondary-hover: var(--espresso);
   --pico-secondary-hover-background: #76503d;
-  --pico-secondary-hover-border: #76503d;
-  --pico-secondary-focus: rgba(99, 65, 51, 0.45);
-  --pico-secondary-inverse: var(--cream);
+  --pico-secondary-hover-border: var(--espresso);
+  --pico-secondary-focus: rgba(140, 90, 60, 0.35);
+  --pico-secondary-inverse: var(--milk);
 
   /* Links */
-  --pico-link-color: var(--coral);
-  --pico-link-hover-color: var(--crema);
+  --pico-link-color: var(--mocha);
+  --pico-link-hover-color: var(--espresso);
 
   /* Form elements */
-  --pico-form-element-background-color: rgba(35, 28, 7, 0.6);
-  --pico-form-element-border-color: var(--mocha);
-  --pico-form-element-color: var(--cream);
-  --pico-form-element-placeholder-color: var(--cream-dim);
-  --pico-form-element-active-background-color: rgba(35, 28, 7, 0.8);
+  --pico-form-element-background-color: #ffffff;
+  --pico-form-element-border-color: rgba(140, 90, 60, 0.45);
+  --pico-form-element-color: var(--espresso);
+  --pico-form-element-placeholder-color: rgba(140, 90, 60, 0.75);
+  --pico-form-element-active-background-color: #ffffff;
   --pico-form-element-active-border-color: var(--caramel);
-  --pico-form-element-focus-color: rgba(247, 135, 100, 0.35);
+  --pico-form-element-focus-color: rgba(192, 133, 82, 0.35);
 }
 
 /* ---- Base canvas -------------------------------------------------------- */
 html {
   background:
-    radial-gradient(1200px 600px at 50% -10%, #2c2109 0%, var(--espresso) 60%);
+    radial-gradient(1200px 600px at 50% -10%, #f7e8d6 0%, var(--milk) 60%);
   min-height: 100%;
 }
 
@@ -168,6 +168,27 @@ h3 { font-size: 1.3rem; }
 
 main.container { max-width: 46rem; }
 
+/* ---- Buttons: make hover states unmistakable ----------------------------- */
+button, [role="button"] {
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    color 0.15s ease, box-shadow 0.15s ease;
+}
+/* Outline buttons (Edit / Remove / Change name / Log out / Clear order):
+   Pico only nudges the text colour on hover, which is easy to miss — fill
+   them with a warm tint and darken the border as well. */
+button.outline:hover,
+button.outline:focus-visible {
+  background: rgba(192, 133, 82, 0.16);
+  border-color: var(--mocha);
+  color: var(--espresso);
+}
+.header-action.danger:hover,
+.header-action.danger:focus-visible {
+  background: rgba(169, 71, 42, 0.12);
+  border-color: var(--rust);
+  color: var(--rust);
+}
+
 /* ---- Top bar ------------------------------------------------------------ */
 .brand {
   display: flex;
@@ -189,7 +210,7 @@ main.container { max-width: 46rem; }
   font-weight: 600;
   line-height: 1.04;
   letter-spacing: -0.02em;
-  color: var(--crema);
+  color: var(--espresso);
 }
 .brand-at {
   color: var(--caramel);
@@ -199,7 +220,7 @@ main.container { max-width: 46rem; }
   margin: 0 0.03em;
 }
 .brand-domain {
-  color: var(--coral);
+  color: var(--mocha);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -210,7 +231,7 @@ main.container { max-width: 46rem; }
   font-style: italic;
   font-weight: 400;
   font-size: 0.95rem;
-  color: var(--cream-dim);
+  color: var(--mocha);
 }
 
 /* ---- Cards & spacing ---------------------------------------------------- */
@@ -238,12 +259,12 @@ article > header :is(h1, h2, h3) { margin-bottom: 0; }
   user-select: none;
   transition: border-color 0.12s ease, background-color 0.12s ease;
 }
-.pill-row label:hover { border-color: var(--caramel); }
+.pill-row label:hover { border-color: var(--caramel); background: rgba(192, 133, 82, 0.1); }
 .pill-row input { margin: 0; }
 .pill-row label:has(input:checked) {
-  border-color: var(--coral);
-  background: rgba(247, 135, 100, 0.16);
-  color: var(--cream);
+  border-color: var(--caramel);
+  background: rgba(192, 133, 82, 0.18);
+  color: var(--espresso);
 }
 
 /* ---- Lists: order / roster / onboard ------------------------------------ */
@@ -262,10 +283,10 @@ article > header :is(h1, h2, h3) { margin-bottom: 0; }
   padding: 0.7rem 0.9rem;
   border: 1px solid var(--pico-card-border-color);
   border-radius: var(--pico-border-radius);
-  background: rgba(99, 65, 51, 0.16);
+  background: rgba(192, 133, 82, 0.08);
 }
 .order-list li strong, .roster-list li strong, .onboard-list li strong {
-  color: var(--crema);
+  color: var(--espresso);
 }
 /* Name + drink text shrinks/wraps; the action buttons never shrink. */
 .who {
@@ -290,8 +311,8 @@ article > header :is(h1, h2, h3) { margin-bottom: 0; }
   margin-left: 0.15rem;
   padding: 0.05rem 0.45rem;
   border-radius: 1rem;
-  background: rgba(184, 111, 82, 0.22);
-  color: var(--crema);
+  background: rgba(192, 133, 82, 0.22);
+  color: var(--mocha);
   font-size: 0.68rem;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -304,9 +325,9 @@ article > header :is(h1, h2, h3) { margin-bottom: 0; }
 /* ---- Till summary ------------------------------------------------------- */
 #order-section textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  background: rgba(35, 28, 7, 0.75);
-  border-color: var(--mocha);
-  color: var(--crema);
+  background: rgba(192, 133, 82, 0.1);
+  border-color: rgba(140, 90, 60, 0.45);
+  color: var(--espresso);
   resize: vertical;
 }
 
@@ -331,9 +352,9 @@ article > header :is(h1, h2, h3) { margin-bottom: 0; }
   font-size: 0.85rem;
 }
 .header-action.danger {
-  --pico-color: var(--coral);
-  border-color: var(--coral);
-  color: var(--coral);
+  --pico-color: var(--rust);
+  border-color: var(--rust);
+  color: var(--rust);
 }
 
 /* Inline name-edit form swapped into the dashboard header. */
@@ -355,26 +376,31 @@ dialog article footer button {
   margin: 0;
 }
 .danger-solid {
-  --pico-background-color: var(--coral);
-  --pico-border-color: var(--coral);
-  --pico-color: #231c07;
-  background: var(--coral);
-  border-color: var(--coral);
-  color: #231c07;
+  --pico-background-color: var(--rust);
+  --pico-border-color: var(--rust);
+  --pico-color: var(--milk);
+  background: var(--rust);
+  border-color: var(--rust);
+  color: var(--milk);
+}
+.danger-solid:hover {
+  background: #8f3a22;
+  border-color: #8f3a22;
+  color: var(--milk);
 }
 
-/* Long rosters/name lists stay contained and scroll in place. */
+/* Long rosters/name lists stay contained and scroll in place. Scrolling
+   chains to the page at the list's edges (no overscroll-behavior) so
+   hovering the list never traps the page scroll. */
 .onboard-list, .roster-list {
   max-height: 21rem;
   overflow-y: auto;
   padding-right: 0.25rem;
   margin-block: 0;
-  /* Reaching the end of the list shouldn't start scrolling the page. */
-  overscroll-behavior: contain;
   /* macOS/iOS overlay scrollbars are invisible until touched; keep a thin
      visible one so a capped list doesn't just look cut off. */
   scrollbar-width: thin;
-  scrollbar-color: var(--mocha) transparent;
+  scrollbar-color: var(--caramel) transparent;
 }
 
 /* Scroll-edge fades: gradients appear only while content actually continues
@@ -397,11 +423,11 @@ dialog article footer button {
 }
 .scroll-shadow::before {
   top: 0;
-  background: linear-gradient(to bottom, rgba(35, 28, 7, 0.85), transparent);
+  background: linear-gradient(to bottom, rgba(75, 46, 43, 0.22), transparent);
 }
 .scroll-shadow::after {
   bottom: 0;
-  background: linear-gradient(to top, rgba(35, 28, 7, 0.85), transparent);
+  background: linear-gradient(to top, rgba(75, 46, 43, 0.22), transparent);
 }
 .scroll-shadow.fade-top::before { opacity: 1; }
 .scroll-shadow.fade-bottom::after { opacity: 1; }
@@ -421,21 +447,22 @@ dialog article footer button {
   border-radius: 999px;
   border: 1px solid var(--mocha);
   background: var(--espresso);
-  color: var(--crema);
+  color: var(--milk);
   font-size: 0.72rem;
   line-height: 1.4;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, background-color 0.15s ease;
 }
 .scroll-shadow.fade-bottom .scroll-more {
   opacity: 1;
   pointer-events: auto;
 }
+.scroll-more:hover { background: var(--mocha); border-color: var(--mocha); color: var(--milk); }
 
 /* ---- Misc --------------------------------------------------------------- */
-.muted { color: var(--cream-dim); }
-.form-error { color: var(--coral); margin: 0.2rem 0 0.4rem; }
+.muted { color: var(--mocha); }
+.form-error { color: var(--rust); margin: 0.2rem 0 0.4rem; }
 [role="alert"].form-error { font-weight: 500; }
 
 /* Buttons that submit a whole form (Save / Save & add) stay roomy; the
@@ -450,7 +477,7 @@ article form legend {
   padding: 0;
   margin-bottom: 0.3rem;
   font-weight: 600;
-  color: var(--crema);
+  color: var(--espresso);
 }
 
 /* ---- Mobile ------------------------------------------------------------- */
