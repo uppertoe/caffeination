@@ -397,14 +397,41 @@ dialog article footer button {
 }
 .scroll-shadow::before {
   top: 0;
-  background: linear-gradient(to bottom, var(--bean), transparent);
+  background: linear-gradient(to bottom, rgba(35, 28, 7, 0.85), transparent);
 }
 .scroll-shadow::after {
   bottom: 0;
-  background: linear-gradient(to top, var(--bean), transparent);
+  background: linear-gradient(to top, rgba(35, 28, 7, 0.85), transparent);
 }
 .scroll-shadow.fade-top::before { opacity: 1; }
 .scroll-shadow.fade-bottom::after { opacity: 1; }
+
+/* Explicit affordance: fades alone read as "text cut off", and overlay
+   scrollbars (macOS Firefox/Safari) are invisible until touched. The pill
+   only shows while content continues below, and clicking it scrolls. */
+.scroll-more {
+  position: absolute;
+  bottom: 0.4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  width: auto;
+  margin: 0;
+  padding: 0.15rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--mocha);
+  background: var(--espresso);
+  color: var(--crema);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.scroll-shadow.fade-bottom .scroll-more {
+  opacity: 1;
+  pointer-events: auto;
+}
 
 /* ---- Misc --------------------------------------------------------------- */
 .muted { color: var(--cream-dim); }

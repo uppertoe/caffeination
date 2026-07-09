@@ -135,6 +135,13 @@
           </li>
           {% endfor %}
         </ul>
+        <button
+          type="button"
+          class="scroll-more"
+          tabindex="-1"
+          aria-hidden="true"
+          @click="$refs.list.scrollBy({ top: $refs.list.clientHeight * 0.8, behavior: 'smooth' })"
+        >scroll for more &#9662;</button>
       </div>
       <p x-show="noMatches" x-cloak class="muted">
         <small>No matches for &ldquo;<span x-text="q"></span>&rdquo;.</small>
