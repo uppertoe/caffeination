@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260" viewBox="0 0 260 260" fill="none">
+  <g stroke="#e1dcc9" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- cup: straight rim, rounded bowl -->
+    <path d="M56 100 h68 v24 a34 34 0 0 1 -68 0 z"/>
+    <!-- handle: D-loop attached to the wall at both ends -->
+    <path d="M124 106 a12 12 0 1 1 0 22"/>
+    <!-- saucer -->
+    <path d="M48 166 h84" stroke-width="2.6"/>
+    <!-- steam -->
+    <path d="M72 88 c-5 -8 5 -14 0 -22" stroke-width="1.8"/>
+    <path d="M90 88 c-5 -8 5 -14 0 -22" stroke-width="1.8"/>
+    <path d="M108 88 c-5 -8 5 -14 0 -22" stroke-width="1.8"/>
+    <!-- beans: oval with the centre crack running the length of the bean -->
+    <g transform="translate(206 56) rotate(28)">
+      <ellipse cx="0" cy="0" rx="15" ry="10"/>
+      <path d="M-12 0 C -5 -5.5, 5 5.5, 12 0"/>
+    </g>
+    <g transform="translate(38 222) rotate(-18)">
+      <ellipse cx="0" cy="0" rx="15" ry="10"/>
+      <path d="M-12 0 C -5 -5.5, 5 5.5, 12 0"/>
+    </g>
+    <g transform="translate(214 196) rotate(52)">
+      <ellipse cx="0" cy="0" rx="15" ry="10"/>
+      <path d="M-12 0 C -5 -5.5, 5 5.5, 12 0"/>
+    </g>
+  </g>
+</svg>
