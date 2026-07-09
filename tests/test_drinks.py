@@ -198,6 +198,6 @@ def test_cancel_returns_card_without_persisting_form_values():
             data={"base_id": "espresso", "notes": "double shot"},
         )
         # Cancel returns the existing card, unchanged.
-        r = client.get("/me/drink/cancel")
+        r = client.get("/me/drink")
     assert r.status_code == 200
     assert "espresso (double shot)" in r.text

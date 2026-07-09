@@ -28,9 +28,11 @@ LLM-agent-driven development.
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-uvicorn app.main:app --reload   # http://localhost:8000
-pytest                          # tests
-docker compose up --build       # containerised
+DEBUG=true uvicorn app.main:app --reload   # http://localhost:8000
+pytest                                     # tests
+docker compose up --build                  # containerised
+# DEBUG=true opts into the dev SECRET_KEY; without it (or a real SECRET_KEY)
+# create_app() refuses to start on the forgeable default.
 ```
 
 ## Conventions

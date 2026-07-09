@@ -54,6 +54,8 @@ def test_one_off_is_in_order_but_not_roster_or_onboarding():
                   "milk": "oat", "one_off": "1"},
         )
         assert r.status_code == 200
+        assert r.headers["HX-Trigger"] == "order-refresh"
+        r = bob.get("/order")
         assert "Guest" in r.text  # appears in Bob's order
         assert "oat latte" in r.text
         assert "one-off" in r.text  # tagged

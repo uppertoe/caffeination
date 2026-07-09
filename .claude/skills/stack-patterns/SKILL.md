@@ -115,31 +115,51 @@ def _isolated_sqlite(monkeypatch):
 
 Same rule applies anywhere a `|tojson`-produced value goes into an attribute (`x-show='matches({{ name | tojson }})'`).
 
-## HTMX out-of-band swaps for "one POST, two regions"
+## HTMX: updating a second region from one POST
 
-**Symptom.** You want a single button click to update two different parts of the page that aren't a parent/child of each other.
+**Symptom.** A single button click must update two different parts of the page that aren't a parent/child of each other.
 
-**Pattern.** The form's `hx-target` points to one region. The response body contains BOTH that region's new content AND another fragment marked with `hx-swap-oob="true"` — HTMX picks the OOB fragment up by id and swaps it independently.
+Two patterns, picked by whether the second region can be in a state you must not destroy:
+
+**OOB swap** — the response body contains BOTH the `hx-target` region's new content AND another fragment marked `hx-swap-oob="true"`; HTMX picks the OOB fragment up by id and swaps it unconditionally. Use when the second region is always safe to replace.
+
+```jinja
+<section id="other-region" hx-swap-oob="true">...</section>
+```
+
+**Event-driven refresh** — the response carries an `HX-Trigger` header; the second region listens for that event and refetches itself. Use when the second region has a state that must survive (this repo: the order section can be replaced by an inline person-edit form — an OOB swap from a drink save would clobber a half-finished edit; the edit form simply carries no listener, so it's immune, and it re-renders the section fresh on its own save/cancel anyway).
 
 ```python
+ORDER_REFRESH = {"HX-Trigger": "order-refresh"}
+
 @app.post("/me/drink", response_class=HTMLResponse)
 async def save_drink(...):
     upsert_saved_drink(session, user.id, normalized)
     card_html = templates.get_template("_drink_card.html").render(_drink_card_ctx(...))
-    order_html = templates.get_template("_order_section.html").render(
-        {**_order_section_ctx(...), "oob": True}
-    )
-    return HTMLResponse(card_html + order_html)
+    return HTMLResponse(card_html, headers=ORDER_REFRESH)
 ```
 
 ```jinja
-{# _order_section.html #}
-<section id="order-section"{% if oob %} hx-swap-oob="true"{% endif %}>
-  ...
-</section>
+{# _order_section.html — the event bubbles to body, hence from:body #}
+<section id="order-section" hx-get="/order"
+         hx-trigger="order-refresh from:body" hx-swap="outerHTML">
 ```
 
-The same partial works for both the in-band render (initial page load + add/remove POSTs) and the OOB render (drink-save POST).
+Costs one extra GET per update; in exchange the refresh is opt-in per state of the target.
+
+## HTMX 2 silently drops 4xx responses
+
+**Symptom.** The server correctly returns a re-rendered form with an error message and status 409/422, tests assert it, yet in the browser clicking Save does nothing — no error appears.
+
+**Cause.** htmx 2's default `responseHandling` only swaps 2xx/3xx responses; 4xx/5xx fire an error event and are discarded. Validation-error fragments never reach the DOM.
+
+**Fix.** Opt 4xx back into swapping via the config meta tag (keep 5xx as errors):
+
+```html
+<meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[4]..","swap":true},{"code":"[5]..","swap":false,"error":true}]}' />
+```
+
+Note the single-quoted attribute (the JSON needs its double quotes — same rule as the Alpine/tojson section). TestClient can't catch this class of bug: assert the meta tag is present in the base template instead.
 
 ## Server-side normalization for forms with hidden axes
 

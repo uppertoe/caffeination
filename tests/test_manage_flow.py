@@ -40,8 +40,9 @@ def test_rename_updates_header_and_order_row():
         r = client.post("/me/rename", data={"display_name": "Samantha"})
         assert r.status_code == 200
         assert "Hi, Samantha" in r.text
-        # Own order row refreshes OOB with the new name.
-        assert 'hx-swap-oob="true"' in r.text
+        # Own order row refreshes via the order-refresh event.
+        assert r.headers["HX-Trigger"] == "order-refresh"
+        r = client.get("/order")
         assert "Samantha" in r.text
 
         r = client.get("/")

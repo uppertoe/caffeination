@@ -24,8 +24,12 @@ endpoint, a placeholder index page, and the surrounding plumbing.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-uvicorn app.main:app --reload
+DEBUG=true uvicorn app.main:app --reload
 ```
+
+(`DEBUG=true` opts into the known dev `SECRET_KEY`; without it the app
+refuses to start on the forgeable default. Set a real `SECRET_KEY` instead
+if you prefer.)
 
 Then open http://localhost:8000.
 

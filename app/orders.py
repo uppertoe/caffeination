@@ -63,6 +63,10 @@ def add_to_order(session: Session, owner_id: str, target_user_id: str) -> None:
     target = session.get(User, target_user_id)
     if target is None or target.display_name is None:
         return
+    if target.one_off and target.created_by != owner_id:
+        # One-offs belong to the order of whoever created them; letting a
+        # second owner hold a reference would orphan it on deletion.
+        return
     if session.get(OrderItem, (owner_id, target_user_id)) is not None:
         return
     session.add(OrderItem(owner_id=owner_id, target_user_id=target_user_id))

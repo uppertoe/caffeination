@@ -41,6 +41,10 @@ def get_current_user(
 
     First visits stash a fresh signed token on `request.state`; the
     identity middleware writes the Set-Cookie header on the way out.
+
+    Unknown ids get a TRANSIENT User (not persisted) — a row is only
+    written once the visitor names themselves (or claims someone), so
+    cookie-less bots and bounced visits don't litter the table.
     """
     user_id = read_identity(request)
     if user_id is None:
@@ -48,9 +52,6 @@ def get_current_user(
     user = session.get(User, user_id)
     if user is None:
         user = User(id=user_id)
-        session.add(user)
-        session.commit()
-        session.refresh(user)
     else:
         touch_last_active(session, user)
     return user
@@ -172,20 +173,18 @@ def delete_user(session: Session, user_id: str) -> None:
 def claim_user(
     session: Session,
     request: Request,
-    current_user: User,
     target_user_id: str,
 ) -> Optional[User]:
     """Rebind the cookie to an existing named user.
 
-    Refuses if the target doesn't exist or has no display_name. If the
-    current user row is empty (no display_name), it's deleted so we don't
-    leave orphan rows behind.
+    Refuses if the target doesn't exist, has no display_name, or is a
+    one-off guest — one-offs live only inside their creator's order and
+    are hard-deleted when removed from it, so a cookie must never point
+    at one. (Unnamed visitors are never persisted, so there's no orphan
+    row to clean up here.)
     """
     target = session.get(User, target_user_id)
-    if target is None or target.display_name is None:
+    if target is None or target.display_name is None or target.one_off:
         return None
-    if current_user.id != target.id and current_user.display_name is None:
-        session.delete(current_user)
-        session.commit()
     set_identity(request, target.id)
     return target

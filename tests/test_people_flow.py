@@ -22,12 +22,14 @@ def test_create_person_adds_them_to_order_and_roster():
             data={"display_name": "Priya", "base_id": "latte", "size": "small", "milk": "oat"},
         )
         assert r.status_code == 200
+        # The response is the reset slot; the order section refreshes itself
+        # via the order-refresh event.
+        assert r.headers["HX-Trigger"] == "order-refresh"
+        r = bob.get("/order")
         # Priya joins Bob's order immediately, with her saved drink.
         # (small is the default size, so it isn't spelled out.)
         assert "Priya" in r.text
         assert "oat latte" in r.text
-        assert 'id="order-section"' in r.text
-        assert 'hx-swap-oob="true"' in r.text  # order section refreshed OOB
 
         # She's a global citizen now — Carol sees her in the roster.
         _onboard(carol, "Carol")
@@ -68,7 +70,8 @@ def test_create_person_honours_drink_rules():
             "/people",
             data={"display_name": "Dee", "base_id": "espresso", "size": "large", "milk": "oat"},
         )
-    assert r.status_code == 200
+        assert r.status_code == 200
+        r = bob.get("/order")
     assert "Dee" in r.text
     assert "espresso" in r.text
     assert "oat" not in r.text.split("espresso")[1][:40]

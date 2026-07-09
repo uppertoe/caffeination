@@ -29,6 +29,7 @@ def init_db() -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
     SQLModel.metadata.create_all(get_engine())
     _ensure_last_active_column()
+    _purge_unnamed_users()
 
 
 def _ensure_last_active_column() -> None:
@@ -50,6 +51,26 @@ def _ensure_last_active_column() -> None:
                 'UPDATE "user" SET last_active_at = created_at'
             )
             conn.commit()
+
+
+def _purge_unnamed_users() -> None:
+    """Clean up rows from before unnamed visitors stopped being persisted:
+    every cookie-less request used to INSERT a User, so old DBs carry junk
+    rows for bots and bounced visits. Unnamed users can't be claimed, named
+    lists filter them out, and their cookie-holders (if any) are recreated
+    transiently on the next request — deleting them loses nothing."""
+    engine = get_engine()
+    with engine.connect() as conn:
+        conn.exec_driver_sql(
+            'DELETE FROM orderitem WHERE owner_id IN '
+            '(SELECT id FROM "user" WHERE display_name IS NULL)'
+        )
+        conn.exec_driver_sql(
+            'DELETE FROM saveddrink WHERE user_id IN '
+            '(SELECT id FROM "user" WHERE display_name IS NULL)'
+        )
+        conn.exec_driver_sql('DELETE FROM "user" WHERE display_name IS NULL')
+        conn.commit()
 
 
 def get_session() -> Iterator[Session]:

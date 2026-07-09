@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.config import get_settings
+from app.config import DEV_SECRET_KEY, get_settings
 from app.db import get_session, init_db
 from app.drinks import (
     format_drink,
@@ -107,7 +107,7 @@ def _drink_form_ctx(saved: SavedDrink | None) -> dict:
     }
 
 
-def _order_section_ctx(session: Session, user: User, *, oob: bool = False) -> dict:
+def _order_section_ctx(session: Session, user: User) -> dict:
     rows = order_rows(session, user.id)  # also purges, so check exclusion after
     self_excluded = (
         is_self_excluded(session, user.id)
@@ -121,8 +121,16 @@ def _order_section_ctx(session: Session, user: User, *, oob: bool = False) -> di
         "roster": roster,
         "roster_inactive": roster_inactive,
         "till_lines": till_summary(rows),
-        "oob": oob,
     }
+
+
+# Responses that change order data outside the order section carry this
+# HX-Trigger header. The order section listens for the event and refetches
+# itself — EXCEPT while an inline person-edit form has replaced it (the form
+# deliberately carries no listener), so a drink save or rename can't clobber
+# a half-finished edit. The section re-renders fresh on the edit's own
+# save/cancel anyway.
+ORDER_REFRESH = {"HX-Trigger": "order-refresh"}
 
 
 def _new_person_ctx(session: Session) -> dict:
@@ -149,6 +157,12 @@ def _render(name: str, ctx: dict) -> str:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    if settings.secret_key == DEV_SECRET_KEY and not settings.debug:
+        raise RuntimeError(
+            "SECRET_KEY is still the known dev default — identity cookies "
+            "would be forgeable. Set SECRET_KEY, or set DEBUG=true for "
+            "local development."
+        )
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.add_middleware(IdentityMiddleware)
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -214,10 +228,9 @@ def create_app() -> FastAPI:
     def onboard_claim(
         user_id: str,
         request: Request,
-        user: User = Depends(get_current_user),
         session: Session = Depends(get_session),
     ):
-        claimed = claim_user(session, request, user, user_id)
+        claimed = claim_user(session, request, user_id)
         if claimed is None:
             return templates.TemplateResponse(
                 request,
@@ -318,12 +331,9 @@ def create_app() -> FastAPI:
         session.add(user)
         session.commit()
         session.refresh(user)
-        # The owner's name also shows on their own order row — refresh it OOB.
+        # The owner's name also shows on their own order row.
         header_html = _render("_dash_header.html", {"user": user})
-        order_html = _render(
-            "_order_section.html", _order_section_ctx(session, user, oob=True)
-        )
-        return HTMLResponse(header_html + order_html)
+        return HTMLResponse(header_html, headers=ORDER_REFRESH)
 
     @app.post("/me/delete", response_class=HTMLResponse)
     def delete_me(
@@ -345,16 +355,7 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
         session: Session = Depends(get_session),
     ):
-        return templates.TemplateResponse(
-            request, "_drink_card.html", _drink_card_ctx(session, user)
-        )
-
-    @app.get("/me/drink/cancel", response_class=HTMLResponse)
-    def drink_card_cancel(
-        request: Request,
-        user: User = Depends(get_current_user),
-        session: Session = Depends(get_session),
-    ):
+        """Render the drink card (also used to cancel an edit)."""
         return templates.TemplateResponse(
             request, "_drink_card.html", _drink_card_ctx(session, user)
         )
@@ -389,10 +390,7 @@ def create_app() -> FastAPI:
             )
         upsert_saved_drink(session, user.id, normalized)
         card_html = _render("_drink_card.html", _drink_card_ctx(session, user))
-        order_html = _render(
-            "_order_section.html", _order_section_ctx(session, user, oob=True)
-        )
-        return HTMLResponse(card_html + order_html)
+        return HTMLResponse(card_html, headers=ORDER_REFRESH)
 
     @app.post("/people", response_class=HTMLResponse)
     async def create_person(
@@ -435,10 +433,7 @@ def create_app() -> FastAPI:
         add_to_order(session, user.id, new_user.id)
 
         slot_html = _render("_new_person_slot.html", _new_person_ctx(session))
-        order_html = _render(
-            "_order_section.html", _order_section_ctx(session, user, oob=True)
-        )
-        return HTMLResponse(slot_html + order_html)
+        return HTMLResponse(slot_html, headers=ORDER_REFRESH)
 
     @app.get("/order", response_class=HTMLResponse)
     def order_section(

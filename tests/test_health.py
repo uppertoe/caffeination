@@ -23,6 +23,16 @@ def test_index_renders_and_sets_cookie():
     assert "coffee_rch_id" in r.cookies
 
 
+def test_index_configures_htmx_to_swap_4xx_responses():
+    """Validation errors come back as 409/422 fragments; htmx 2 drops 4xx
+    responses unless the config says to swap them. Without this meta tag,
+    every 'name taken' / 'unknown drink' error is invisible in the browser."""
+    with _client() as client:
+        r = client.get("/")
+    assert 'name="htmx-config"' in r.text
+    assert '{"code":"[4]..","swap":true}' in r.text
+
+
 def test_webmanifest_uses_app_name(monkeypatch):
     monkeypatch.setenv("APP_NAME", "caffeine@Monash")
     from app.config import get_settings

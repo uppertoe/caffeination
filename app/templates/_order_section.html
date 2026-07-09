@@ -1,4 +1,13 @@
-<section id="order-section"{% if oob %} hx-swap-oob="true"{% endif %}>
+{# Refetches itself when a drink save / rename / new-person POST fires the
+   order-refresh event (HX-Trigger header). The inline person-edit form that
+   swaps in over this section carries NO such listener, so those events can't
+   clobber an edit in progress. #}
+<section
+  id="order-section"
+  hx-get="/order"
+  hx-trigger="order-refresh from:body"
+  hx-swap="outerHTML"
+>
   <article>
     <header><h2>Your order</h2></header>
     {% if not rows and not self_excluded %}

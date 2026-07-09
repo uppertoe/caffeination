@@ -109,20 +109,86 @@ def test_claim_nonexistent_user_returns_404():
 
 def test_claim_unnamed_user_returns_404():
     """You can't claim an empty user row — only named users are claimable."""
-    with _client() as ghost, _client() as visitor:
-        # Ghost has a cookie + user row but no display_name.
-        ghost.get("/")
-        # Get the ghost's user id.
+    with _client() as visitor:
+        visitor.get("/")
+        # A legacy unnamed row (new code never persists these).
+        from sqlmodel import Session
+
+        from app.db import get_engine
+        from app.models import User
+
+        with Session(get_engine()) as s:
+            s.add(User(id="ghost-row"))
+            s.commit()
+
+        r = visitor.post("/onboard/claim/ghost-row")
+    assert r.status_code == 404
+
+
+def test_claim_one_off_guest_returns_404():
+    """One-off guests are hard-deleted when removed from their creator's
+    order, so a cookie must never be bound to one."""
+    with _client() as bob, _client() as visitor:
+        bob.get("/")
+        bob.post("/me/name", data={"display_name": "Bob"})
+        bob.post(
+            "/people",
+            data={"display_name": "Guest", "base_id": "latte", "one_off": "1"},
+        )
+
         from sqlmodel import Session, select
 
         from app.db import get_engine
         from app.models import User
 
         with Session(get_engine()) as s:
-            ghost_id = s.exec(
-                select(User).where(User.display_name.is_(None))
+            guest_id = s.exec(
+                select(User).where(User.display_name == "Guest")
             ).first().id
 
         visitor.get("/")
-        r = visitor.post(f"/onboard/claim/{ghost_id}")
+        r = visitor.post(f"/onboard/claim/{guest_id}")
     assert r.status_code == 404
+
+
+def test_unnamed_visitors_leave_no_rows():
+    """Visiting (or logging out and bouncing) must not litter the user table:
+    a row is only written once the visitor names themselves."""
+    from sqlmodel import Session, select
+
+    from app.db import get_engine
+    from app.models import User
+
+    with _client() as client:
+        client.get("/")
+        client.get("/")
+        with Session(get_engine()) as s:
+            assert s.exec(select(User)).all() == []
+
+        client.post("/me/name", data={"display_name": "Sam"})
+        with Session(get_engine()) as s:
+            rows = s.exec(select(User)).all()
+            assert [u.display_name for u in rows] == ["Sam"]
+
+
+def test_init_db_purges_legacy_unnamed_rows():
+    """DBs from before the no-persist change carry junk unnamed rows; startup
+    sweeps them (and anything hanging off them) while keeping named users."""
+    from sqlmodel import Session, select
+
+    from app.db import get_engine, init_db
+    from app.models import SavedDrink, User
+
+    with _client() as client:
+        client.get("/")
+        client.post("/me/name", data={"display_name": "Sam"})
+        with Session(get_engine()) as s:
+            s.add(User(id="legacy-ghost"))
+            s.add(SavedDrink(user_id="legacy-ghost", base_id="latte"))
+            s.commit()
+
+        init_db()
+
+        with Session(get_engine()) as s:
+            assert [u.display_name for u in s.exec(select(User)).all()] == ["Sam"]
+            assert s.get(SavedDrink, "legacy-ghost") is None

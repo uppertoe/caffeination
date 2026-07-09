@@ -72,9 +72,11 @@ def test_add_then_remove_target_from_order():
         assert 'hx-post="/order/add/' in r.text
 
 
-def test_saving_own_drink_updates_order_section_via_oob():
-    """The drink form POST should also refresh the order section so that
-    'you (Alice) — oat latte' appears without a page reload."""
+def test_saving_own_drink_triggers_order_section_refresh():
+    """The drink form POST fires the order-refresh event so the order section
+    refetches itself and 'Alice — oat latte' appears without a page reload.
+    (An event rather than an OOB swap so an open inline person-edit form,
+    which carries no listener, is never clobbered.)"""
     with _client() as alice:
         alice.get("/")
         alice.post("/me/name", data={"display_name": "Alice"})
@@ -82,10 +84,10 @@ def test_saving_own_drink_updates_order_section_via_oob():
             "/me/drink",
             data={"base_id": "latte", "size": "regular", "milk": "oat"},
         )
-    assert r.status_code == 200
-    # OOB section is appended to the response body.
-    assert 'id="order-section"' in r.text
-    assert 'hx-swap-oob="true"' in r.text
+        assert r.status_code == 200
+        assert r.headers["HX-Trigger"] == "order-refresh"
+        # The refresh the event triggers in the browser:
+        r = alice.get("/order")
     assert "Alice" in r.text
     assert "oat latte" in r.text
 
@@ -235,3 +237,21 @@ def test_adding_unknown_target_is_noop():
         assert r.status_code == 200
         # Still just Alice (the owner row).
         assert r.text.count("Alice") == 1
+
+
+def test_adding_someone_elses_one_off_is_noop():
+    """One-off guests live only in their creator's order — another owner
+    holding a reference would be orphaned when the creator removes them."""
+    with _client() as alice, _client() as bob:
+        _onboard(alice, "Alice", base_id="latte", size="regular", milk="oat")
+        _onboard(bob, "Bob", base_id="espresso")
+        alice.post(
+            "/people",
+            data={"display_name": "Guest", "base_id": "latte", "one_off": "1"},
+        )
+        guest_id = _user_id_by_name("Guest")
+
+        r = bob.post(f"/order/add/{guest_id}")
+        assert r.status_code == 200
+        assert f'hx-post="/order/remove/{guest_id}"' not in r.text
+        assert "Guest" not in r.text

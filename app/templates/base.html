@@ -51,6 +51,12 @@
     <link rel="preload" href="/static/vendor/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/static/vendor/fraunces-italic-latin.woff2" as="font" type="font/woff2" crossorigin />
 
+    <!-- htmx 2 refuses to swap 4xx responses by default, but our validation
+         errors (409 name taken, 422 bad input, 404 stale claim) come back as
+         re-rendered fragments that must reach the DOM. Swap 4xx; keep 5xx as
+         errors. -->
+    <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[4]..","swap":true},{"code":"[5]..","swap":false,"error":true}]}' />
+
     <!-- Vendored bundles — no external CDN (works on locked-down networks) -->
     <link rel="stylesheet" href="/static/vendor/pico.min.css" />
     <link rel="stylesheet" href="/static/coffee.css" />
