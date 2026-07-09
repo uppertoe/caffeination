@@ -14,15 +14,15 @@ RUN pip install --prefix=/install .
 FROM python:3.14-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/install/bin:${PATH}" \
-    PYTHONPATH="/install/lib/python3.12/site-packages"
+    PYTHONDONTWRITEBYTECODE=1
 
 RUN useradd --create-home --uid 1000 app \
  && mkdir -p /data \
  && chown app:app /data
 
-COPY --from=builder /install /install
+# Overlay onto the interpreter's own prefix so scripts and site-packages land
+# on the default import path — no PYTHONPATH pinned to a python version.
+COPY --from=builder /install /usr/local
 WORKDIR /app
 COPY app ./app
 
