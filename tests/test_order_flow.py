@@ -150,6 +150,84 @@ def test_clear_order_resets_self_removal():
         assert f'hx-post="/order/remove/{bob_id}"' not in r.text
 
 
+def _backdate_activity(user_id: str, days: int) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from sqlmodel import Session
+
+    from app.db import get_engine
+    from app.models import User
+
+    with Session(get_engine()) as s:
+        u = s.get(User, user_id)
+        u.last_active_at = datetime.now(timezone.utc) - timedelta(days=days)
+        s.add(u)
+        s.commit()
+
+
+def test_inactive_users_collapse_behind_expander():
+    with _client() as alice, _client() as bob:
+        _onboard(alice, "Alice", base_id="latte", size="regular", milk="oat")
+        _onboard(bob, "Bob", base_id="espresso")
+        alice_id = _user_id_by_name("Alice")
+        _backdate_activity(alice_id, days=120)
+
+        r = bob.get("/")
+        # Alice is offered, but as a collapsed inactive entry.
+        assert "Show 1 inactive person" in r.text
+        assert f'hx-post="/order/add/{alice_id}"' in r.text
+        assert "inactive-row" in r.text
+
+
+def test_active_users_have_no_expander():
+    with _client() as alice, _client() as bob:
+        _onboard(alice, "Alice", base_id="latte", size="regular", milk="oat")
+        _onboard(bob, "Bob", base_id="espresso")
+        r = bob.get("/")
+        assert "inactive" not in r.text
+
+
+def test_being_added_to_an_order_reactivates_a_user():
+    with _client() as alice, _client() as bob, _client() as carol:
+        _onboard(alice, "Alice", base_id="latte", size="regular", milk="oat")
+        _onboard(bob, "Bob", base_id="espresso")
+        _onboard(carol, "Carol", base_id="flat_white", size="regular", milk="oat")
+        alice_id = _user_id_by_name("Alice")
+        _backdate_activity(alice_id, days=120)
+
+        # Bob picks Alice for his run: that is a sign of life.
+        bob.post(f"/order/add/{alice_id}")
+
+        # Carol's roster now shows Alice as active again.
+        r = carol.get("/")
+        assert "Show 1 inactive" not in r.text
+        assert f'hx-post="/order/add/{alice_id}"' in r.text
+
+
+def test_visiting_refreshes_own_activity():
+    with _client() as alice:
+        _onboard(alice, "Alice", base_id="latte", size="regular", milk="oat")
+        alice_id = _user_id_by_name("Alice")
+        _backdate_activity(alice_id, days=120)
+
+        alice.get("/")  # any authenticated request counts
+
+        from sqlmodel import Session
+
+        from app.db import get_engine
+        from app.models import User
+        from app.users import _as_naive_utc
+
+        from datetime import datetime, timedelta, timezone
+
+        with Session(get_engine()) as s:
+            u = s.get(User, alice_id)
+            age = _as_naive_utc(datetime.now(timezone.utc)) - _as_naive_utc(
+                u.last_active_at
+            )
+            assert age < timedelta(minutes=5)
+
+
 def test_adding_unknown_target_is_noop():
     with _client() as alice:
         _onboard(alice, "Alice", base_id="latte", size="regular", milk="oat")

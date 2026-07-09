@@ -14,6 +14,24 @@ from app.models import OrderItem, SavedDrink, User
 # How long after creating a roster person you may still edit their usual.
 EDIT_WINDOW = timedelta(hours=2)
 
+# Visits refresh last_active_at at most this often, so a busy session isn't a
+# write per request. Any gap under a day is far finer than the roster's
+# 90-day activity window needs.
+TOUCH_INTERVAL = timedelta(hours=1)
+
+
+def touch_last_active(
+    session: Session, user: User, now: Optional[datetime] = None
+) -> None:
+    """Record a sign of life (visit, drink save, being added to an order)."""
+    now = now or datetime.now(timezone.utc)
+    last = user.last_active_at
+    if last is not None and _as_naive_utc(now) - _as_naive_utc(last) < TOUCH_INTERVAL:
+        return
+    user.last_active_at = now
+    session.add(user)
+    session.commit()
+
 
 def get_current_user(
     request: Request,
@@ -33,6 +51,8 @@ def get_current_user(
         session.add(user)
         session.commit()
         session.refresh(user)
+    else:
+        touch_last_active(session, user)
     return user
 
 

@@ -80,7 +80,9 @@
 
   <article x-data='{
     q: "",
-    names: {{ roster | map(attribute=0) | map(attribute="display_name") | map("lower") | list | tojson }},
+    showInactive: false,
+    names: {{ (roster + roster_inactive) | map(attribute=0) | map(attribute="display_name") | map("lower") | list | tojson }},
+    get searching() { return this.q.trim().length > 0; },
     matches(name) {
       const needle = this.q.trim().toLowerCase();
       return !needle || name.toLowerCase().includes(needle);
@@ -91,7 +93,7 @@
     }
   }'>
     <header><h2>Add to your order</h2></header>
-    {% if not roster %}
+    {% if not roster and not roster_inactive %}
       <p><em>No one else has saved a drink yet.</em></p>
     {% else %}
       <label>
@@ -115,7 +117,7 @@
             this.moreBelow = el.scrollTop + el.clientHeight < el.scrollHeight - 4;
           }
         }"
-        x-effect="q; $nextTick(() => update())"
+        x-effect="q; showInactive; $nextTick(() => update())"
         @resize.window="update()"
         :class="{ 'fade-top': moreAbove, 'fade-bottom': moreBelow }"
       >
@@ -134,6 +136,31 @@
             </span>
           </li>
           {% endfor %}
+          {% if roster_inactive %}
+          {# Collapsed by default; typing in the filter searches them too. #}
+          <li class="roster-expand" x-show="!showInactive && !searching">
+            <button
+              type="button"
+              class="secondary outline row-action"
+              @click="showInactive = true"
+            >Show {{ roster_inactive | length }} inactive
+              {{- ' person' if roster_inactive | length == 1 else ' people' }}</button>
+          </li>
+          {% for u, line in roster_inactive %}
+          <li class="inactive-row" x-show='(showInactive || searching) && matches({{ u.display_name | tojson }})'>
+            <span class="who"><strong>{{ u.display_name }}</strong> — {{ line }} <small class="tag">inactive</small></span>
+            <span class="row-actions">
+              <button
+                type="button"
+                class="row-action"
+                hx-post="/order/add/{{ u.id }}"
+                hx-target="#order-section"
+                hx-swap="outerHTML"
+              >Add</button>
+            </span>
+          </li>
+          {% endfor %}
+          {% endif %}
         </ul>
         <button
           type="button"

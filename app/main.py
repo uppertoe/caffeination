@@ -113,11 +113,13 @@ def _order_section_ctx(session: Session, user: User, *, oob: bool = False) -> di
         is_self_excluded(session, user.id)
         and get_saved_drink(session, user.id) is not None
     )
+    roster, roster_inactive = roster_candidates(session, user.id)
     return {
         "rows": rows,
         "user": user,
         "self_excluded": self_excluded,
-        "roster": roster_candidates(session, user.id),
+        "roster": roster,
+        "roster_inactive": roster_inactive,
         "till_lines": till_summary(rows),
         "oob": oob,
     }

@@ -19,6 +19,11 @@ class User(SQLModel, table=True):
     # One-off ("guest") entries live only in their creator's order: excluded
     # from the roster + name search, duplicate names allowed, deleted on removal.
     one_off: bool = False
+    # Last sign of life: visiting the app (throttled), saving a name/drink,
+    # building an order, or being added to someone else's order. Drives the
+    # roster's active/inactive split so finished rotations sink out of the way.
+    # Optional because pre-existing rows are backfilled by init_db's ALTER.
+    last_active_at: Optional[datetime] = Field(default_factory=utcnow)
 
 
 class SavedDrink(SQLModel, table=True):

@@ -493,6 +493,12 @@ article > header + p:last-child {
 /* Roster/onboard search input sits a touch above its list. */
 .scroll-shadow { margin-top: 0.6rem; }
 
+/* Roster activity split: the expander row centres its button; revealed
+   inactive rows read slightly quieter than active ones. */
+.roster-expand { justify-content: center; border-style: dashed; background: none; }
+.roster-expand .row-action { margin-inline: auto; }
+.inactive-row .who { opacity: 0.75; }
+
 /* ---- Till summary ------------------------------------------------------- */
 #order-section textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

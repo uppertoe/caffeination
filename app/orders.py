@@ -12,12 +12,18 @@ from sqlmodel import Session, select
 from app.drinks import format_drink, get_saved_drink
 from app.menu import get_drink
 from app.models import OrderItem, SavedDrink, User
-from app.users import _as_naive_utc, can_edit_person
+from app.users import _as_naive_utc, can_edit_person, touch_last_active
 
 # An open order goes stale this long after its FIRST item was added; the
 # whole thing is cleared lazily on the next render. Coffee runs are a
 # same-morning affair — yesterday's order shouldn't greet you today.
 ORDER_TTL = timedelta(hours=12)
+
+# Roster split: anyone without a sign of life in this window (visiting,
+# saving a drink, or being picked for an order) drops into the collapsed
+# "inactive" group — rotating registrars sink out of the picker after their
+# rotation ends without anyone having to delete them.
+ACTIVE_WINDOW = timedelta(days=90)
 
 
 @dataclass
@@ -61,6 +67,9 @@ def add_to_order(session: Session, owner_id: str, target_user_id: str) -> None:
         return
     session.add(OrderItem(owner_id=owner_id, target_user_id=target_user_id))
     session.commit()
+    # Being picked for a coffee run is a sign of life — it keeps colleagues
+    # who never open the app themselves in the roster's active group.
+    touch_last_active(session, target)
 
 
 def remove_from_order(session: Session, owner_id: str, target_user_id: str) -> None:
@@ -154,8 +163,20 @@ def order_rows(session: Session, owner_id: str) -> list[OrderRow]:
     return rows
 
 
-def roster_candidates(session: Session, owner_id: str) -> list[tuple[User, str]]:
-    """Users (other than owner) who have a saved drink and aren't in the order."""
+def _is_active(user: User, now: datetime) -> bool:
+    ref = user.last_active_at or user.created_at
+    return _as_naive_utc(now) - _as_naive_utc(ref) < ACTIVE_WINDOW
+
+
+def roster_candidates(
+    session: Session, owner_id: str
+) -> tuple[list[tuple[User, str]], list[tuple[User, str]]]:
+    """Users (other than owner) who have a saved drink and aren't in the order.
+
+    Returns (active, inactive): alphabetical within each group, split on
+    ACTIVE_WINDOW. Bucketing rather than sorting by raw recency keeps the
+    list stable day to day while stale names still sink as a group.
+    """
     in_order = {
         i.target_user_id
         for i in session.exec(
@@ -173,16 +194,19 @@ def roster_candidates(session: Session, owner_id: str) -> list[tuple[User, str]]
         sd.user_id: sd for sd in session.exec(select(SavedDrink)).all()
     }
 
-    out: list[tuple[User, str]] = []
+    now = datetime.now(timezone.utc)
+    active: list[tuple[User, str]] = []
+    inactive: list[tuple[User, str]] = []
     for uid, user in users_by_id.items():
         if uid in excluded:
             continue
         sd = drinks_by_user.get(uid)
         if sd is None:
             continue
-        out.append((user, _line_for(sd)))
-    out.sort(key=lambda pair: pair[0].display_name.lower())
-    return out
+        (active if _is_active(user, now) else inactive).append((user, _line_for(sd)))
+    active.sort(key=lambda pair: pair[0].display_name.lower())
+    inactive.sort(key=lambda pair: pair[0].display_name.lower())
+    return active, inactive
 
 
 # ---------------------------------------------------------------------------
