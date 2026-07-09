@@ -74,7 +74,7 @@ jobs:
       # serve /healthz before anything is pushed (unit tests can pass while
       # the packaged image is broken).
       - name: Build image (load for smoke test)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           load: true
@@ -101,7 +101,7 @@ jobs:
           fi
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
