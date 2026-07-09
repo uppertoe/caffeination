@@ -6,6 +6,37 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff8f0" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
+
+    <!-- Theme resolver — must run before first paint so a stored light/dark
+         override never flashes the wrong theme. Stamps data-theme (resolved)
+         and data-theme-pref (system|light|dark) on <html>; cycleTheme() is
+         wired to the header toggle button. -->
+    <script>
+      (() => {
+        const KEY = "theme";
+        const mq = window.matchMedia("(prefers-color-scheme: dark)");
+        const stored = () => {
+          try { const v = localStorage.getItem(KEY); return v === "light" || v === "dark" ? v : null; }
+          catch { return null; }
+        };
+        const apply = () => {
+          const pref = stored();
+          const theme = pref || (mq.matches ? "dark" : "light");
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.dataset.themePref = pref || "system";
+          document.querySelectorAll('meta[name="theme-color"]').forEach((m) =>
+            m.setAttribute("content", theme === "dark" ? "#000000" : "#fff8f0"));
+        };
+        mq.addEventListener("change", () => { if (!stored()) apply(); });
+        window.cycleTheme = () => {
+          const next = { system: "light", light: "dark", dark: "system" }[stored() || "system"];
+          try { next === "system" ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, next); }
+          catch {}
+          apply();
+        };
+        apply();
+      })();
+    </script>
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
 
     <!-- Icons & PWA manifest -->
@@ -34,6 +65,16 @@
           <p class="brand-title">{{ _name[0] }}{% if _name|length > 1 %}<span class="brand-at">@</span><span class="brand-domain">{{ _name[1] }}</span>{% endif %}</p>
           <p class="brand-tagline">{{ tagline }}</p>
         </div>
+        <button
+          type="button"
+          class="theme-toggle outline"
+          onclick="cycleTheme()"
+          aria-label="Colour theme: cycles system, light, dark"
+        >
+          <span class="theme-opt theme-opt-system">&#9681; Auto</span>
+          <span class="theme-opt theme-opt-light">&#9728; Light</span>
+          <span class="theme-opt theme-opt-dark">&#9790; Dark</span>
+        </button>
       </header>
       {% block content %}{% endblock %}
     </main>

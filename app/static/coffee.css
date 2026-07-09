@@ -68,9 +68,10 @@
 /* ---- Theme palettes ------------------------------------------------------ *
    Selectors are :root-level (0,2,0) on purpose: Pico's own light block is
    `:root:not([data-theme=dark])`, which outranks a bare attribute selector.
-   Light is the default; the dark block follows it so it wins under a dark
-   prefers-color-scheme. An explicit data-theme attribute still forces
-   either theme if we ever add a toggle. */
+   The pre-paint script in base.html always resolves the user's preference
+   (localStorage override, else prefers-color-scheme) and stamps data-theme
+   on <html>, so these two blocks are the whole story. Light doubles as the
+   no-JS fallback — the app needs JS regardless (HTMX/Alpine). */
 :root:not([data-theme="dark"]) {
   color-scheme: light;
   --page-bg: #fff8f0;
@@ -82,11 +83,12 @@
   --ink: #4b2e2b;
   --ink-strong: #4b2e2b;
   --ink-muted: #8c5a3c;
-  --heading: #8c5a3c;
+  --heading: #71432a;
   --accent-ink: #4b2e2b;
   --accent-hover-bg: #8c5a3c;
   --accent-hover-ink: #fff8f0;
   --row-tint: rgba(192, 133, 82, 0.08);
+  --card-band: rgba(192, 133, 82, 0.18);
   --sec-ink: #8c5a3c;
   --sec-bg: #8c5a3c;
   --sec-bg-ink: #fff8f0;
@@ -113,48 +115,47 @@
   --pattern-opacity: 0.05;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --page-bg: #000000;
-    --page-glow: #1f150c;
-    --card-bg: #1f150c;
-    --card-line: #412d15;
-    --card-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.55);
-    --soft-line: rgba(65, 45, 21, 0.85);
-    --ink: #e1dcc9;
-    --ink-strong: #e1dcc9;
-    --ink-muted: #a89e85;
-    --heading: #c08552;
-    --accent-ink: #1f150c;
-    --accent-hover-bg: #d29b69;
-    --accent-hover-ink: #1f150c;
-    --row-tint: rgba(65, 45, 21, 0.35);
-    --sec-ink: #cbc0a6;
-    --sec-bg: #412d15;
-    --sec-bg-ink: #e1dcc9;
-    --sec-hover-bg: #55391b;
-    --link: #c08552;
-    --link-hover: #e1dcc9;
-    --field-bg: #140d05;
-    --field-line: #412d15;
-    --field-placeholder: rgba(225, 220, 201, 0.45);
-    --line-strong: #5a3d1d;
-    --danger: #d2693e;
-    --danger-ink: #1f150c;
-    --danger-hover: #dd7a4f;
-    --danger-tint: rgba(210, 105, 62, 0.15);
-    --edge-shadow: rgba(0, 0, 0, 0.85);
-    --pill-bg: #e1dcc9;
-    --pill-ink: #1f150c;
-    --pill-line: #412d15;
-    --pill-hover-bg: #c08552;
-    --pill-hover-ink: #1f150c;
-    --till-bg: rgba(0, 0, 0, 0.5);
-    --selection: rgba(192, 133, 82, 0.35);
-    --pattern-img: url("/static/coffee-pattern-dark.svg");
-    --pattern-opacity: 0.04;
-  }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page-bg: #000000;
+  --page-glow: #1f150c;
+  --card-bg: #1f150c;
+  --card-line: #412d15;
+  --card-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.55);
+  --soft-line: rgba(65, 45, 21, 0.85);
+  --ink: #e1dcc9;
+  --ink-strong: #e1dcc9;
+  --ink-muted: #a89e85;
+  --heading: #c08552;
+  --accent-ink: #1f150c;
+  --accent-hover-bg: #d29b69;
+  --accent-hover-ink: #1f150c;
+  --row-tint: rgba(65, 45, 21, 0.35);
+  --card-band: rgba(65, 45, 21, 0.35);
+  --sec-ink: #cbc0a6;
+  --sec-bg: #412d15;
+  --sec-bg-ink: #e1dcc9;
+  --sec-hover-bg: #55391b;
+  --link: #c08552;
+  --link-hover: #e1dcc9;
+  --field-bg: #140d05;
+  --field-line: #412d15;
+  --field-placeholder: rgba(225, 220, 201, 0.45);
+  --line-strong: #5a3d1d;
+  --danger: #d2693e;
+  --danger-ink: #1f150c;
+  --danger-hover: #dd7a4f;
+  --danger-tint: rgba(210, 105, 62, 0.15);
+  --edge-shadow: rgba(0, 0, 0, 0.85);
+  --pill-bg: #e1dcc9;
+  --pill-ink: #1f150c;
+  --pill-line: #412d15;
+  --pill-hover-bg: #c08552;
+  --pill-hover-ink: #1f150c;
+  --till-bg: rgba(0, 0, 0, 0.5);
+  --selection: rgba(192, 133, 82, 0.35);
+  --pattern-img: url("/static/coffee-pattern-dark.svg");
+  --pattern-opacity: 0.04;
 }
 
 /* ---- Pico variable mapping (theme-agnostic) ------------------------------ */
@@ -178,7 +179,7 @@
   --pico-card-background-color: var(--card-bg);
   --pico-card-border-color: var(--card-line);
   --pico-card-box-shadow: var(--card-shadow);
-  --pico-card-sectioning-background-color: var(--row-tint);
+  --pico-card-sectioning-background-color: var(--card-band);
 
   /* Primary (caramel) */
   --pico-primary: var(--accent-ink);
@@ -323,6 +324,24 @@ button.outline:focus-visible {
   font-size: 0.95rem;
   color: var(--ink-muted);
 }
+
+/* Theme toggle — cycles system → light → dark; the pre-paint script stamps
+   data-theme-pref on <html>, which picks the visible label. */
+.theme-toggle {
+  flex: 0 0 auto;
+  margin-left: auto;
+  width: auto;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  background: transparent;
+  border: 1px solid var(--soft-line);
+  color: var(--ink-muted);
+}
+.theme-opt { display: none; }
+html[data-theme-pref="light"] .theme-opt-light { display: inline; }
+html[data-theme-pref="dark"] .theme-opt-dark { display: inline; }
+html[data-theme-pref="system"] .theme-opt-system,
+html:not([data-theme-pref]) .theme-opt-system { display: inline; }
 
 /* ---- Cards & spacing ---------------------------------------------------- */
 article { margin-block: 1.1rem; }
