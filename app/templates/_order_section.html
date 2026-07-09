@@ -1,16 +1,29 @@
 <section id="order-section"{% if oob %} hx-swap-oob="true"{% endif %}>
   <article>
     <header><h2>Your order</h2></header>
-    {% if not rows %}
+    {% if not rows and not self_excluded %}
       <p><em>Save your usual above, then add other people from the roster.</em></p>
     {% else %}
       <ul class="order-list">
+        {% if self_excluded %}
+        <li>
+          <span class="who muted"><em>You&rsquo;re not in this order.</em></span>
+          <span class="row-actions">
+            <button
+              type="button"
+              class="row-action"
+              hx-post="/order/add/{{ user.id }}"
+              hx-target="#order-section"
+              hx-swap="outerHTML"
+            >Add me</button>
+          </span>
+        </li>
+        {% endif %}
         {% for row in rows %}
         <li>
           <span class="who"><strong>{{ row.user.display_name }}</strong> — {{ row.line }}{% if row.user.one_off %} <small class="tag">one-off</small>{% endif %}</span>
-          {% if not row.is_self %}
           <span class="row-actions">
-            {% if row.can_edit %}
+            {% if not row.is_self and row.can_edit %}
             <button
               type="button"
               class="secondary outline row-action"
@@ -27,7 +40,6 @@
               hx-swap="outerHTML"
             >Remove</button>
           </span>
-          {% endif %}
         </li>
         {% endfor %}
       </ul>

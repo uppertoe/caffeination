@@ -100,6 +100,56 @@ def test_owner_cant_add_self_to_order_via_add_endpoint():
         assert r.text.count("Alice") == 1
 
 
+def test_owner_can_remove_self_then_add_back():
+    with _client() as alice:
+        _onboard(alice, "Alice", base_id="latte", size="regular", milk="oat")
+        alice_id = _user_id_by_name("Alice")
+
+        r = alice.post(f"/order/remove/{alice_id}")
+        assert r.status_code == 200
+        # Her drink drops out of the till summary and an add-back button shows.
+        assert "1x regular oat latte" not in r.text
+        assert "Your order is empty." in r.text
+        assert f'hx-post="/order/add/{alice_id}"' in r.text
+
+        r = alice.post(f"/order/add/{alice_id}")
+        assert r.status_code == 200
+        assert "1x regular oat latte" in r.text
+        assert f'hx-post="/order/add/{alice_id}"' not in r.text
+
+
+def test_self_removal_survives_rerender_and_only_affects_own_order():
+    with _client() as alice, _client() as bob:
+        _onboard(alice, "Alice", base_id="latte", size="regular", milk="oat")
+        _onboard(bob, "Bob", base_id="espresso")
+        alice_id = _user_id_by_name("Alice")
+
+        alice.post(f"/order/remove/{alice_id}")
+        r = alice.get("/")
+        assert "1x regular oat latte" not in r.text  # sticks across page loads
+
+        # Bob can still add Alice to *his* order.
+        r = bob.post(f"/order/add/{alice_id}")
+        assert "regular oat latte" in r.text
+
+
+def test_clear_order_resets_self_removal():
+    with _client() as alice, _client() as bob:
+        _onboard(alice, "Alice", base_id="latte", size="regular", milk="oat")
+        _onboard(bob, "Bob", base_id="espresso")
+        alice_id = _user_id_by_name("Alice")
+        bob_id = _user_id_by_name("Bob")
+
+        alice.post(f"/order/remove/{alice_id}")
+        alice.post(f"/order/add/{bob_id}")
+        r = alice.post("/order/clear")
+        # Cleared order is back to the default: Alice included, Bob gone
+        # (his espresso is a roster line again, not a till line).
+        assert "1x regular oat latte" in r.text
+        assert "1x espresso" not in r.text
+        assert f'hx-post="/order/remove/{bob_id}"' not in r.text
+
+
 def test_adding_unknown_target_is_noop():
     with _client() as alice:
         _onboard(alice, "Alice", base_id="latte", size="regular", milk="oat")

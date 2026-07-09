@@ -29,6 +29,7 @@ from app.models import SavedDrink, User
 from app.orders import (
     add_to_order,
     clear_order,
+    is_self_excluded,
     order_rows,
     remove_from_order,
     roster_candidates,
@@ -107,9 +108,15 @@ def _drink_form_ctx(saved: SavedDrink | None) -> dict:
 
 
 def _order_section_ctx(session: Session, user: User, *, oob: bool = False) -> dict:
-    rows = order_rows(session, user.id)
+    rows = order_rows(session, user.id)  # also purges, so check exclusion after
+    self_excluded = (
+        is_self_excluded(session, user.id)
+        and get_saved_drink(session, user.id) is not None
+    )
     return {
         "rows": rows,
+        "user": user,
+        "self_excluded": self_excluded,
         "roster": roster_candidates(session, user.id),
         "till_lines": till_summary(rows),
         "oob": oob,

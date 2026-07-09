@@ -152,7 +152,7 @@ def test_clear_order_empties_order_and_restores_roster():
         # Alice is back in the roster with an Add button; order shows just Bob.
         assert 'hx-post="/order/add/' in r.text
         assert "large oat flat white" in r.text  # roster line, not order row
-        assert 'hx-post="/order/remove/' not in r.text
+        assert f'hx-post="/order/remove/{alice_id}"' not in r.text
 
 
 def test_clear_order_deletes_one_off_guests():
@@ -190,7 +190,7 @@ def test_order_expires_after_12_hours():
         assert r.status_code == 200
         # Order cleared: Alice is offered from the roster again.
         assert 'hx-post="/order/add/' in r.text
-        assert 'hx-post="/order/remove/' not in r.text
+        assert f'hx-post="/order/remove/{alice_id}"' not in r.text
         with Session(get_engine()) as s:
             assert s.exec(select(OrderItem)).all() == []
 

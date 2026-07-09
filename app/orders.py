@@ -29,9 +29,31 @@ class OrderRow:
     can_edit: bool = False
 
 
+def is_self_excluded(session: Session, owner_id: str) -> bool:
+    """True when the owner has opted out of their own order.
+
+    The owner is included implicitly (no membership row), so a self-targeting
+    OrderItem is an OPT-OUT marker, not a membership row: it exists only while
+    the owner has removed themselves ("buying for others, not me"). It shares
+    the order's lifecycle — cleared by clear_order and expired by the TTL —
+    so tomorrow's order includes the owner again by default.
+    """
+    return session.get(OrderItem, (owner_id, owner_id)) is not None
+
+
+def _delete_self_opt_out(session: Session, owner_id: str) -> None:
+    marker = session.get(OrderItem, (owner_id, owner_id))
+    if marker is not None:
+        session.delete(marker)
+        session.commit()
+
+
 def add_to_order(session: Session, owner_id: str, target_user_id: str) -> None:
     if target_user_id == owner_id:
-        return  # owner is included implicitly in the till summary
+        # Owner is included implicitly; "adding yourself" just clears any
+        # opt-out marker (see is_self_excluded).
+        _delete_self_opt_out(session, owner_id)
+        return
     target = session.get(User, target_user_id)
     if target is None or target.display_name is None:
         return
@@ -42,6 +64,13 @@ def add_to_order(session: Session, owner_id: str, target_user_id: str) -> None:
 
 
 def remove_from_order(session: Session, owner_id: str, target_user_id: str) -> None:
+    if target_user_id == owner_id:
+        # Removing yourself records the opt-out marker rather than deleting
+        # anything — there is no membership row for the owner to delete.
+        if not is_self_excluded(session, owner_id):
+            session.add(OrderItem(owner_id=owner_id, target_user_id=owner_id))
+            session.commit()
+        return
     item = session.get(OrderItem, (owner_id, target_user_id))
     if item is not None:
         session.delete(item)
@@ -58,7 +87,12 @@ def remove_from_order(session: Session, owner_id: str, target_user_id: str) -> N
 
 
 def clear_order(session: Session, owner_id: str) -> None:
-    """Empty the owner's open order, cleaning up one-off people with it."""
+    """Empty the owner's open order, cleaning up one-off people with it.
+
+    Also resets any self opt-out marker: a cleared order is back to the
+    default state, which includes the owner.
+    """
+    _delete_self_opt_out(session, owner_id)
     items = session.exec(
         select(OrderItem).where(OrderItem.owner_id == owner_id)
     ).all()
@@ -97,13 +131,19 @@ def order_rows(session: Session, owner_id: str) -> list[OrderRow]:
     rows: list[OrderRow] = []
     owner = session.get(User, owner_id)
     owner_drink = get_saved_drink(session, owner_id)
-    if owner is not None and owner_drink is not None:
+    if (
+        owner is not None
+        and owner_drink is not None
+        and not is_self_excluded(session, owner_id)
+    ):
         rows.append(OrderRow(owner, owner_drink, _line_for(owner_drink), True))
 
     items = session.exec(
         select(OrderItem).where(OrderItem.owner_id == owner_id)
     ).all()
     for item in items:
+        if item.target_user_id == owner_id:
+            continue  # the self opt-out marker is not an order line
         u = session.get(User, item.target_user_id)
         if u is None:
             continue
