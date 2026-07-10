@@ -643,6 +643,10 @@ dialog article footer button {
 
 /* ---- Misc --------------------------------------------------------------- */
 .muted { color: var(--ink-muted); }
+/* Footnote under the drink fields (consent note): hug the field above,
+   tighten the line gap, keep a full space before the action buttons. */
+.consent-note { margin: -0.4rem 0 1rem; }
+.consent-note small { line-height: 1.4; display: inline-block; }
 .form-error { color: var(--danger); margin: 0.2rem 0 0.4rem; }
 [role="alert"].form-error { font-weight: 500; }
 

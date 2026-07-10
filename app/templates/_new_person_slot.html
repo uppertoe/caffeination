@@ -39,11 +39,12 @@
   }'
   x-init='$watch("baseId", () => onBaseChange())'
 >
-  <header><h2>Order for someone else</h2></header>
+  <header><h2>Someone new? Something different?</h2></header>
 
   <p x-show="!open" class="muted">
-    <small>Add a colleague who isn't here yet — record their name and usual,
-    and they'll join the roster.</small>
+    <small>Add a colleague and their usual to the roster &mdash; or make a
+    one-off order for a guest, or for anyone who wants something different
+    today.</small>
   </p>
 
   <button
@@ -52,7 +53,7 @@
     x-show="!open"
     @click="open = true"
   >
-    + Add someone new
+    + Add a person or one-off
   </button>
 
   <form
@@ -83,16 +84,19 @@
 
     <label class="oneoff-toggle">
       <input type="checkbox" name="one_off" value="1" x-model="oneOff" />
-      One-off &mdash; don&rsquo;t save to the roster
+      One-off &mdash; this round only
     </label>
     <p class="muted" x-show="oneOff" x-cloak>
-      <small>A guest order for this round only. Won&rsquo;t appear in the
-      roster or name search, and duplicate names are fine.</small>
+      <small>A one-round order that isn&rsquo;t saved to the roster.
+      Duplicate names are fine, so someone on the roster can still order
+      something different from their usual.</small>
     </p>
 
     {% include "_drink_fields.html" %}
 
-    <p class="muted">
+    {# One-offs never join the shared roster, so the consent note only
+       applies when we're saving a persistent person. #}
+    <p class="muted consent-note" x-show="!oneOff">
       <small>Please make sure this person is happy to have their name and
       order saved to the shared list.</small>
     </p>
