@@ -40,16 +40,16 @@
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
 
     <!-- Icons & PWA manifest -->
-    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="/static/favicon-32.png" sizes="32x32" type="image/png" />
-    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml" />
+    <link rel="icon" href="{{ asset('favicon-32.png') }}" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}" />
     <link rel="manifest" href="/site.webmanifest" />
 
     <!-- Display type (self-hosted; preload the latin faces so they're ready
          at first paint and the wordmark/headings don't reflow) -->
-    <link rel="preload" href="/static/vendor/shrikhand-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/static/vendor/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/static/vendor/fraunces-italic-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="{{ asset('vendor/shrikhand-latin.woff2') }}" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="{{ asset('vendor/fraunces-latin.woff2') }}" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="{{ asset('vendor/fraunces-italic-latin.woff2') }}" as="font" type="font/woff2" crossorigin />
 
     <!-- htmx 2 refuses to swap 4xx responses by default, but our validation
          errors (409 name taken, 422 bad input, 404 stale claim) come back as
@@ -58,15 +58,15 @@
     <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[4]..","swap":true},{"code":"[5]..","swap":false,"error":true}]}' />
 
     <!-- Vendored bundles — no external CDN (works on locked-down networks) -->
-    <link rel="stylesheet" href="/static/vendor/pico.min.css" />
-    <link rel="stylesheet" href="/static/coffee.css" />
-    <script src="/static/vendor/htmx.min.js"></script>
-    <script defer src="/static/vendor/alpine.min.js"></script>
+    <link rel="stylesheet" href="{{ asset('vendor/pico.min.css') }}" />
+    <link rel="stylesheet" href="{{ asset('coffee.css') }}" />
+    <script src="{{ asset('vendor/htmx.min.js') }}"></script>
+    <script defer src="{{ asset('vendor/alpine.min.js') }}"></script>
   </head>
   <body>
     <main class="container">
       <header class="brand">
-        <img class="brand-mark" src="/static/brand-mark.svg" alt="" aria-hidden="true" width="48" height="48" />
+        <img class="brand-mark" src="{{ asset('brand-mark.svg') }}" alt="" aria-hidden="true" width="48" height="48" />
         <div>
           {% set _name = app_name.split('@') %}
           <p class="brand-title">{{ _name[0] }}{% if _name|length > 1 %}<span class="brand-at">@</span><span class="brand-domain">{{ _name[1] }}</span>{% endif %}</p>
