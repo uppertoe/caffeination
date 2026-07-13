@@ -46,10 +46,15 @@
     <link rel="manifest" href="/site.webmanifest" />
 
     <!-- Display type (self-hosted; preload the latin faces so they're ready
-         at first paint and the wordmark/headings don't reflow) -->
-    <link rel="preload" href="{{ asset('vendor/shrikhand-latin.woff2') }}" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="{{ asset('vendor/fraunces-latin.woff2') }}" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="{{ asset('vendor/fraunces-italic-latin.woff2') }}" as="font" type="font/woff2" crossorigin />
+         at first paint and the wordmark/headings don't reflow). The URLs are
+         deliberately bare (no asset() ?v= token): a preload only primes the
+         cache if it matches the request the browser later makes, and the actual
+         load is coffee.css's @font-face src, which references these files bare.
+         Version them here and the two URLs diverge -> each font is fetched
+         twice. Keep in sync with the @font-face src in coffee.css. -->
+    <link rel="preload" href="/static/vendor/shrikhand-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/static/vendor/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/static/vendor/fraunces-italic-latin.woff2" as="font" type="font/woff2" crossorigin />
 
     <!-- htmx 2 refuses to swap 4xx responses by default, but our validation
          errors (409 name taken, 422 bad input, 404 stale claim) come back as
