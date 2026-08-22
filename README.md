@@ -1,4 +1,4 @@
-# coffee-rch
+# caffeination
 
 Group coffee orders for the office. A small FastAPI + HTMX + Alpine + PicoCSS
 app for assembling till-ready coffee orders from a roster of people.

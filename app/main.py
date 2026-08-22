@@ -75,7 +75,7 @@ def asset(path: str) -> str:
     The scaffold Caddy layer recognises the ``?v=`` tag and serves the file with
     a one-year ``immutable`` Cache-Control, so the browser never re-fetches it
     until the bytes (hence the hash, hence the URL) change -- which matters most
-    off the RCH network, where every asset otherwise round-trips through the
+    off the office network, where every asset otherwise round-trips through the
     gateway. A missing file degrades to a plain, un-versioned ``/static`` URL.
     """
     rel = path.lstrip("/")

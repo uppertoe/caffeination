@@ -1,6 +1,6 @@
 ---
 name: stack-patterns
-description: Use this skill when writing or reviewing FastAPI/Jinja2/HTMX/Alpine/SQLModel code in coffee-rch. It captures the non-obvious patterns and gotchas that the first build hit — cookie-via-middleware, lazy SQLite engine, JSON-in-attribute quoting, OOB swaps, server-side normalization. Pair with [[live-build-playbook]] for the build sequence.
+description: Use this skill when writing or reviewing FastAPI/Jinja2/HTMX/Alpine/SQLModel code in caffeination. It captures the non-obvious patterns and gotchas that the first build hit — cookie-via-middleware, lazy SQLite engine, JSON-in-attribute quoting, OOB swaps, server-side normalization. Pair with [[live-build-playbook]] for the build sequence.
 ---
 
 # stack-patterns

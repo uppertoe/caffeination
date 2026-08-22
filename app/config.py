@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # Per-deployment branding. Override with the APP_NAME / TAGLINE env vars.
     # app_name renders as "name@domain" in the header (split on the first @).
-    app_name: str = "caffeine@RCH"
+    app_name: str = "caffeine@HQ"
     tagline: str = "Enabling safe and smooth anaesthesia since 2026"
     debug: bool = False
 
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # Used to sign the identity cookie. create_app() refuses to start with
     # this default unless DEBUG=true — see the check there.
     secret_key: str = DEV_SECRET_KEY
-    cookie_name: str = "coffee_rch_id"
+    cookie_name: str = "coffee_id"
     cookie_max_age: int = 60 * 60 * 24 * 365  # 1 year
 
     base_dir: Path = Path(__file__).resolve().parent

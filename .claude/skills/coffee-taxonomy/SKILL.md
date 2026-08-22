@@ -1,11 +1,11 @@
 ---
 name: coffee-taxonomy
-description: Use when modelling, rendering, or validating coffee drinks in coffee-rch — defines the Melbourne drink set, the option axes (base/size/milk/shots/temp/sweetener), and the constraint matrix (e.g. espresso has no size, long black has no milk). Reach for this skill any time the drink-builder, the menu enums, or the till summary changes.
+description: Use when modelling, rendering, or validating coffee drinks in caffeination — defines the Melbourne drink set, the option axes (base/size/milk/shots/temp/sweetener), and the constraint matrix (e.g. espresso has no size, long black has no milk). Reach for this skill any time the drink-builder, the menu enums, or the till summary changes.
 ---
 
 # coffee-taxonomy
 
-The drink-builder UX in `coffee-rch` is the heart of the app. Getting the
+The drink-builder UX in `caffeination` is the heart of the app. Getting the
 taxonomy right is what makes the form feel native to a Melbourne café
 regular instead of a generic Starbucks clone. This skill captures the
 domain so we don't relitigate it in every PR.

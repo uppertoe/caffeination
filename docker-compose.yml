@@ -1,7 +1,7 @@
 services:
   web:
     build: .
-    image: caffeine-rch:dev
+    image: caffeination:dev
     ports:
       - "8000:8000"
     environment:

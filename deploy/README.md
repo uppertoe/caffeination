@@ -1,25 +1,25 @@
-# Deploying caffeine@RCH
+# Deploying caffeine@HQ
 
 This folder mirrors the per-app layout of the
-[anaes-data-lab/rch-server-image](https://github.com/anaes-data-lab/rch-server-image)
+[uppertoe/server-instance-template](https://github.com/uppertoe/server-instance-template)
 VPS, where each app lives under `apps/<name>/` with its own compose file, a
 Caddy routing snippet, and an `.env.example`.
 
 ## Add it to the server
 
-1. Copy this folder into the server repo as `apps/caffeine-rch/`:
+1. Copy this folder into the server repo as `apps/caffeination/`:
    - `docker-compose.yml`
-   - `caffeine-rch.caddy`
+   - `caffeination.caddy`
    - `.env.example`
 2. Create the real env file and set a secret:
    ```bash
-   cp apps/caffeine-rch/.env.example apps/caffeine-rch/.env
+   cp apps/caffeination/.env.example apps/caffeination/.env
    # SECRET_KEY=$(openssl rand -hex 32)
    ```
 3. Add one include line to the server's top-level `docker-compose.yml`:
    ```yaml
    include:
-     - apps/caffeine-rch/docker-compose.yml
+     - apps/caffeination/docker-compose.yml
    ```
 4. Deploy as usual. The Caddy snippet is picked up automatically, so the app
    comes up at `https://caffeine.<DOMAIN>`.
@@ -47,7 +47,7 @@ under `backup/services/` (see the server repo's `ansible/backup.yml`).
 
 The app deliberately has no login — identity is a signed cookie, so colleagues
 just type their name. To gate it behind the SSO gateway instead, add
-`import protected` in `caffeine-rch.caddy` (see `apps/auth/auth.caddy`).
+`import protected` in `caffeination.caddy` (see `apps/auth/auth.caddy`).
 
 ## Notes
 

@@ -1,4 +1,4 @@
-# caffeine@RCH -- office coffee orders. The app uses its own signed-cookie
+# caffeine@HQ -- office coffee orders. The app uses its own signed-cookie
 # identity (no passwords), so it is served openly to anyone who can reach it.
 # To put it behind the SSO gateway instead, add the line  import protected
 # above the reverse_proxy (see apps/auth/auth.caddy).

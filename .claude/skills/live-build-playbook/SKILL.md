@@ -1,11 +1,11 @@
 ---
 name: live-build-playbook
-description: Use this skill when the user asks you to build out the coffee-rch app on top of the scaffold (or asks for a similar live-build). It lays out the up-front decisions to confirm, the four phases to ship, what to commit between phases, and the gotchas to anticipate so the demo doesn't stall on debugging. Read [[stack-patterns]] alongside for the technical patterns each phase relies on.
+description: Use this skill when the user asks you to build out the caffeination app on top of the scaffold (or asks for a similar live-build). It lays out the up-front decisions to confirm, the four phases to ship, what to commit between phases, and the gotchas to anticipate so the demo doesn't stall on debugging. Read [[stack-patterns]] alongside for the technical patterns each phase relies on.
 ---
 
 # live-build-playbook
 
-This is the playbook for taking `coffee-rch` from "scaffold runs, page is blank" to "two browsers can build a group coffee order and copy a till-ready summary". It was distilled from doing the build once already — the failure modes below cost real time the first run and shouldn't cost time the second.
+This is the playbook for taking `caffeination` from "scaffold runs, page is blank" to "two browsers can build a group coffee order and copy a till-ready summary". It was distilled from doing the build once already — the failure modes below cost real time the first run and shouldn't cost time the second.
 
 ## Confirm decisions before you write code
 

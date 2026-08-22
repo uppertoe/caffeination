@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "caffeine-rch"
+name = "caffeination"
 version = "0.1.0"
-description = "caffeine@RCH — group coffee orders for the office"
+description = "caffeine@HQ — group coffee orders for the office"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",

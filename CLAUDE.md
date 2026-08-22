@@ -4,7 +4,7 @@ Project-specific guidance for Claude Code working in this repo.
 
 ## What this is
 
-`coffee-rch` is a small web app where office colleagues record a "usual"
+`caffeination` is a small web app where office colleagues record a "usual"
 coffee order, then anyone can assemble a group order by adding people from
 the roster. The output is a till-ready summary (e.g. "2x small lattes, 1x
 flat white oat, 1x double espresso"). The repo doubles as a live demo of

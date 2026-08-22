@@ -9,7 +9,7 @@ The prompt is calibrated to skip past the things that ate the most time the firs
 ## The prompt (copy-paste)
 
 ```
-We're going to build out the coffee-rch app on top of this scaffold, live,
+We're going to build out the caffeination app on top of this scaffold, live,
 for an audience. Use the playbook in `.claude/skills/live-build-playbook/`
 and the patterns in `.claude/skills/stack-patterns/`. The coffee taxonomy
 in `.claude/skills/coffee-taxonomy/` is the source of truth for drinks.

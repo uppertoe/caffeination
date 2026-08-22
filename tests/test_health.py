@@ -19,8 +19,8 @@ def test_index_renders_and_sets_cookie():
     with _client() as client:
         r = client.get("/")
     assert r.status_code == 200
-    assert "caffeine@RCH" in r.text
-    assert "coffee_rch_id" in r.cookies
+    assert "caffeine@HQ" in r.text
+    assert "coffee_id" in r.cookies
 
 
 def test_index_configures_htmx_to_swap_4xx_responses():
@@ -34,7 +34,7 @@ def test_index_configures_htmx_to_swap_4xx_responses():
 
 
 def test_webmanifest_uses_app_name(monkeypatch):
-    monkeypatch.setenv("APP_NAME", "caffeine@Monash")
+    monkeypatch.setenv("APP_NAME", "caffeine@Annex")
     from app.config import get_settings
 
     get_settings.cache_clear()
@@ -43,5 +43,5 @@ def test_webmanifest_uses_app_name(monkeypatch):
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/manifest+json"
     body = r.json()
-    assert body["name"] == "caffeine@Monash"
-    assert body["short_name"] == "caffeine@Monash"
+    assert body["name"] == "caffeine@Annex"
+    assert body["short_name"] == "caffeine@Annex"
