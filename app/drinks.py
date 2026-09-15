@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Optional
 
 from sqlmodel import Session
@@ -108,43 +109,76 @@ def get_saved_drink(session: Session, user_id: str) -> Optional[SavedDrink]:
 # ---------------------------------------------------------------------------
 
 
+# Field order shared by format_line and the column-only roster queries in
+# app.orders / app.users, so a row can be formatted without building a
+# SavedDrink object. Keep in sync with the SavedDrink model.
+LINE_FIELDS = ("base_id", "length", "size", "temp", "strength", "milk", "sweetener", "notes")
+
+_ICED = Temp.ICED.value
+_REGULAR = Strength.REGULAR.value
+_FULL_CREAM = Milk.FULL_CREAM.value
+_NO_SWEETENER = Sweetener.NONE.value
+
+
 def format_drink(drink: Drink, sd: SavedDrink) -> str:
-    """Render one till-summary line — lowercase, ordered like a barista call."""
+    """Render one till-summary line for a saved drink."""
+    return format_line(
+        drink.id, sd.length, sd.size, sd.temp, sd.strength, sd.milk, sd.sweetener, sd.notes
+    )
+
+
+@lru_cache(maxsize=2048)
+def format_line(
+    base_id: str,
+    length: Optional[str],
+    size: Optional[str],
+    temp: str,
+    strength: str,
+    milk: Optional[str],
+    sweetener: str,
+    notes: Optional[str],
+) -> str:
+    """Render one till-summary line — lowercase, ordered like a barista call.
+
+    Memoised on the field tuple: an office has far fewer distinct drinks than
+    people, and a full-roster render formats every one of them. An unknown
+    base_id (a drink retired from the menu) renders as the raw id.
+    """
+    drink = get_drink(base_id)
+    if drink is None:
+        return base_id
+
     parts: list[str] = []
 
     # Macchiato length comes before the drink name: "short macchiato".
-    if drink.has_length and sd.length:
-        parts.append(sd.length)
+    if drink.has_length and length:
+        parts.append(length)
 
     # Size, only if not the default.
-    if drink.sized and sd.size and (
-        not drink.default_size or sd.size != drink.default_size.value
+    if drink.sized and size and (
+        not drink.default_size or size != drink.default_size.value
     ):
-        parts.append(sd.size)
+        parts.append(size)
 
-    if drink.allows_iced and sd.temp == Temp.ICED.value:
+    if drink.allows_iced and temp == _ICED:
         parts.append("iced")
 
-    if drink.allows_strength and sd.strength != Strength.REGULAR.value:
-        parts.append(STRENGTH_LABELS[sd.strength].lower())
+    if drink.allows_strength and strength != _REGULAR:
+        parts.append(STRENGTH_LABELS[strength].lower())
 
-    if (
-        drink.milk_policy == MilkPolicy.REQUIRED
-        and sd.milk
-        and sd.milk != Milk.FULL_CREAM.value
-    ):
-        parts.append(MILK_LABELS[sd.milk].lower())
+    if drink.milk_policy == MilkPolicy.REQUIRED and milk and milk != _FULL_CREAM:
+        parts.append(MILK_LABELS[milk].lower())
 
     parts.append(drink.display.lower())
     line = " ".join(parts)
 
     extras: list[str] = []
-    if sd.sweetener and sd.sweetener != Sweetener.NONE.value:
-        extras.append(SWEETENER_LABELS[sd.sweetener].lower())
-    if sd.notes:
+    if sweetener and sweetener != _NO_SWEETENER:
+        extras.append(SWEETENER_LABELS[sweetener].lower())
+    if notes:
         # Notes are free text; lowercase at display time so the till line
         # stays uniformly lowercase (the stored note keeps the user's typing).
-        extras.append(sd.notes.lower())
+        extras.append(notes.lower())
     if extras:
         line += " (" + ", ".join(extras) + ")"
     return line

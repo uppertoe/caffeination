@@ -26,6 +26,7 @@
 
   <label>
     <input
+      id="onboard-filter"
       type="search"
       placeholder="Type your name..."
       autocomplete="off"
@@ -52,7 +53,7 @@
     @resize.window="update()"
     :class="{ 'fade-top': moreAbove, 'fade-bottom': moreBelow }"
   >
-    <ul class="onboard-list" x-ref="list" @scroll="update()">
+    <ul class="onboard-list" x-ref="list" x-keyboard-fit @scroll="update()">
       <template x-for="u in filtered" :key="u.id">
         <li>
           <span class="who"><strong x-text="u.display_name"></strong><span x-text="u.drink_line ? ' — ' + u.drink_line : ''"></span></span>

@@ -3,12 +3,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, Request
-from sqlmodel import Session, select
+from sqlalchemy import func
+from sqlmodel import Session, delete, select, update
 
 from app.db import get_session
-from app.drinks import format_drink, get_saved_drink
+from app.drinks import LINE_FIELDS, format_line
 from app.identity import mint_identity, read_identity, set_identity
-from app.menu import get_drink
 from app.models import OrderItem, SavedDrink, User
 
 # How long after creating a roster person you may still edit their usual.
@@ -18,6 +18,11 @@ EDIT_WINDOW = timedelta(hours=2)
 # write per request. Any gap under a day is far finer than the roster's
 # 90-day activity window needs.
 TOUCH_INTERVAL = timedelta(hours=1)
+
+# The discoverable roster: named, non-one-off users. One-off guest entries
+# are deliberately excluded from search/picker/uniqueness. Reused by every
+# roster query so the definition lives in one place.
+ROSTER_FILTER = (User.display_name.is_not(None), User.one_off == False)  # noqa: E712
 
 
 def touch_last_active(
@@ -57,25 +62,31 @@ def get_current_user(
     return user
 
 
-def _roster_users(session: Session) -> list[User]:
-    """Named, non-one-off users — the discoverable roster. One-off guest
-    entries are deliberately excluded from search/picker/uniqueness."""
+def _roster_names(session: Session) -> list[tuple[str, str]]:
+    """(id, display_name) for every roster user — columns only, no ORM
+    hydration, since the callers just compare names."""
     return session.exec(
-        select(User).where(User.display_name.is_not(None), User.one_off == False)  # noqa: E712
+        select(User.id, User.display_name).where(*ROSTER_FILTER)
     ).all()
 
 
 def find_user_by_display_name(session: Session, name: str) -> Optional[User]:
+    """Case-insensitive roster lookup.
+
+    The comparison stays in Python on purpose: SQLite's lower()/NOCASE only
+    fold ASCII, so pushing it into the WHERE clause would let "Éamonn" and
+    "éamonn" coexist. The roster is a few hundred short strings at most.
+    """
     target = name.strip().lower()
-    for u in _roster_users(session):
-        if u.display_name.lower() == target:
-            return u
+    for user_id, display_name in _roster_names(session):
+        if display_name.lower() == target:
+            return session.get(User, user_id)
     return None
 
 
 def existing_names_lower(session: Session) -> list[str]:
     """Every taken roster name, lowercased. Feeds the client-side dup check."""
-    return [u.display_name.lower() for u in _roster_users(session)]
+    return [display_name.lower() for _, display_name in _roster_names(session)]
 
 
 def create_named_user(
@@ -125,20 +136,25 @@ def can_edit_person(owner_id: str, target: Optional[User], now: Optional[datetim
 
 
 def named_users_with_lines(session: Session) -> list[dict]:
-    """All roster users, with their saved-drink line. For the onboarding picker."""
-    users = _roster_users(session)
-    drinks = {sd.user_id: sd for sd in session.exec(select(SavedDrink)).all()}
-    out: list[dict] = []
-    for u in users:
-        sd = drinks.get(u.id)
-        if sd is not None:
-            drink = get_drink(sd.base_id)
-            line = format_drink(drink, sd) if drink else sd.base_id
-        else:
-            line = ""
-        out.append({"id": u.id, "display_name": u.display_name, "drink_line": line})
-    out.sort(key=lambda x: x["display_name"].lower())
-    return out
+    """All roster users, with their saved-drink line. For the onboarding picker.
+
+    One LEFT JOIN of just the columns needed, ordered in SQL; users without
+    a drink get an empty line.
+    """
+    rows = session.exec(
+        select(User.id, User.display_name, *(getattr(SavedDrink, f) for f in LINE_FIELDS))
+        .join(SavedDrink, SavedDrink.user_id == User.id, isouter=True)
+        .where(*ROSTER_FILTER)
+        .order_by(func.lower(User.display_name))
+    ).all()
+    return [
+        {
+            "id": uid,
+            "display_name": name,
+            "drink_line": format_line(*drink) if drink[0] is not None else "",
+        }
+        for uid, name, *drink in rows
+    ]
 
 
 def delete_user(session: Session, user_id: str) -> None:
@@ -146,7 +162,8 @@ def delete_user(session: Session, user_id: str) -> None:
 
     Their own open order (including any one-off guests it spawned), their
     presence in other people's orders, and their saved drink all go; people
-    they created stay on the roster with `created_by` detached.
+    they created stay on the roster with `created_by` detached. Set-based
+    statements, one commit.
     """
     from app.orders import clear_order  # function-local: orders imports us
 
@@ -154,18 +171,11 @@ def delete_user(session: Session, user_id: str) -> None:
     if user is None:
         return
     clear_order(session, user_id)
-    for item in session.exec(
-        select(OrderItem).where(OrderItem.target_user_id == user_id)
-    ).all():
-        session.delete(item)
-    for created in session.exec(
-        select(User).where(User.created_by == user_id)
-    ).all():
-        created.created_by = None
-        session.add(created)
-    saved = session.get(SavedDrink, user_id)
-    if saved is not None:
-        session.delete(saved)
+    session.exec(delete(OrderItem).where(OrderItem.target_user_id == user_id))
+    session.exec(
+        update(User).where(User.created_by == user_id).values(created_by=None)
+    )
+    session.exec(delete(SavedDrink).where(SavedDrink.user_id == user_id))
     session.delete(user)
     session.commit()
 

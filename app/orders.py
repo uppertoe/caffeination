@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import NamedTuple, Optional
 
-from sqlmodel import Session, select
+from sqlalchemy import func
+from sqlmodel import Session, delete, select
 
-from app.drinks import format_drink, get_saved_drink
-from app.menu import get_drink
+from app.drinks import LINE_FIELDS, format_line
 from app.models import OrderItem, SavedDrink, User
-from app.users import _as_naive_utc, can_edit_person, touch_last_active
+from app.users import ROSTER_FILTER, _as_naive_utc, can_edit_person, touch_last_active
 
 # An open order goes stale this long after its FIRST item was added; the
 # whole thing is cleared lazily on the next render. Coffee runs are a
@@ -33,6 +33,30 @@ class OrderRow:
     line: str
     is_self: bool
     can_edit: bool = False
+
+
+class RosterEntry(NamedTuple):
+    """One pickable person in the "Add to your order" list. Plain columns
+    rather than User/SavedDrink objects: the roster is the one part of the
+    page that scales with the whole office, and hydrating two ORM objects
+    per row was most of the render cost at a few hundred people."""
+
+    id: str
+    display_name: str
+    line: str
+
+
+@dataclass
+class OrderView:
+    """Everything the order section renders, loaded in three statements:
+    the order (items joined to people and drinks), the owner's own drink,
+    and the roster of everyone not yet in the order."""
+
+    rows: list[OrderRow] = field(default_factory=list)
+    self_excluded: bool = False
+    owner_drink: Optional[SavedDrink] = None
+    roster: list[RosterEntry] = field(default_factory=list)
+    roster_inactive: list[RosterEntry] = field(default_factory=list)
 
 
 def is_self_excluded(session: Session, owner_id: str) -> bool:
@@ -87,130 +111,128 @@ def remove_from_order(session: Session, owner_id: str, target_user_id: str) -> N
     item = session.get(OrderItem, (owner_id, target_user_id))
     if item is not None:
         session.delete(item)
-        session.commit()
     # A one-off only ever lives in its creator's order, so removing it should
     # delete the throwaway person + drink rather than orphan them.
     target = session.get(User, target_user_id)
     if target is not None and target.one_off and target.created_by == owner_id:
-        sd = session.get(SavedDrink, target_user_id)
-        if sd is not None:
-            session.delete(sd)
+        session.exec(delete(SavedDrink).where(SavedDrink.user_id == target_user_id))
         session.delete(target)
-        session.commit()
+    session.commit()
+
+
+def _one_offs_of(owner_id: str):
+    return select(User.id).where(User.one_off == True, User.created_by == owner_id)  # noqa: E712
 
 
 def clear_order(session: Session, owner_id: str) -> None:
     """Empty the owner's open order, cleaning up one-off people with it.
 
     Also resets any self opt-out marker: a cleared order is back to the
-    default state, which includes the owner.
+    default state, which includes the owner. Three set-based deletes and one
+    commit, however many people are in the order. One-offs can only ever sit
+    in their creator's order (add_to_order refuses anyone else), so "every
+    one-off this owner created" is exactly the set to remove.
     """
-    _delete_self_opt_out(session, owner_id)
-    items = session.exec(
-        select(OrderItem).where(OrderItem.owner_id == owner_id)
-    ).all()
-    for item in items:
-        remove_from_order(session, owner_id, item.target_user_id)
+    session.exec(delete(SavedDrink).where(SavedDrink.user_id.in_(_one_offs_of(owner_id))))
+    session.exec(delete(OrderItem).where(OrderItem.owner_id == owner_id))
+    session.exec(delete(User).where(User.one_off == True, User.created_by == owner_id))  # noqa: E712
+    session.commit()
+
+
+def _expired(items: list[OrderItem], now: Optional[datetime] = None) -> bool:
+    if not items:
+        return False
+    now = now or datetime.now(timezone.utc)
+    oldest = min(_as_naive_utc(item.added_at) for item in items)
+    return _as_naive_utc(now) - oldest >= ORDER_TTL
 
 
 def purge_expired_order(
     session: Session, owner_id: str, now: Optional[datetime] = None
-) -> None:
+) -> bool:
+    """Clear the owner's order if its first item is older than ORDER_TTL.
+    Returns True if it was cleared."""
     items = session.exec(
         select(OrderItem).where(OrderItem.owner_id == owner_id)
     ).all()
-    if not items:
-        return
-    now = now or datetime.now(timezone.utc)
-    oldest = min(_as_naive_utc(item.added_at) for item in items)
-    if _as_naive_utc(now) - oldest >= ORDER_TTL:
-        clear_order(session, owner_id)
+    if not _expired(items, now):
+        return False
+    clear_order(session, owner_id)
+    return True
 
 
 def _line_for(saved: Optional[SavedDrink]) -> str:
     if saved is None:
         return "(no drink saved yet)"
-    drink = get_drink(saved.base_id)
-    return format_drink(drink, saved) if drink else saved.base_id
+    return format_line(*(getattr(saved, f) for f in LINE_FIELDS))
 
 
-def order_rows(session: Session, owner_id: str) -> list[OrderRow]:
-    """Owner (if they have a drink) followed by each added user.
+def load_order_view(session: Session, owner: User) -> OrderView:
+    """Load the owner's order section in a fixed number of statements,
+    independent of how many people are in the order or on the roster.
 
     Stale orders are purged here so every render (page load or HTMX
     fragment) sees at most a 12-hour-old order.
     """
-    purge_expired_order(session, owner_id)
-    rows: list[OrderRow] = []
-    owner = session.get(User, owner_id)
-    owner_drink = get_saved_drink(session, owner_id)
-    if (
-        owner is not None
-        and owner_drink is not None
-        and not is_self_excluded(session, owner_id)
-    ):
-        rows.append(OrderRow(owner, owner_drink, _line_for(owner_drink), True))
+    owner_id = owner.id
 
-    items = session.exec(
-        select(OrderItem).where(OrderItem.owner_id == owner_id)
-    ).all()
-    for item in items:
-        if item.target_user_id == owner_id:
+    # 1. The order: every item joined to its person and their drink. A
+    #    person can vanish between the item being added and now (deleted
+    #    themselves), so the joins are outer and such rows are skipped.
+    order_q = (
+        select(OrderItem, User, SavedDrink)
+        .join(User, User.id == OrderItem.target_user_id, isouter=True)
+        .join(SavedDrink, SavedDrink.user_id == OrderItem.target_user_id, isouter=True)
+        .where(OrderItem.owner_id == owner_id)
+        .order_by(OrderItem.added_at, OrderItem.target_user_id)
+    )
+    joined = session.exec(order_q).all()
+    items = [item for item, _, _ in joined]
+    if _expired(items):
+        clear_order(session, owner_id)
+        joined = []
+
+    view = OrderView()
+    view.self_excluded = any(item.target_user_id == owner_id for item, _, _ in joined)
+
+    # 2. The owner's own drink (an identity-map hit when the drink card
+    #    already loaded it this request).
+    view.owner_drink = session.get(SavedDrink, owner_id)
+    if view.owner_drink is not None and not view.self_excluded:
+        view.rows.append(
+            OrderRow(owner, view.owner_drink, _line_for(view.owner_drink), True)
+        )
+    for item, u, sd in joined:
+        if item.target_user_id == owner_id or u is None:
             continue  # the self opt-out marker is not an order line
-        u = session.get(User, item.target_user_id)
-        if u is None:
-            continue
-        sd = get_saved_drink(session, u.id)
-        rows.append(
+        view.rows.append(
             OrderRow(u, sd, _line_for(sd), False, can_edit_person(owner_id, u))
         )
-    return rows
 
-
-def _is_active(user: User, now: datetime) -> bool:
-    ref = user.last_active_at or user.created_at
-    return _as_naive_utc(now) - _as_naive_utc(ref) < ACTIVE_WINDOW
-
-
-def roster_candidates(
-    session: Session, owner_id: str
-) -> tuple[list[tuple[User, str]], list[tuple[User, str]]]:
-    """Users (other than owner) who have a saved drink and aren't in the order.
-
-    Returns (active, inactive): alphabetical within each group, split on
-    ACTIVE_WINDOW. Bucketing rather than sorting by raw recency keeps the
-    list stable day to day while stale names still sink as a group.
-    """
-    in_order = {
-        i.target_user_id
-        for i in session.exec(
-            select(OrderItem).where(OrderItem.owner_id == owner_id)
-        ).all()
-    }
-    excluded = in_order | {owner_id}
-
-    users_by_id = {
-        u.id: u
-        for u in session.exec(select(User)).all()
-        if u.display_name and not u.one_off
-    }
-    drinks_by_user = {
-        sd.user_id: sd for sd in session.exec(select(SavedDrink)).all()
-    }
-
-    now = datetime.now(timezone.utc)
-    active: list[tuple[User, str]] = []
-    inactive: list[tuple[User, str]] = []
-    for uid, user in users_by_id.items():
-        if uid in excluded:
-            continue
-        sd = drinks_by_user.get(uid)
-        if sd is None:
-            continue
-        (active if _is_active(user, now) else inactive).append((user, _line_for(sd)))
-    active.sort(key=lambda pair: pair[0].display_name.lower())
-    inactive.sort(key=lambda pair: pair[0].display_name.lower())
-    return active, inactive
+    # 3. The roster: roster users with a saved drink, minus the owner and
+    #    anyone already in the order. Filtered and ordered in SQL, and only
+    #    the columns the list renders are fetched. The active/inactive split
+    #    is a per-row date comparison done here so the naive-vs-aware
+    #    datetime handling stays in one place.
+    in_order = select(OrderItem.target_user_id).where(OrderItem.owner_id == owner_id)
+    roster_q = (
+        select(
+            User.id,
+            User.display_name,
+            User.last_active_at,
+            User.created_at,
+            *(getattr(SavedDrink, f) for f in LINE_FIELDS),
+        )
+        .join(SavedDrink, SavedDrink.user_id == User.id)
+        .where(*ROSTER_FILTER, User.id != owner_id, User.id.not_in(in_order))
+        .order_by(func.lower(User.display_name))
+    )
+    cutoff = _as_naive_utc(datetime.now(timezone.utc)) - ACTIVE_WINDOW
+    for uid, name, last_active, created, *drink in session.exec(roster_q).all():
+        active = _as_naive_utc(last_active or created) >= cutoff
+        bucket = view.roster if active else view.roster_inactive
+        bucket.append(RosterEntry(uid, name, format_line(*drink)))
+    return view
 
 
 # ---------------------------------------------------------------------------
