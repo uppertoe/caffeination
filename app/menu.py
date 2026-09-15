@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from functools import lru_cache
 from typing import Optional
 
 
@@ -281,5 +282,9 @@ def get_drink(base_id: str) -> Optional[Drink]:
     return DRINKS_BY_ID.get(base_id)
 
 
+@lru_cache(maxsize=1)
 def rules_for_template() -> dict[str, dict]:
+    """The constraint matrix as the drink forms embed it (via |tojson). The
+    menu is a code constant, so build it once; every dashboard render
+    serialises it for the new-person slot."""
     return {d.id: d.rules_dict() for d in DRINKS}

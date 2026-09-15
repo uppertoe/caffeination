@@ -8,7 +8,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.types import Receive, Scope, Send
 
 from app.config import DEV_SECRET_KEY, get_settings
 from app.db import get_session, init_db
@@ -18,7 +19,7 @@ from app.drinks import (
     normalize,
     upsert_saved_drink,
 )
-from app.identity import apply_fresh_identity
+from app.identity import IdentityMiddleware
 from app.menu import (
     DRINKS,
     MILK_LABELS,
@@ -31,12 +32,11 @@ from app.models import SavedDrink, User
 from app.orders import (
     add_to_order,
     clear_order,
-    is_self_excluded,
-    order_rows,
+    load_order_view,
     remove_from_order,
-    roster_candidates,
     till_summary,
 )
+from app.timing import ServerTimingMiddleware
 from app.users import (
     can_edit_person,
     claim_user,
@@ -93,13 +93,22 @@ async def lifespan(app: FastAPI):
     yield
 
 
-class IdentityMiddleware(BaseHTTPMiddleware):
-    """Write the Set-Cookie header if `get_current_user` minted a fresh id."""
+class CompressTextMiddleware(GZipMiddleware):
+    """Gzip HTML/CSS/JS/SVG responses, leave already-compressed assets alone.
 
-    async def dispatch(self, request, call_next):
-        response = await call_next(request)
-        apply_fresh_identity(request, response)
-        return response
+    A 150-person dashboard is ~90 KB of very repetitive markup that gzips to
+    ~10 KB; the vendored Pico/htmx/Alpine bundles shrink four- to fivefold.
+    Starlette's GZipMiddleware compresses everything over the size floor,
+    including woff2 and PNG, which only wastes CPU — so those bypass it.
+    """
+
+    _PRECOMPRESSED = (".woff2", ".png", ".ico")
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["path"].endswith(self._PRECOMPRESSED):
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
 
 
 # ---------------------------------------------------------------------------
@@ -145,19 +154,16 @@ def _drink_form_ctx(saved: SavedDrink | None) -> dict:
 
 
 def _order_section_ctx(session: Session, user: User) -> dict:
-    rows = order_rows(session, user.id)  # also purges, so check exclusion after
-    self_excluded = (
-        is_self_excluded(session, user.id)
-        and get_saved_drink(session, user.id) is not None
-    )
-    roster, roster_inactive = roster_candidates(session, user.id)
+    view = load_order_view(session, user)
     return {
-        "rows": rows,
+        "rows": view.rows,
         "user": user,
-        "self_excluded": self_excluded,
-        "roster": roster,
-        "roster_inactive": roster_inactive,
-        "till_lines": till_summary(rows),
+        # The "you're not in this order" row only makes sense once there is
+        # a drink to opt back in with.
+        "self_excluded": view.self_excluded and view.owner_drink is not None,
+        "roster": view.roster,
+        "roster_inactive": view.roster_inactive,
+        "till_lines": till_summary(view.rows),
     }
 
 
@@ -201,7 +207,10 @@ def create_app() -> FastAPI:
             "local development."
         )
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
+    # Innermost first: compress, then stamp the cookie, then time the lot.
+    app.add_middleware(CompressTextMiddleware, minimum_size=1000)
     app.add_middleware(IdentityMiddleware)
+    app.add_middleware(ServerTimingMiddleware)
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
     @app.get("/healthz", include_in_schema=False)

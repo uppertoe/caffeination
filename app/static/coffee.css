@@ -571,6 +571,10 @@ dialog article footer button {
    hovering the list never traps the page scroll. */
 .onboard-list, .roster-list {
   max-height: 21rem;
+  /* Where the browser shrinks the layout viewport for the on-screen keyboard
+     (Android, via the viewport meta's interactive-widget hint) dvh tracks it,
+     so the list never runs under the keys even before coffee.js sizes it. */
+  max-height: min(21rem, 60dvh);
   overflow-y: auto;
   padding-right: 0.25rem;
   margin-block: 0;

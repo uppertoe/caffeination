@@ -22,28 +22,29 @@ def mint_identity(request: Request) -> str:
     request.state.fresh_identity_token = _serializer().dumps(user_id)
     return user_id
 
-def apply_fresh_identity(request: Request, response: Response) -> None:
-    token = getattr(request.state, "fresh_identity_token", None)
-    if not token:
-        return
-    response.set_cookie(
-        key=settings.cookie_name,
-        value=token,
-        max_age=settings.cookie_max_age,
-        httponly=True,
-        samesite="lax",
-        secure=request.url.scheme == "https",
-    )
+class IdentityMiddleware:
+    """Plain ASGI, not BaseHTTPMiddleware: the base class re-wraps every
+    response as a stream and runs a task group per request, which costs
+    more than the cheap routes themselves. request.state is a view over
+    scope["state"], so the token is readable here without a Request."""
+    def __init__(self, app): self.app = app
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        async def send_with_cookie(message):
+            if message["type"] == "http.response.start":
+                token = scope.get("state", {}).get("fresh_identity_token")
+                if token:
+                    MutableHeaders(scope=message).append(
+                        "set-cookie", _cookie_header(token, scope.get("scheme", "http")))
+            await send(message)
+        await self.app(scope, receive, send_with_cookie)
 
 # app/main.py
-class IdentityMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        response = await call_next(request)
-        apply_fresh_identity(request, response)
-        return response
-
 app.add_middleware(IdentityMiddleware)
 ```
+
+`_cookie_header` builds the value with a scratch `Response().set_cookie(...)` so the flags (HttpOnly, SameSite, Secure-when-https) come from Starlette's own serialiser.
 
 `set_identity(request, user_id)` is the same trick but with a chosen id — used by the claim flow to rebind a cookie to an existing user.
 
@@ -185,6 +186,38 @@ def normalize(base_id: str, form: dict) -> Optional[dict]:
 ```
 
 The form is the UX. The rules are the source of truth. They live together in `app/menu.py`.
+
+## Measuring a route before optimising it
+
+Every response carries `Server-Timing: app;dur=<ms>, db;desc="<n> queries"`
+(`app/timing.py`). In the browser's Network panel the Timing tab shows both;
+in tests, read the header. The statement counter is a ContextVar holding a
+one-element list, because sync handlers run in a worker thread under a
+*copy* of the request context — a bare int re-set from the thread would
+never reach the middleware, a list mutated in place does.
+
+`scripts/bench.py --people 400` seeds a roster and prints p50/p95 and the
+query count per route. Run it before and after a change to the order or
+roster code; the number that matters is the query count staying flat as
+people are added. `tests/test_perf.py` pins that.
+
+Patterns that keep it flat:
+
+- **One statement per shape, not per row.** The order section is three
+  selects (`app.orders.load_order_view`): items joined to people and
+  drinks, the owner's drink, and the roster with `NOT IN (subquery)` for
+  people already in the order. Never `session.get` inside a loop.
+- **Columns, not objects, for the list that scales with the office.** The
+  roster selects `User.id, display_name, last_active_at, created_at` plus
+  the drink columns and builds a `NamedTuple`; hydrating two SQLModel
+  objects per row was most of the render cost at a few hundred people.
+- **Set-based deletes.** `clear_order` is three `DELETE ... WHERE` statements
+  and one commit, whatever the order size.
+- **Memoise pure formatting.** `format_line` is `lru_cache`d on the drink's
+  field tuple — an office has far fewer distinct drinks than people.
+- **Case-insensitive name matching stays in Python.** SQLite's `lower()` and
+  `NOCASE` fold ASCII only, so pushing it into `WHERE` would let "Éamonn"
+  and "éamonn" coexist. Fetch `(id, display_name)` columns and compare.
 
 ## Multi-user simulation in tests
 

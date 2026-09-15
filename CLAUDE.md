@@ -30,6 +30,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 DEBUG=true uvicorn app.main:app --reload   # http://localhost:8000
 pytest                                     # tests
+python scripts/bench.py --people 400       # per-route p50/p95 + SQL count
 docker compose up --build                  # containerised
 # DEBUG=true opts into the dev SECRET_KEY; without it (or a real SECRET_KEY)
 # create_app() refuses to start on the forgeable default.
@@ -90,7 +91,8 @@ docker compose up --build                  # containerised
   to confirm, what to defer, and the three pre-flight scaffold fixes.
 - `.claude/skills/stack-patterns/` — concrete patterns for cookie-via-middleware,
   lazy SQLite engine, JSON-in-attribute quoting, OOB swaps, server-side
-  normalization, and multi-user TestClient tests.
+  normalization, measuring routes (Server-Timing + `scripts/bench.py`), and
+  multi-user TestClient tests.
 
 If the user asks for the live build, lean on **live-build-playbook**; if
 you're writing new HTMX/Alpine code or a new model/route, **stack-patterns**

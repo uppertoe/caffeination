@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- interactive-widget=resizes-content: on Android the layout viewport
+         shrinks when the keyboard opens, so dvh units and scrollIntoView work
+         above it. iOS ignores the hint; static/coffee.js covers it there. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff8f0" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
@@ -62,10 +65,15 @@
          errors. -->
     <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[4]..","swap":true},{"code":"[5]..","swap":false,"error":true}]}' />
 
-    <!-- Vendored bundles — no external CDN (works on locked-down networks) -->
+    <!-- Vendored bundles — no external CDN (works on locked-down networks).
+         All three scripts are deferred so they never block first paint;
+         deferred scripts run in document order, and htmx/Alpine both do
+         their DOM pass once the document is parsed. coffee.js registers
+         Alpine directives on alpine:init, so it must precede Alpine. -->
     <link rel="stylesheet" href="{{ asset('vendor/pico.min.css') }}" />
     <link rel="stylesheet" href="{{ asset('coffee.css') }}" />
-    <script src="{{ asset('vendor/htmx.min.js') }}"></script>
+    <script defer src="{{ asset('vendor/htmx.min.js') }}"></script>
+    <script defer src="{{ asset('coffee.js') }}"></script>
     <script defer src="{{ asset('vendor/alpine.min.js') }}"></script>
   </head>
   <body>
