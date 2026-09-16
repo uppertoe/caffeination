@@ -1,0 +1,9 @@
+{#
+  Response to an Add clicked in the roster picker. The picker row itself is
+  the hx-target (hx-swap="delete"), so nothing in the roster re-renders and
+  its scroll position, filter and Alpine state survive untouched; only the
+  two articles that actually changed come back, marked hx-swap-oob so htmx
+  drops them in by id. Rendered with oob=True in the context.
+#}
+{% include "_order_list.html" %}
+{% include "_till_summary.html" %}

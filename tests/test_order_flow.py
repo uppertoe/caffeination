@@ -175,8 +175,10 @@ def test_inactive_users_collapse_behind_expander():
         _backdate_activity(alice_id, days=120)
 
         r = bob.get("/")
-        # Alice is offered, but as a collapsed inactive entry.
-        assert "Show 1 inactive person" in r.text
+        # Alice is offered, but as a collapsed inactive entry. The count is
+        # server-rendered inside the span Alpine keeps live after an Add.
+        assert "roster-expand" in r.text
+        assert 'x-text="inactive.length">1</span> inactive' in r.text
         assert f'hx-post="/order/add/{alice_id}"' in r.text
         assert "inactive-row" in r.text
 
@@ -186,7 +188,10 @@ def test_active_users_have_no_expander():
         _onboard(alice, "Alice", base_id="latte", size="regular", milk="oat")
         _onboard(bob, "Bob", base_id="espresso")
         r = bob.get("/")
-        assert "inactive" not in r.text
+        # No expander row and no collapsed rows; the Alpine state still
+        # declares an (empty) inactive list, so don't grep the bare word.
+        assert "roster-expand" not in r.text
+        assert "inactive-row" not in r.text
 
 
 def test_being_added_to_an_order_reactivates_a_user():
@@ -202,7 +207,8 @@ def test_being_added_to_an_order_reactivates_a_user():
 
         # Carol's roster now shows Alice as active again.
         r = carol.get("/")
-        assert "Show 1 inactive" not in r.text
+        assert "roster-expand" not in r.text
+        assert "inactive-row" not in r.text
         assert f'hx-post="/order/add/{alice_id}"' in r.text
 
 
@@ -255,3 +261,45 @@ def test_adding_someone_elses_one_off_is_noop():
         assert r.status_code == 200
         assert f'hx-post="/order/remove/{guest_id}"' not in r.text
         assert "Guest" not in r.text
+
+
+# ---------------------------------------------------------------------------
+# Add from a roster row: the row is the swap target, the rest comes back OOB
+# ---------------------------------------------------------------------------
+
+
+def test_add_from_roster_row_returns_only_changed_articles_oob():
+    with _client() as alice, _client() as bob:
+        _onboard(alice, "Alice", base_id="flat_white", size="large", milk="oat")
+        _onboard(bob, "Bob", base_id="espresso")
+        alice_id = _user_id_by_name("Alice")
+
+        page = bob.get("/").text
+        # The roster row carries the id htmx will report as HX-Target, and
+        # its Add button deletes just that row.
+        assert f'id="roster-{alice_id}"' in page
+        assert 'hx-target="closest li"' in page and 'hx-swap="delete"' in page
+
+        r = bob.post(f"/order/add/{alice_id}", headers={"HX-Target": f"roster-{alice_id}"})
+        assert r.status_code == 200
+        # Both changed articles, flagged out-of-band; no roster, no section.
+        assert r.text.count('hx-swap-oob="true"') == 2
+        assert 'id="order-list"' in r.text and 'id="till-summary"' in r.text
+        assert 'id="order-section"' not in r.text
+        assert "roster-list" not in r.text
+        # And they carry the new state.
+        assert "Alice" in r.text
+        assert f'hx-post="/order/remove/{alice_id}"' in r.text
+        assert "1x large oat flat white" in r.text
+
+
+def test_add_without_row_target_returns_full_section():
+    """The 'Add me' opt-in, tests and curl target the whole section."""
+    with _client() as alice, _client() as bob:
+        _onboard(alice, "Alice", base_id="latte")
+        _onboard(bob, "Bob", base_id="espresso")
+        alice_id = _user_id_by_name("Alice")
+        r = bob.post(f"/order/add/{alice_id}")
+        assert 'id="order-section"' in r.text
+        assert 'id="roster-picker"' in r.text
+        assert 'hx-swap-oob' not in r.text

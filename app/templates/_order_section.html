@@ -3,8 +3,12 @@
    swaps in over this section carries NO such listener, so those events can't
    clobber an edit in progress.
 
-   Every button in here replaces the whole section, so hx-target/hx-swap are
-   set once on the section and inherited — it halves the markup of a long
+   Buttons in here replace the whole section by default, so hx-target/hx-swap
+   are set once on the section and inherited. The one exception is the
+   roster's Add button: it deletes just its own row and the server sends the
+   two changed articles back out of band (_order_oob.html), so the picker
+   keeps its scroll position, filter text and inactive toggle. Remove and
+   Clear still re-render everything — the person has to reappear in the
    roster. #}
 <section
   id="order-section"
@@ -13,81 +17,18 @@
   hx-target="#order-section"
   hx-swap="outerHTML"
 >
-  <article>
-    <header><h2>Your order</h2></header>
-    {% if not rows and not self_excluded %}
-      <p><em>Save your usual above, then add other people from the roster.</em></p>
-    {% else %}
-      <ul class="order-list">
-        {% if self_excluded %}
-        <li>
-          <span class="who muted"><em>You&rsquo;re not in this order.</em></span>
-          <span class="row-actions">
-            <button
-              type="button"
-              class="row-action"
-              hx-post="/order/add/{{ user.id }}"
-            >Add me</button>
-          </span>
-        </li>
-        {% endif %}
-        {% for row in rows %}
-        <li>
-          <span class="who"><strong>{{ row.user.display_name }}</strong> — {{ row.line }}{% if row.user.one_off %} <small class="tag">one-off</small>{% endif %}</span>
-          <span class="row-actions">
-            {% if not row.is_self and row.can_edit %}
-            <button
-              type="button"
-              class="secondary outline row-action"
-              hx-get="/people/{{ row.user.id }}/edit"
-            >Edit</button>
-            {% endif %}
-            <button
-              type="button"
-              class="secondary outline row-action"
-              hx-post="/order/remove/{{ row.user.id }}"
-            >Remove</button>
-          </span>
-        </li>
-        {% endfor %}
-      </ul>
-      {% if rows | rejectattr("is_self") | list %}
-      <footer>
-        <button
-          type="button"
-          class="secondary outline row-action"
-          hx-post="/order/clear"
-        >Clear order</button>
-      </footer>
-      {% endif %}
-    {% endif %}
-  </article>
+  {% include "_order_list.html" %}
 
-  <article x-data="{ copied: false }">
-    <header><h2>This order:</h2></header>
-    {% if till_lines %}
-      <textarea
-        readonly
-        rows="{{ till_lines | length }}"
-        x-ref="tillText"
-        style="font-family: ui-monospace, monospace;"
-      >{{ till_lines | join('\n') }}</textarea>
-      <button
-        type="button"
-        x-on:click="navigator.clipboard.writeText($refs.tillText.value).then(() => { copied = true; setTimeout(() => copied = false, 1500); })"
-      >
-        <span x-show="!copied">Copy this order</span>
-        <span x-show="copied" x-cloak>Copied ✓</span>
-      </button>
-    {% else %}
-      <p><em>Your order is empty.</em></p>
-    {% endif %}
-  </article>
+  {% include "_till_summary.html" %}
 
-  <article x-data='{
+  {# names/inactive mirror the rows so "No matches" and the inactive count
+     stay right after an Add removes a row without a re-render: the button's
+     @click trims the name it just added. #}
+  <article id="roster-picker" x-data='{
     q: "",
     showInactive: false,
-    names: {{ (roster + roster_inactive) | map(attribute="display_name") | map("lower") | list | tojson }},
+    names: {{ roster | map(attribute="display_name") | map("lower") | list | tojson }},
+    inactive: {{ roster_inactive | map(attribute="display_name") | map("lower") | list | tojson }},
     get searching() { return this.q.trim().length > 0; },
     matches(name) {
       const needle = this.q.trim().toLowerCase();
@@ -95,8 +36,9 @@
     },
     get noMatches() {
       const needle = this.q.trim().toLowerCase();
-      return needle && this.names.every(n => !n.includes(needle));
-    }
+      return needle && this.names.concat(this.inactive).every(n => !n.includes(needle));
+    },
+    drop(list, name) { this[list] = this[list].filter(n => n !== name); }
   }'>
     <header><h2>Add to your order</h2></header>
     {% if not roster and not roster_inactive %}
@@ -133,35 +75,42 @@
       >
         <ul class="roster-list" x-ref="list" x-keyboard-fit @scroll="update()">
           {% for p in roster %}
-          <li x-show='matches({{ p.display_name | tojson }})'>
+          <li id="roster-{{ p.id }}" x-show='matches({{ p.display_name | tojson }})'>
             <span class="who"><strong>{{ p.display_name }}</strong> — {{ p.line }}</span>
             <span class="row-actions">
               <button
                 type="button"
                 class="row-action"
                 hx-post="/order/add/{{ p.id }}"
+                hx-target="closest li"
+                hx-swap="delete"
+                @click='drop("names", {{ p.display_name | lower | tojson }})'
               >Add</button>
             </span>
           </li>
           {% endfor %}
           {% if roster_inactive %}
           {# Collapsed by default; typing in the filter searches them too. #}
-          <li class="roster-expand" x-show="!showInactive && !searching">
+          <li class="roster-expand" x-show="!showInactive && !searching && inactive.length">
             <button
               type="button"
               class="secondary outline row-action"
               @click="showInactive = true"
-            >Show {{ roster_inactive | length }} inactive
-              {{- ' person' if roster_inactive | length == 1 else ' people' }}</button>
+            >Show <span x-text="inactive.length">{{ roster_inactive | length }}</span> inactive
+              <span x-text="inactive.length === 1 ? 'person' : 'people'">
+                {{- 'person' if roster_inactive | length == 1 else 'people' }}</span></button>
           </li>
           {% for p in roster_inactive %}
-          <li class="inactive-row" x-show='(showInactive || searching) && matches({{ p.display_name | tojson }})'>
+          <li id="roster-{{ p.id }}" class="inactive-row" x-show='(showInactive || searching) && matches({{ p.display_name | tojson }})'>
             <span class="who"><strong>{{ p.display_name }}</strong> — {{ p.line }} <small class="tag">inactive</small></span>
             <span class="row-actions">
               <button
                 type="button"
                 class="row-action"
                 hx-post="/order/add/{{ p.id }}"
+                hx-target="closest li"
+                hx-swap="delete"
+                @click='drop("inactive", {{ p.display_name | lower | tojson }})'
               >Add</button>
             </span>
           </li>

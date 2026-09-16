@@ -1,0 +1,21 @@
+{# Till-ready summary — the other article an Add re-renders out of band. #}
+<article id="till-summary"{% if oob %} hx-swap-oob="true"{% endif %} x-data="{ copied: false }">
+  <header><h2>This order:</h2></header>
+  {% if till_lines %}
+    <textarea
+      readonly
+      rows="{{ till_lines | length }}"
+      x-ref="tillText"
+      style="font-family: ui-monospace, monospace;"
+    >{{ till_lines | join('\n') }}</textarea>
+    <button
+      type="button"
+      x-on:click="navigator.clipboard.writeText($refs.tillText.value).then(() => { copied = true; setTimeout(() => copied = false, 1500); })"
+    >
+      <span x-show="!copied">Copy this order</span>
+      <span x-show="copied" x-cloak>Copied ✓</span>
+    </button>
+  {% else %}
+    <p><em>Your order is empty.</em></p>
+  {% endif %}
+</article>
