@@ -1,0 +1,51 @@
+{# "Your order" — one of the two articles an Add re-renders out of band (see
+ _order_oob.html), so it carries an id and an optional hx-swap-oob flag. #}
+<article id="order-list"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <header><h2>Your order</h2></header>
+  {% if not rows and not self_excluded %}
+    <p><em>Save your usual above, then add other people from the roster.</em></p>
+  {% else %}
+    <ul class="order-list">
+      {% if self_excluded %}
+      <li>
+        <span class="who muted"><em>You&rsquo;re not in this order.</em></span>
+        <span class="row-actions">
+          <button
+            type="button"
+            class="row-action"
+            hx-post="/order/add/{{ user.id }}"
+          >Add me</button>
+        </span>
+      </li>
+      {% endif %}
+      {% for row in rows %}
+      <li>
+        <span class="who"><strong>{{ row.user.display_name }}</strong> — {{ row.line }}{% if row.user.one_off %} <small class="tag">one-off</small>{% endif %}</span>
+        <span class="row-actions">
+          {% if not row.is_self and row.can_edit %}
+          <button
+            type="button"
+            class="secondary outline row-action"
+            hx-get="/people/{{ row.user.id }}/edit"
+          >Edit</button>
+          {% endif %}
+          <button
+            type="button"
+            class="secondary outline row-action"
+            hx-post="/order/remove/{{ row.user.id }}"
+          >Remove</button>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if rows | rejectattr("is_self") | list %}
+    <footer>
+      <button
+        type="button"
+        class="secondary outline row-action"
+        hx-post="/order/clear"
+      >Clear order</button>
+    </footer>
+    {% endif %}
+  {% endif %}
+</article>

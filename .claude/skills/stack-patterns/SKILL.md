@@ -128,6 +128,21 @@ Two patterns, picked by whether the second region can be in a state you must not
 <section id="other-region" hx-swap-oob="true">...</section>
 ```
 
+This is also the answer to "the list loses its scroll position / filter /
+Alpine state when I click a row": swap the smallest thing that changed
+instead of the region around it. The roster's Add button targets its own
+row (`hx-target="closest li" hx-swap="delete"`) and `POST /order/add`
+returns only the two articles that changed, flagged `hx-swap-oob`
+(`_order_oob.html`). The list is never re-rendered, so nothing to restore;
+the browser's own scroll anchoring even keeps it in place on screen as the
+order grows above it. The route tells the two callers apart by the
+`HX-Target` header htmx sends (the row id, `roster-<id>`); anything else
+gets the whole section. Client-side counts derived from the rows (the
+inactive count, the "no matches" name list) are kept honest by trimming
+the clicked name in the button's `@click`. Don't reach for a
+beforeSwap/afterSettle capture-and-restore, and don't reach for idiomorph
+for one hot spot.
+
 **Event-driven refresh** — the response carries an `HX-Trigger` header; the second region listens for that event and refetches itself. Use when the second region has a state that must survive (this repo: the order section can be replaced by an inline person-edit form — an OOB swap from a drink save would clobber a half-finished edit; the edit form simply carries no listener, so it's immune, and it re-renders the section fresh on its own save/cancel anyway).
 
 ```python

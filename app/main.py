@@ -546,10 +546,20 @@ def create_app() -> FastAPI:
         user: User = Depends(get_current_user),
         session: Session = Depends(get_session),
     ):
+        """Add a person to the order.
+
+        From a roster row (htmx reports the row's id as HX-Target) the row
+        itself is the swap target and gets deleted, so only the two articles
+        that changed are returned, out of band. Every other caller — the
+        "Add me" opt-in, tests, curl — gets the whole section.
+        """
         add_to_order(session, user.id, target_id)
-        return templates.TemplateResponse(
-            request, "_order_section.html", _order_section_ctx(session, user)
-        )
+        ctx = _order_section_ctx(session, user)
+        if request.headers.get("HX-Target", "").startswith("roster-"):
+            return templates.TemplateResponse(
+                request, "_order_oob.html", {**ctx, "oob": True}
+            )
+        return templates.TemplateResponse(request, "_order_section.html", ctx)
 
     @app.post("/order/clear", response_class=HTMLResponse)
     def order_clear(
