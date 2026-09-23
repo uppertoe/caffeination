@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # this default unless DEBUG=true — see the check there.
     secret_key: str = DEV_SECRET_KEY
     cookie_name: str = "coffee_id"
+
+    # Do the one-off work (template compilation, statement compilation, a
+    # first render) at startup rather than on the first visitor. Off in the
+    # test suite, which builds the app dozens of times. See app.main.warm_up.
+    warm_on_startup: bool = True
     cookie_max_age: int = 60 * 60 * 24 * 365  # 1 year
 
     base_dir: Path = Path(__file__).resolve().parent

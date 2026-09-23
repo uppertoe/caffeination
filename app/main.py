@@ -7,12 +7,13 @@ from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import configure_mappers
 from sqlmodel import Session
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Receive, Scope, Send
 
 from app.config import DEV_SECRET_KEY, get_settings
-from app.db import get_session, init_db
+from app.db import get_engine, get_session, init_db
 from app.drinks import (
     format_drink,
     get_saved_drink,
@@ -87,9 +88,43 @@ def asset(path: str) -> str:
 templates.env.globals["asset"] = asset
 
 
+def warm_up() -> None:
+    """Pay the one-off costs before the container reports healthy.
+
+    Jinja compiles templates lazily, SQLAlchemy compiles each statement
+    shape on first use and configures the mappers on the first query, and
+    the asset fingerprints are hashed on first render. Measured on the
+    single-vCPU production box that is ~200 ms of CPU — but it is also the
+    code path that has never run since import, so on a memory-starved host
+    it is the first thing paged out during an idle spell, and the first
+    visitor after a deploy or a quiet hour was paying seconds to fault it
+    back in. Doing it here leaves the compiled templates and cached
+    statements in the heap, so a real request only needs the small render
+    working set.
+
+    Rendering goes through a transient user that is never written: the
+    dashboard branch exercises every fragment the page includes, and the
+    onboarding branch the rest.
+    """
+    configure_mappers()
+    for name in templates.env.list_templates(filter_func=lambda n: n.endswith(".html")):
+        templates.get_template(name)
+    settings = get_settings()
+    base = {"app_name": settings.app_name, "tagline": settings.tagline}
+    with Session(get_engine()) as session:
+        visitor = User(id="warm-up")
+        _render("index.html", {**base, "user": visitor, **_onboard_ctx(session)})
+        visitor.display_name = "warm-up"
+        _render("index.html", {**base, "user": visitor, **_dashboard_ctx(session, visitor)})
+        _render("_order_oob.html", {**_order_section_ctx(session, visitor), "oob": True})
+        _render("_drink_form.html", _drink_form_ctx(None))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    if get_settings().warm_on_startup:
+        warm_up()
     yield
 
 
