@@ -16,7 +16,12 @@ FROM python:3.14-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-RUN useradd --create-home --uid 1000 app \
+# The base image's system pip is never used at runtime, and its vendored
+# certifi/urllib3/msgpack/setuptools carry CVEs that scanners flag. Remove it,
+# along with ensurepip's bundled wheel.
+RUN python -m pip uninstall -y pip \
+ && rm -rf /usr/local/lib/python3.*/ensurepip/_bundled \
+ && useradd --create-home --uid 1000 app \
  && mkdir -p /data \
  && chown app:app /data
 
