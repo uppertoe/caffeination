@@ -173,12 +173,13 @@ def purge_all_expired_orders(session: Session, now: Optional[datetime] = None) -
     Expiry is otherwise lazy, on the owner's next render, so an order built,
     read off at the café and left alone would stay out of the statistics
     until its owner came back. Returns how many orders were cleared."""
+    # Compared in Python, like the rest of the expiry code: SQLite reads
+    # datetimes back naive, and SQLModel refuses to bind a naive one.
     cutoff = _as_naive_utc(now or datetime.now(timezone.utc)) - ORDER_TTL
-    owners = session.exec(
-        select(OrderItem.owner_id)
-        .group_by(OrderItem.owner_id)
-        .having(func.min(OrderItem.added_at) <= cutoff)
+    firsts = session.exec(
+        select(OrderItem.owner_id, func.min(OrderItem.added_at)).group_by(OrderItem.owner_id)
     ).all()
+    owners = [owner for owner, first in firsts if _as_naive_utc(first) <= cutoff]
     for owner_id in owners:
         clear_order(session, owner_id)
     return len(owners)

@@ -153,7 +153,7 @@ def test_round_charts_appear_from_five_rounds():
         r = me.get("/stats")
         assert "The round charts will appear once 5 rounds have been recorded." in r.text
         with Session(get_engine()) as s:
-            base = datetime(2026, 10, 26, 23, 0)  # Tuesday 10 am in Melbourne
+            base = datetime(2026, 10, 26, 23, 0, tzinfo=timezone.utc)  # Tuesday 10 am in Melbourne
             for i in range(5):
                 s.add(Round(placed_at=base + timedelta(days=i % 2, minutes=15 * i), drink_count=4))
             s.commit()

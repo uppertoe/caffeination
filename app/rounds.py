@@ -3,7 +3,7 @@ of who was in it. See the Round / RoundDrink models for what is kept."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import insert
@@ -20,10 +20,14 @@ DRINK_FIELDS = ("base_id", "temp", "size", "milk", "strength", "sweetener", "len
 
 
 def floor_placed_at(when: datetime) -> datetime:
+    """Floor to PLACED_AT_RESOLUTION, returned timezone-aware in UTC: SQLModel
+    refuses naive datetimes on write. (SQLite still reads them back naive,
+    hence _as_naive_utc wherever they are compared.)"""
     when = _as_naive_utc(when)
     step = int(PLACED_AT_RESOLUTION.total_seconds())
     seconds = int((when - datetime.min).total_seconds())
-    return datetime.min + timedelta(seconds=seconds - seconds % step)
+    floored = datetime.min + timedelta(seconds=seconds - seconds % step)
+    return floored.replace(tzinfo=timezone.utc)
 
 
 def _sort_key(drink: dict) -> tuple:

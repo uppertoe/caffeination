@@ -47,7 +47,7 @@ def _age_order(owner_id: str, by: timedelta):
         s.exec(
             update(OrderItem)
             .where(OrderItem.owner_id == owner_id)
-            .values(added_at=_now() - by)
+            .values(added_at=datetime.now(timezone.utc) - by)
         )
         s.commit()
 
@@ -77,8 +77,9 @@ def test_clearing_an_order_logs_its_drinks_without_people():
 def test_placed_at_is_the_last_addition_floored_to_fifteen_minutes():
     from app.rounds import floor_placed_at
 
-    assert floor_placed_at(datetime(2026, 10, 31, 10, 44, 59)) == datetime(2026, 10, 31, 10, 30)
-    assert floor_placed_at(datetime(2026, 10, 31, 10, 45)) == datetime(2026, 10, 31, 10, 45)
+    utc = timezone.utc
+    assert floor_placed_at(datetime(2026, 10, 31, 10, 44, 59)) == datetime(2026, 10, 31, 10, 30, tzinfo=utc)
+    assert floor_placed_at(datetime(2026, 10, 31, 10, 45, tzinfo=utc)) == datetime(2026, 10, 31, 10, 45, tzinfo=utc)
 
 
 def test_an_owner_alone_is_not_a_round():
@@ -108,7 +109,9 @@ def test_an_order_left_to_expire_is_logged_when_its_owner_returns():
         me.get("/")
     rounds, _ = _rounds()
     assert len(rounds) == 1 and rounds[0]["drink_count"] == 2
-    assert rounds[0]["placed_at"] < _now() - timedelta(hours=12)
+    from app.users import _as_naive_utc
+
+    assert _as_naive_utc(rounds[0]["placed_at"]) < _now() - timedelta(hours=12)
 
 
 def test_sweep_logs_every_expired_order_but_leaves_fresh_ones():
