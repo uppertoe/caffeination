@@ -27,7 +27,7 @@
           if (r.sized && r.defaultSize && ["small","regular","large"].indexOf(this.size) === -1) {
             this.size = r.defaultSize;
           }
-          if (!r.allowsIced) this.temp = "hot";
+          if ((this.temp === "iced" && !r.allowsIced) || (this.temp === "extra_hot" && !r.allowsExtraHot)) this.temp = "hot";
           if (!r.allowsStrength) this.strength = "regular";
         }
       }'

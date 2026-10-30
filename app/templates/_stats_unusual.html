@@ -1,0 +1,26 @@
+{% from "_stats_macros.html" import bean_chart %}
+{# The result half of "How unusual a drink is", re-rendered on every change
+   to the drink controls. #}
+<div id="unusual-result" class="unusual-result">
+  <p class="unusual-line">{{ unusual.line }}</p>
+  {% set pool = "of the other " ~ unusual.n ~ " usual drinks in the department" if unusual.excludes_viewer else "of the department’s " ~ unusual.n ~ " usual drinks" %}
+  <p class="unusual-verdict">
+    {% if unusual.more_ordinary == unusual.n %}This drink is more unusual than every one {{ pool }}.
+    {% elif unusual.more_ordinary == 0 %}None {{ pool }} is more ordinary than this one.
+    {% else %}This drink is more unusual than <strong>{{ unusual.more_ordinary }}</strong> {{ pool }}.{% endif %}
+  </p>
+  <p class="unusual-reason">{{ unusual.reason }}</p>
+
+  {% call(part) bean_chart(unusual.chart, 600, 18, 12, "Each colleague’s usual drink placed from more ordinary to more unusual, with this drink marked.", top=10) %}
+    {% if part == "above" %}
+    <div class="chart-marker-label" aria-hidden="true"
+      style="left: {{ '%.2f' % (unusual.marker_x / 6) }}%"
+      data-edge="{{ 'start' if unusual.marker_x < 90 else 'end' if unusual.marker_x > 510 else 'middle' }}">This drink</div>
+    {% elif part == "svg" %}
+    <line class="marker" x1="{{ '%.1f' % unusual.marker_x }}" x2="{{ '%.1f' % unusual.marker_x }}" y1="-10" y2="{{ unusual.chart.height + 1 }}" />
+    {% else %}
+    <div class="chart-ends" aria-hidden="true"><span>More ordinary</span><span>More unusual</span></div>
+    {% endif %}
+  {% endcall %}
+
+</div>

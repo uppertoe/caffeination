@@ -60,6 +60,7 @@ class Sweetener(str, Enum):
 
 class Temp(str, Enum):
     HOT = "hot"
+    EXTRA_HOT = "extra_hot"
     ICED = "iced"
 
 
@@ -78,7 +79,7 @@ MILK_LABELS: dict[str, str] = {
 }
 
 STRENGTH_LABELS: dict[str, str] = {
-    Strength.REGULAR.value: "Regular",
+    Strength.REGULAR.value: "Regular strength",
     Strength.WEAK.value: "Weak",
     Strength.EXTRA_SHOT.value: "Extra shot",
     Strength.DECAF.value: "Decaf",
@@ -89,6 +90,12 @@ SWEETENER_LABELS: dict[str, str] = {
     Sweetener.ONE_SUGAR.value: "1 sugar",
     Sweetener.TWO_SUGAR.value: "2 sugars",
     Sweetener.HONEY.value: "Honey",
+}
+
+TEMP_LABELS: dict[str, str] = {
+    Temp.HOT.value: "Hot",
+    Temp.EXTRA_HOT.value: "Extra hot",
+    Temp.ICED.value: "Iced",
 }
 
 SIZE_LABELS: dict[str, str] = {
@@ -109,8 +116,17 @@ class Drink:
     allows_strength: bool
     allows_iced: bool
     default_size: Optional[Size] = None
+    # Shot counts the customer can choose between; () means not adjustable.
+    # The first is the default.
+    shot_choices: tuple[int, ...] = ()
     # Friendly note shown under the form when an axis is hidden by rule
     served_note: Optional[str] = None
+
+    @property
+    def allows_extra_hot(self) -> bool:
+        """Extra hot is a request about steaming the milk, so it applies
+        exactly to the drinks made with milk."""
+        return self.milk_policy == MilkPolicy.REQUIRED
 
     def rules_dict(self) -> dict:
         """Serialised flags for the Alpine-driven form."""
@@ -120,6 +136,8 @@ class Drink:
             "hasLength": self.has_length,
             "allowsStrength": self.allows_strength,
             "allowsIced": self.allows_iced,
+            "allowsExtraHot": self.allows_extra_hot,
+            "shotChoices": list(self.shot_choices),
             "defaultSize": self.default_size.value if self.default_size else None,
             "servedNote": self.served_note,
         }
@@ -193,7 +211,8 @@ DRINKS: tuple[Drink, ...] = (
         has_length=False,
         allows_strength=False,
         allows_iced=False,
-        served_note="Served black, no size. Note shot count in the notes field.",
+        shot_choices=(1, 2),
+        served_note="Served black, no size.",
     ),
     Drink(
         id="macchiato",
@@ -217,6 +236,29 @@ DRINKS: tuple[Drink, ...] = (
         allows_iced=True,
         default_size=Size.SMALL,
         served_note="Served black.",
+    ),
+    Drink(
+        id="filter",
+        display="Filter",
+        family=Family.BLACK,
+        milk_policy=MilkPolicy.NONE,
+        sized=True,
+        has_length=False,
+        allows_strength=False,
+        allows_iced=False,
+        default_size=Size.SMALL,
+        served_note="Batch-brewed filter coffee, served black.",
+    ),
+    Drink(
+        id="cold_brew",
+        display="Cold brew",
+        family=Family.BLACK,
+        milk_policy=MilkPolicy.NONE,
+        sized=False,
+        has_length=False,
+        allows_strength=False,
+        allows_iced=False,
+        served_note="Served cold and black.",
     ),
     Drink(
         id="mocha",
@@ -288,3 +330,59 @@ def rules_for_template() -> dict[str, dict]:
     menu is a code constant, so build it once; every dashboard render
     serialises it for the new-person slot."""
     return {d.id: d.rules_dict() for d in DRINKS}
+
+
+# ---------------------------------------------------------------------------
+# Caffeine estimates for the statistics page. Café coffee varies severalfold,
+# so these are averages, not measurements of any one cup.
+#
+# Espresso: 107 mg per café serve, the Australian average measured by
+# Desbrow et al. (Food Chem Toxicol 2007; J Food Compos Anal 2012), ranging
+# from 25 to 214 mg. Filter, tea and hot chocolate: the Australian Institute
+# of Sport's caffeine table. Cold brew, chai and matcha: no Australian
+# measurements found, so these are overseas estimates.
+# ---------------------------------------------------------------------------
+MG_PER_SHOT = 107
+MG_PER_SHOT_RANGE = (25, 214)
+
+# Shots in each espresso drink; milk drinks scale with size.
+_FIXED_SHOTS: dict[str, float] = {
+    "macchiato": 1,
+    "piccolo": 1,
+    "magic": 2,
+}
+_SHOTS_BY_SIZE: dict[str, float] = {"small": 1, "regular": 1, "large": 2}
+# Drinks without espresso, by their own caffeine.
+_NON_ESPRESSO_MG: dict[str, float] = {
+    "hot_chocolate": 5,
+    "chai_latte": 35,
+    "matcha_latte": 70,
+    "filter": 80,
+    "cold_brew": 150,
+}
+
+
+def estimated_caffeine_mg(
+    base_id: str, size: Optional[str], strength: str, shots: Optional[int] = None
+) -> float:
+    """Estimated caffeine in one drink, in milligrams."""
+    if base_id in _NON_ESPRESSO_MG:
+        return _NON_ESPRESSO_MG[base_id]
+    if base_id == "espresso":
+        n = shots or 1
+    elif base_id in _FIXED_SHOTS:
+        n = _FIXED_SHOTS[base_id]
+    elif base_id == "long_black":
+        n = 2 if size != "large" else 3
+    else:
+        n = _SHOTS_BY_SIZE.get(size or "regular", 1)
+    if strength == Strength.EXTRA_SHOT.value:
+        n += 1
+    elif strength == Strength.WEAK.value:
+        n = max(n - 0.5, 0.5)
+    mg = n * MG_PER_SHOT
+    if strength == Strength.DECAF.value:
+        mg *= 0.03
+    if base_id == "dirty_chai":
+        mg += _NON_ESPRESSO_MG["chai_latte"]
+    return mg

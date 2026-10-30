@@ -1,0 +1,202 @@
+{% from "_stats_macros.html" import fact, plural %}
+{% macro pct(x) %}{{ (x * 100) | round | int }}%{% endmacro %}
+<div id="stats" class="stats-body">
+
+{% if board.n == 0 %}
+  <article class="stats-empty">
+    <p>No one in this group has saved a usual drink yet. The statistics will appear once someone has.</p>
+  </article>
+{% else %}
+
+  {# ---- What the department drinks: exact shares (a census, so no
+     intervals). Leads because every reader found it the most useful. #}
+  <article class="palate" x-data="{ tab: 'base_id' }">
+    <header><h2>What the department drinks</h2></header>
+    <div class="fact-grid">
+      {{ fact("cup", "Usual drinks saved:", board.n) }}
+      {{ fact("layers", "Exact orders no one else shares:", board.unique ~ " of " ~ board.n) }}
+      {{ fact("star", "Most common exact order:", (board.top_line ~ ", chosen by " ~ board.top_count ~ " people") if board.top_line else "No single exact order leads yet") }}
+    </div>
+    <div class="tabs" role="tablist" aria-label="Drink option">
+      {% for f in board.facets %}
+      <button type="button" role="tab" class="tab"
+        :aria-selected="tab === '{{ f.key }}'" aria-selected="{{ 'true' if loop.first else 'false' }}"
+        @click="tab = '{{ f.key }}'">{{ f.tab }}</button>
+      {% endfor %}
+    </div>
+    {% for f in board.facets %}
+    <div role="tabpanel" x-show="tab === '{{ f.key }}'" {% if not loop.first %}x-cloak{% endif %}>
+      <p class="facet-basis">
+        {% if f.key in ("base_id", "sweetener") %}Shares of all {{ f.n }} usual drinks.
+        {% elif f.key == "milk" %}Shares of the {{ f.n }} usual drinks made with milk.
+        {% elif f.key == "size" %}Shares of the {{ f.n }} usual drinks that come in a size.
+        {% elif f.key == "strength" %}Shares of the {{ f.n }} usual drinks with a strength choice.
+        {% else %}Shares of the {{ f.n }} usual drinks that offer a choice of temperature.{% endif %}
+      </p>
+      <ul class="share-list">
+        {% for r in f.rows %}
+        <li class="share-row{% if r.count == 0 %} is-zero{% endif %}" data-tip="{{ r.count }} of {{ f.n }} usual drinks">
+          <span class="share-label">{{ r.label }}</span>
+          <span class="share-track" aria-hidden="true"><span class="share-bar" style="width: {{ '%.2f' % (r.share * 100) }}%"></span></span>
+          <span class="share-value">{{ pct(r.share) }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      <details class="table-view">
+        <summary>Show the numbers</summary>
+        <table>
+          <thead><tr><th scope="col">{{ f.tab }}</th><th scope="col">Usual drinks</th><th scope="col">Share</th></tr></thead>
+          <tbody>
+            {% for r in f.rows %}
+            <tr><th scope="row">{{ r.label }}</th><td>{{ r.count }}</td><td>{{ pct(r.share) }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
+    </div>
+    {% endfor %}
+  </article>
+
+  {# ---- How unusual a drink is ------------------------------------------ #}
+  <article class="unusual">
+    <header><h2>How unusual a drink is</h2></header>
+    <p class="panel-intro">
+      {% if has_own %}The controls are set to your usual drink.{% else %}The controls are set to the department’s most common usual drink.{% endif %}
+      Change any option to see how another drink compares.
+    </p>
+    <div class="unusual-layout">
+      <form
+        class="unusual-controls"
+        hx-get="/stats/unusual"
+        hx-target="#unusual-result"
+        hx-swap="outerHTML"
+        hx-trigger="change delay:60ms"
+        x-data='{
+          rules: {{ rules | tojson }},
+          baseId: {{ initial.base_id | tojson }},
+          temp: {{ (initial.temp or "hot") | tojson }},
+          size: {{ (initial.size or "small") | tojson }},
+          milk: {{ (initial.milk or "full_cream") | tojson }},
+          strength: {{ (initial.strength or "regular") | tojson }},
+          sweetener: {{ (initial.sweetener or "none") | tojson }},
+          length: {{ (initial.length or "short") | tojson }},
+          notes: "",
+          get rule() { return this.rules[this.baseId]; },
+          onBaseChange() {
+            const r = this.rule;
+            if (r.sized && r.defaultSize && ["small","regular","large"].indexOf(this.size) === -1) {
+              this.size = r.defaultSize;
+            }
+            if ((this.temp === "iced" && !r.allowsIced) || (this.temp === "extra_hot" && !r.allowsExtraHot)) this.temp = "hot";
+            if (!r.allowsStrength) this.strength = "regular";
+          }
+        }'
+        x-init='$watch("baseId", () => onBaseChange())'
+      >
+        <input type="hidden" name="who" value="{{ who }}" />
+        {% with without_notes = true %}{% include "_drink_fields.html" %}{% endwith %}
+      </form>
+      {% include "_stats_unusual.html" %}
+    </div>
+    <p class="chart-note">Each bean is one colleague’s usual drink{% if has_own %}, and the ringed bean is yours{% endif %}. A drink’s score adds up how seldom the department chooses each of its options, so several slightly uncommon options can outweigh one rare one.</p>
+  </article>
+
+  {# ---- Caffeine, in shots first ----------------------------------------- #}
+  <article class="caffeine">
+    <header><h2>Caffeine</h2></header>
+    <p class="panel-lead">{{ caffeine.lead }}</p>
+    <div class="fact-grid">
+      {{ fact("bolt", "Typical drink:", caffeine.typical) }}
+      {{ fact("bean", "Your usual drink:", caffeine.mine or "No usual drink saved") }}
+      {{ fact("moon", "Decaf usual drinks:", caffeine.decaf) }}
+    </div>
+    <ul class="bean-rows" aria-label="Colleagues’ usual drinks by estimated caffeine">
+      {% for row in caffeine.rows %}
+      <li class="bean-row{% if not row.beans %} is-empty{% endif %}">
+        <span class="bean-row-label">{{ row.label }}</span>
+        <span class="bean-row-beans">
+          {% for tip, mine in row.beans %}<svg class="bean{% if mine %} bean-mine{% endif %}" viewBox="0 0 15 10" data-tip="{{ tip }}" aria-hidden="true"><use href="#bean" /></svg>{% endfor %}
+          <span class="bean-row-count">{{ row.beans | length }}</span>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="chart-note">Each bean is one colleague’s usual drink{% if caffeine.mine %}, and the ringed bean is yours{% endif %}. Little or none covers decaf, hot chocolate and the tea-based drinks.</p>
+    <details class="table-view">
+      <summary>How the estimate is made</summary>
+      <p class="chart-note">The typical drink is the median of the department’s usual drinks. Small and regular milk drinks are counted as one espresso shot, and large milk drinks and long blacks as two. An extra shot adds one, and a weak drink takes off half. A café espresso shot averages {{ shot_mg }} mg in Australian testing, though single shots have measured anywhere from {{ shot_range[0] }} to {{ shot_range[1] }} mg (Desbrow and colleagues, 2007 and 2012).</p>
+    </details>
+  </article>
+{% endif %}
+
+  {# ---- Rounds ----------------------------------------------------------- #}
+  <article class="rounds">
+    <header><h2>Rounds</h2></header>
+    <p class="panel-intro">A round is recorded, without names, when an order is cleared, or when it expires 12 hours after the first person is added.</p>
+    {% if not rounds.ready %}
+      <p class="stats-wait">
+        {% if rounds.n == 0 %}No rounds have been recorded yet.
+        {% else %}{{ rounds.n }} {{ plural(rounds.n, "round has", "rounds have") }} been recorded so far.{% endif %}
+        The round charts will appear once {{ min_rounds }} rounds have been recorded.
+      </p>
+    {% else %}
+      <div class="fact-grid fact-grid-4">
+        {{ fact("layers", "Rounds recorded:", rounds.n) }}
+        {{ fact("people", "Drinks in a typical round:", rounds.typical_drinks) }}
+        {{ fact("clock", "Busiest stretch, holding half of all rounds:", rounds.half_window) }}
+        {{ fact("calendar", "Busiest day:", rounds.busiest_day or "No day stands out yet") }}
+      </div>
+
+      <h3>Time of day</h3>
+      <div class="chart">
+        <svg class="bar-chart" viewBox="0 0 {{ chart_w }} 120" role="img" aria-label="Rounds in each half hour of the day.">
+          {% if rounds.band %}
+          <rect class="time-band" x="{{ '%.1f' % rounds.band[0] }}" y="0" width="{{ '%.1f' % (rounds.band[1] - rounds.band[0]) }}" height="120" />
+          {% endif %}
+          {% for b in rounds.time_bars if b.count %}
+          <rect class="bar" x="{{ '%.1f' % b.x }}" y="{{ '%.1f' % (120 - b.h * 108) }}" width="{{ '%.1f' % b.w }}" height="{{ '%.1f' % (b.h * 108) }}" rx="3" data-tip="{{ b.tip }}" />
+          {% endfor %}
+          <line class="baseline" x1="0" x2="{{ chart_w }}" y1="119.5" y2="119.5" />
+        </svg>
+        <div class="chart-ticks" aria-hidden="true">
+          {% for x, text in rounds.time_ticks %}<span style="left: {{ '%.2f' % (x / chart_w * 100) }}%">{{ text }}</span>{% endfor %}
+        </div>
+      </div>
+      {% if rounds.band %}<p class="chart-note">The shaded band is the shortest stretch of the day that holds half of all rounds.</p>{% endif %}
+      <details class="table-view">
+        <summary>Show the numbers</summary>
+        <table>
+          <thead><tr><th scope="col">Quarter hour</th><th scope="col">Rounds</th></tr></thead>
+          <tbody>
+            {% for b in rounds.time_bars if b.count %}<tr><th scope="row">{{ b.label }}</th><td>{{ b.count }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </details>
+
+      <h3>Day of the week</h3>
+      <div class="day-chart" style="grid-template-columns: repeat({{ rounds.days | length }}, 1fr)">
+        {% for day, count, h in rounds.days %}
+        <div class="day-col" data-tip="{{ day }}: {{ count }} {{ plural(count, 'round', 'rounds') }}">
+          <span class="day-count">{{ count }}</span>
+          <span class="day-bar" style="height: {{ '%.1f' % (h * 100) }}%"></span>
+          <span class="day-name">{{ day }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </article>
+
+{% if findings %}
+  {# ---- Options that go together: shown only when a link survives a Holm
+     correction across every pair tested. #}
+  <article class="pairings">
+    <header><h2>Options that go together</h2></header>
+    <ul class="finding-list">
+      {% for f in findings %}
+      <li>{{ f.sentence }} than chance alone would explain. A difference this large would arise by chance less than {{ f.odds }}.</li>
+      {% endfor %}
+    </ul>
+    <p class="chart-note">Four pairs of options are checked: {{ pairing_names[:-1] | join("; ") }}; and {{ pairing_names[-1] }}.</p>
+  </article>
+{% endif %}
+</div>

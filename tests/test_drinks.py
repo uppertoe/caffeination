@@ -120,7 +120,48 @@ def test_normalize_strips_size_for_espresso():
     out = normalize("espresso", {"size": "large", "milk": "oat"})
     assert out["size"] is None
     assert out["milk"] is None
-    assert "shots" not in out  # shots is no longer a structured axis
+    assert out["shots"] == 1  # espresso defaults to a single
+
+
+def test_espresso_takes_a_single_or_double_and_nothing_else_does():
+    from app.drinks import format_line, normalize
+
+    double = normalize("espresso", {"shots": "2"})
+    assert double["shots"] == 2
+    assert normalize("espresso", {"shots": "3"})["shots"] == 1
+    assert normalize("latte", {"shots": "2"})["shots"] is None
+    assert format_line("espresso", None, None, "hot", "regular", None, "none", None, 2) == "double espresso"
+    assert format_line("espresso", None, None, "hot", "regular", None, "none", None, 1) == "espresso"
+
+
+def test_extra_hot_applies_only_to_drinks_made_with_milk():
+    from app.drinks import format_line, normalize
+
+    latte = normalize("latte", {"temp": "extra_hot", "size": "small"})
+    assert latte["temp"] == "extra_hot"
+    assert format_line("latte", None, "small", "extra_hot", "regular", "oat", "none", None) == "extra hot oat latte"
+    assert normalize("long_black", {"temp": "extra_hot"})["temp"] == "hot"
+    assert normalize("hot_chocolate", {"temp": "extra_hot"})["temp"] == "extra_hot"
+
+
+def test_own_cup_is_noted_on_the_line():
+    from app.drinks import format_line, normalize
+
+    assert normalize("latte", {"own_cup": "1"})["own_cup"] is True
+    assert normalize("latte", {})["own_cup"] is False
+    line = format_line("latte", None, "small", "hot", "regular", "full_cream", "one_sugar", None, None, True)
+    assert line == "latte (1 sugar, own cup)"
+
+
+def test_filter_and_cold_brew_are_served_black():
+    from app.drinks import format_line, normalize
+
+    filt = normalize("filter", {"size": "large", "milk": "oat", "temp": "iced"})
+    assert (filt["size"], filt["milk"], filt["temp"]) == ("large", None, "hot")
+    assert format_line("filter", None, "large", "hot", "regular", None, "none", None) == "large filter"
+    cold = normalize("cold_brew", {"size": "large", "temp": "extra_hot"})
+    assert (cold["size"], cold["temp"]) == (None, "hot")
+    assert format_line("cold_brew", None, None, "hot", "regular", None, "none", None) == "cold brew"
 
 
 def test_normalize_macchiato_has_length_no_size():
@@ -201,3 +242,33 @@ def test_cancel_returns_card_without_persisting_form_values():
         r = client.get("/me/drink")
     assert r.status_code == 200
     assert "espresso (double shot)" in r.text
+
+
+def test_init_db_adds_the_new_columns_to_an_existing_database():
+    import sqlite3
+
+    from app.config import get_settings
+    from app.db import init_db
+
+    path = get_settings().database_url.removeprefix("sqlite:///")
+    con = sqlite3.connect(path)
+    con.executescript(
+        'CREATE TABLE "user" (id VARCHAR PRIMARY KEY, display_name VARCHAR, created_at TIMESTAMP,'
+        " created_by VARCHAR, one_off BOOLEAN);"
+        "CREATE TABLE saveddrink (user_id VARCHAR PRIMARY KEY, base_id VARCHAR, temp VARCHAR,"
+        " size VARCHAR, milk VARCHAR, strength VARCHAR, sweetener VARCHAR, length VARCHAR,"
+        " notes VARCHAR, updated_at TIMESTAMP);"
+        "INSERT INTO \"user\" VALUES ('u1', 'Old Timer', '2026-01-01', NULL, 0);"
+        "INSERT INTO saveddrink VALUES ('u1', 'espresso', 'hot', NULL, NULL, 'regular', 'none', NULL, 'Double', '2026-01-01');"
+    )
+    con.commit()
+    con.close()
+
+    init_db()
+
+    con = sqlite3.connect(path)
+    cols = {row[1] for row in con.execute("PRAGMA table_info(saveddrink)")}
+    row = con.execute("SELECT shots, own_cup, notes FROM saveddrink").fetchone()
+    con.close()
+    assert {"shots", "own_cup"} <= cols
+    assert row == (None, 0, "Double")
