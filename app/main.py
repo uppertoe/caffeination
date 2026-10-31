@@ -673,13 +673,22 @@ def create_app() -> FastAPI:
         request: Request,
         who: str = "active",
         allocation: int = 1,
+        seen: int = 1,
+        hits: int = 0,
         session: Session = Depends(get_session),
     ):
-        """Another random allocation for the baseline table."""
+        """Another random allocation for the baseline table. seen and hits
+        carry the viewer's running tally of allocations drawn and those with
+        a baseline p-value below 0.05, before this one."""
         usuals = usuals_for(load_usuals(session, "all"), _stats_who(who))
         return templates.TemplateResponse(
             request, "_stats_randomise.html",
-            {"randomisation": build_randomisation(usuals, max(1, allocation)), "who": _stats_who(who)},
+            {
+                "randomisation": build_randomisation(usuals, max(1, allocation)),
+                "who": _stats_who(who),
+                "seen": max(1, seen),
+                "hits": max(0, min(hits, seen - 1)),
+            },
         )
 
     return app

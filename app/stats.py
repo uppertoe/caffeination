@@ -1005,3 +1005,62 @@ def kappa_interval(a: Sequence[int], b: Sequence[int], categories: int, weighted
             out.append(k)
     out.sort()
     return _percentile(out, 0.025), _percentile(out, 0.975)
+
+
+def cluster_bootstrap(
+    clusters: Sequence[Sequence], stat, resamples: int = 500, seed: int = 0
+) -> Optional[tuple[float, float]]:
+    """95% percentile interval for any statistic of pooled items, resampling
+    whole clusters (people, or rounds) with replacement. stat takes the
+    pooled items and may return None for a resample it cannot score."""
+    if len(clusters) < 2:
+        return None
+    rng = random.Random(seed)
+    k = len(clusters)
+    out = []
+    for _ in range(resamples):
+        pool = [item for _ in range(k) for item in clusters[rng.randrange(k)]]
+        v = stat(pool)
+        if v is not None and math.isfinite(v):
+            out.append(v)
+    if len(out) < resamples // 2:
+        return None
+    out.sort()
+    return _percentile(out, 0.025), _percentile(out, 0.975)
+
+
+def auc(scores: Sequence[float], positive: Sequence[bool]) -> Optional[float]:
+    """Area under the ROC curve by ranks (the Mann–Whitney U over n₁n₀), so
+    it is fast enough to bootstrap."""
+    n1 = sum(1 for y in positive if y)
+    n0 = len(positive) - n1
+    if n1 == 0 or n0 == 0:
+        return None
+    ranks = _ranks(scores)
+    r1 = sum(r for r, y in zip(ranks, positive) if y)
+    return (r1 - n1 * (n1 + 1) / 2) / (n1 * n0)
+
+
+def poisson_binomial(rates: Sequence[float]) -> list[float]:
+    """Distribution of the number of successes among independent trials with
+    their own probabilities: the size of a round if each colleague joined it
+    independently, at their own rate."""
+    dist = [1.0]
+    for p in rates:
+        nxt = [0.0] * (len(dist) + 1)
+        for k, q in enumerate(dist):
+            nxt[k] += q * (1 - p)
+            nxt[k + 1] += q * p
+        dist = nxt
+    return dist
+
+
+def variance_test(values: Sequence[float], expected_var: float) -> float:
+    """Two-sided p-value for a sample variance against an expected one,
+    using (n − 1)s²/σ² on n − 1 degrees of freedom."""
+    n = len(values)
+    if n < 2 or expected_var <= 0:
+        return 1.0
+    stat = (n - 1) * statistics.variance(values) / expected_var
+    upper = chi2_sf(stat, n - 1)
+    return min(1.0, 2 * min(upper, 1 - upper))

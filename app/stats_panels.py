@@ -33,7 +33,6 @@ from app.stats import (
     chi_square,
     cohen_kappa,
     holm_adjust,
-    kappa_interval,
     n2_for_power,
     randomised_baseline_ps,
     simulate_caffeine,
@@ -105,6 +104,8 @@ class Pair:
     rows: tuple[str, ...]  # display order
     cols: tuple[str, ...]
     sentence: Callable[[str, str], str]  # for the standout cell of a real link
+    no_link: str = ""  # the lead when there is no evidence of a link
+    premise: str = ""  # the null hypothesis, as the working states it
 
 
 _STRENGTH_PHRASE = {"Milder": "weak or decaf", "Stronger": "made stronger", "Regular strength": "regular strength"}
@@ -113,23 +114,31 @@ PAIRS: tuple[Pair, ...] = (
     Pair(
         "milk_size", "Milk and size", "Milk", "Size",
         lambda o: (milk_kind(o), size(o)), ("Dairy", "Plant"), SIZES,
-        lambda r, c: f"{r} milk drinks are more often {c.lower()}",
+        lambda r, c: f"{r} milk drinks are {c.lower()} more often",
+        "The department’s choice of milk shows no clear link with size.",
+        "If milk and size were chosen independently",
     ),
     Pair(
         "milk_drink", "Milk and drink", "Milk", "Drink",
         lambda o: (milk_kind(o), drink_group(o)), ("Dairy", "Plant"),
         ("Milk coffee", "Chai, matcha or chocolate"),
-        lambda r, c: f"{c} drinks are more often made with {r.lower()} milk",
+        lambda r, c: f"{c} drinks are made with {r.lower()} milk more often",
+        "The department’s choice of milk shows no clear link with the kind of drink.",
+        "If milk and the kind of drink were chosen independently",
     ),
     Pair(
         "strength_size", "Strength and size", "Strength", "Size",
         lambda o: (strength_group(o), size(o)), ("Milder", "Regular strength", "Stronger"), SIZES,
-        lambda r, c: f"{c} drinks are more often {_STRENGTH_PHRASE[r]}",
+        lambda r, c: f"{c} drinks are {_STRENGTH_PHRASE[r]} more often",
+        "The department’s choice of strength shows no clear link with size.",
+        "If strength and size were chosen independently",
     ),
     Pair(
         "sugar_drink", "Sugar and drink", "Sugar", "Drink",
         lambda o: (sugar(o), drink_group(o)), ("No sugar", "Sugar or honey"), tuple(DRINK_GROUPS),
-        lambda r, c: f"{c} drinks more often come {'without sugar' if r == 'No sugar' else 'with sugar or honey'}",
+        lambda r, c: f"{c} drinks come {'without sugar' if r == 'No sugar' else 'with sugar or honey'} more often",
+        "The department’s use of sugar shows no clear link with the kind of drink.",
+        "If sugar and the kind of drink were chosen independently",
     ),
 )
 
@@ -173,6 +182,8 @@ class PairView:
     marker_x: float = 0.0
     axis_max: float = 0.0
     standout: Optional[tuple[str, str]] = None  # the cell furthest above expected
+    no_link: str = ""
+    premise: str = ""
     ticks: list[tuple[float, str]] = field(default_factory=list)  # (percent, label)
 
 
@@ -220,7 +231,8 @@ def _pair_test(pairs: tuple[tuple[str, str], ...]) -> Optional[ChiSquare]:
 def _pair_view(pair: Pair, kept: tuple[tuple[str, str], ...]) -> PairView:
     """One pair's test laid out for drawing: the table in display order with
     each cell's working, and the permutation histogram."""
-    view = PairView(pair.key, pair.tab, pair.row_name, pair.col_name, len(kept), False)
+    view = PairView(pair.key, pair.tab, pair.row_name, pair.col_name, len(kept), False,
+                    no_link=pair.no_link, premise=pair.premise)
     test = _pair_test(kept) if len(kept) >= MIN_FOR_PAIRING else None
     if test is None:
         return view
@@ -263,7 +275,8 @@ def _kept(pairs) -> tuple[tuple[str, str], ...]:
 
 def build_pairs(usuals: list[Usual]) -> list[PairView]:
     """Every pair with its χ² working, Holm-adjusted across the pairs that
-    could be tested. A finding is stated only when it survives that."""
+    could be tested. A finding is stated only when it survives that. Pairs
+    that can be tested come first, strongest evidence first."""
     views = [(pair, _pair_view(pair, _kept(pair.pick(u.options) for u in usuals))) for pair in PAIRS]
     tested = [v for _, v in views if v.ready]
     for v, p in zip(tested, holm_adjust([v.test.p_permutation for v in tested])):
@@ -271,7 +284,8 @@ def build_pairs(usuals: list[Usual]) -> list[PairView]:
     for pair, v in views:
         if v.ready and v.p_holm < 0.05:
             v.finding = pair.sentence(*v.standout)
-    return [v for _, v in views]
+    ordered = sorted((v for _, v in views), key=lambda v: (not v.ready, v.p_holm if v.ready else 1.0))
+    return ordered
 
 
 # ---------------------------------------------------------------------------
@@ -452,9 +466,11 @@ def build_caffeine_sim(usuals: list[Usual]) -> Optional[CaffeineSim]:
 MIN_MOVED_ON = 10
 
 MOVED_ON = Pair(
-    "moved_on", "Moved on", "Milk", "Colleagues",
-    lambda o: (None, None), ("Dairy", "Plant"), ("Still here", "Moved on"),
-    lambda r, c: f"Colleagues who are {c.lower()} more often chose {r.lower()} milk",
+    "inactive", "Inactive", "Milk", "Colleagues",
+    lambda o: (None, None), ("Dairy", "Plant"), ("Active", "Inactive"),
+    lambda r, c: f"{c} colleagues chose {r.lower()} milk more often",
+    "Inactive colleagues chose plant milk about as often as active colleagues.",
+    "If inactive colleagues’ milk were no different from active colleagues’",
 )
 
 
@@ -487,7 +503,7 @@ def build_moved_on(everyone: list[Usual]) -> MovedOn:
     out = MovedOn(len(active), len(inactive), len(inactive) >= MIN_MOVED_ON, pa, plant_share(inactive), needed)
     if out.ready:
         out.pair = _pair_view(MOVED_ON, _kept(
-            (milk_kind(u.options), "Still here" if u.active else "Moved on") for u in everyone
+            (milk_kind(u.options), "Active" if u.active else "Inactive") for u in everyone
         ))
         if out.pair.ready:
             out.pair.p_holm = out.pair.test.p_permutation  # a single test
@@ -507,10 +523,16 @@ class Agreement:
     left_out: int
     ba: Optional[BlandAltman] = None
     ratio: Optional[float] = None  # AUSNUT's total over ours
+    # The ratio analysis Bland and Altman recommend when the difference grows
+    # with the size: the geometric mean of AUSNUT ÷ Desbrow, and the range
+    # holding 95% of the drinks' ratios. Drinks with no caffeine in either
+    # reference are left out of it.
+    gm_ratio: Optional[float] = None
+    ratio_low: Optional[float] = None
+    ratio_high: Optional[float] = None
+    kinds: int = 0  # distinct kinds of usual drink compared
     kappa: Optional[float] = None
-    kappa_ci: Optional[tuple[float, float]] = None
     wkappa: Optional[float] = None
-    wkappa_ci: Optional[tuple[float, float]] = None
     # Bland–Altman plot: (x, y, radius, tip) in a 600 × 200 frame, and the
     # y of the bias and limit lines, and the proportional-bias line.
     points: list[tuple[float, float, float, str]] = field(default_factory=list)
@@ -581,7 +603,11 @@ def build_agreement(usuals: list[Usual]) -> Optional[Agreement]:
     out.bands = list(CAFFEINE_ROWS)
     out.table = [[sum(1 for x, y in zip(ra, rb) if x == i and y == j) for j in range(k)] for i in range(k)]
     out.kappa = cohen_kappa(ra, rb, k)
-    out.kappa_ci = kappa_interval(ra, rb, k, False)
     out.wkappa = cohen_kappa(ra, rb, k, weighted=True)
-    out.wkappa_ci = kappa_interval(ra, rb, k, True)
+    logs = [math.log(b / a) for a, b in pairs if a > 0 and b > 0]
+    if len(logs) >= 2:
+        m, sd = statistics.fmean(logs), statistics.stdev(logs)
+        out.gm_ratio = math.exp(m)
+        out.ratio_low, out.ratio_high = math.exp(m - 1.96 * sd), math.exp(m + 1.96 * sd)
+    out.kinds = len(counts)
     return out

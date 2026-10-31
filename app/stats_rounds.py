@@ -12,6 +12,7 @@ import statistics
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -24,18 +25,19 @@ from app.stats import (
     OddsRatio,
     Roc,
     Welch,
+    auc,
+    cluster_bootstrap,
     cluster_bootstrap_diff,
     cusum,
-    dispersion,
+    poisson_binomial,
+    variance_test,
     fisher_exact,
     fragility_index,
-    gini_interval,
     kaplan_meier,
     km_median,
     lorenz,
     mantel_haenszel,
     n_per_group_for_means,
-    poisson_pmf,
     roc,
     share_for_half,
     spearman,
@@ -132,8 +134,16 @@ class Afternoon:
     naive: Optional[Welch] = None  # treating every drink as independent
     clustered: Optional[tuple[float, float, float]] = None  # resampling people
     people: int = 0
+    naive_width: Optional[float] = None
+    clustered_width: Optional[float] = None
     crude: Optional[OddsRatio] = None  # odds of a stronger drink after midday
     adjusted: Optional[OddsRatio] = None  # Mantel–Haenszel, within drink groups
+    # Intervals from resampling colleagues, in place of the textbook ones
+    # that treat every drink as independent.
+    crude_ci: Optional[tuple[float, float]] = None
+    adjusted_ci: Optional[tuple[float, float]] = None
+    auc_ci: Optional[tuple[float, float]] = None
+    informative: list[str] = field(default_factory=list)
     strata: list[tuple[str, int, int, int, int]] = field(default_factory=list)
     posterior_input: Optional[tuple[float, float]] = None  # (difference, SE) for the slider
     roc: Optional[Roc] = None
@@ -152,8 +162,51 @@ def _stronger(d: LoggedDrink) -> bool:
     return d.shots >= 2
 
 
+def _colleague_drinks(rounds: list[LoggedRound]) -> list[tuple[LoggedRound, LoggedDrink]]:
+    """Colleagues' drinks only: guests have their own section, and a guest's
+    drink would otherwise count as a colleague who came once."""
+    return [(r, d) for r in rounds for d in r.drinks if not d.guest]
+
+
+@lru_cache(maxsize=4)
+def _afternoon_intervals(items: tuple[tuple[str, bool, float, str], ...]):
+    """Person-resampled intervals for the odds ratios and the AUC. Items are
+    (person, afternoon, shots, drink group)."""
+    by_person: dict[str, list] = defaultdict(list)
+    for it in items:
+        by_person[it[0]].append(it)
+    clusters = list(by_person.values())
+
+    def strata(pool):
+        out = []
+        for group in DRINK_GROUPS:
+            cell = [it for it in pool if it[3] == group]
+            out.append((
+                sum(1 for it in cell if it[1] and it[2] >= 2), sum(1 for it in cell if it[1] and it[2] < 2),
+                sum(1 for it in cell if not it[1] and it[2] >= 2), sum(1 for it in cell if not it[1] and it[2] < 2),
+            ))
+        return out
+
+    def crude(pool):
+        res = mantel_haenszel(strata(pool))
+        return res[0].estimate if res else None
+
+    def adjusted(pool):
+        res = mantel_haenszel(strata(pool))
+        return res[1].estimate if res else None
+
+    def area(pool):
+        return auc([it[2] for it in pool], [it[1] for it in pool])
+
+    return (
+        cluster_bootstrap(clusters, crude),
+        cluster_bootstrap(clusters, adjusted),
+        cluster_bootstrap(clusters, area),
+    )
+
+
 def build_afternoon(rounds: list[LoggedRound], usuals: list[Usual]) -> Afternoon:
-    drinks = [(r, d) for r in rounds for d in r.drinks]
+    drinks = _colleague_drinks(rounds)
     before = [d.shots for r, d in drinks if not r.afternoon]
     after = [d.shots for r, d in drinks if r.afternoon]
     census_sd = statistics.stdev([shots_of(u.options) for u in usuals]) if len(usuals) > 1 else 0.7
@@ -168,6 +221,8 @@ def build_afternoon(rounds: list[LoggedRound], usuals: list[Usual]) -> Afternoon
     out.naive = welch(after, before)
     out.clustered = cluster_bootstrap_diff([(d.person, int(r.afternoon), d.shots) for r, d in drinks])
     out.people = len({d.person for _, d in drinks})
+    out.naive_width = out.naive.high - out.naive.low
+    out.clustered_width = (out.clustered[2] - out.clustered[1]) if out.clustered else None
 
     # Odds of a stronger drink after midday, crude and within drink groups.
     strata = []
@@ -182,6 +237,10 @@ def build_afternoon(rounds: list[LoggedRound], usuals: list[Usual]) -> Afternoon
     mh = mantel_haenszel([s[1:] for s in strata])
     if mh:
         out.crude, out.adjusted = mh
+    # Strata in which every drink falls on one side carry no information.
+    out.informative = [g for g, sa, sb, sc, sd in strata if (sa + sc) and (sb + sd) and (sa + sb) and (sc + sd)]
+    items = tuple(sorted((d.person, r.afternoon, d.shots, drink_group(d.options)) for r, d in drinks))
+    out.crude_ci, out.adjusted_ci, out.auc_ci = _afternoon_intervals(items)
 
     if out.clustered:
         est, lo, hi = out.clustered
@@ -194,14 +253,15 @@ def build_afternoon(rounds: list[LoggedRound], usuals: list[Usual]) -> Afternoon
     # Each round's mean shots against its time of day.
     lo_t = min(7 * 60, min(r.minutes for r in rounds))
     hi_t = max(17 * 60, max(r.minutes for r in rounds))
-    top = max(3.0, max(statistics.fmean(d.shots for d in r.drinks) for r in rounds if r.drinks))
-    for r in rounds:
-        if r.drinks:
-            m = statistics.fmean(d.shots for d in r.drinks)
-            out.dots.append(Dot(
-                (r.minutes - lo_t) / (hi_t - lo_t) * CHART_W, CHART_H - m / top * (CHART_H - 6),
-                f"A round of {len(r.drinks)}: {_fmt(m)} shots a drink",
-            ))
+    per_round = [(r, [d.shots for d in r.drinks if not d.guest]) for r in rounds]
+    per_round = [(r, xs) for r, xs in per_round if xs]
+    top = max(3.0, max(statistics.fmean(xs) for _, xs in per_round))
+    for r, xs in per_round:
+        m = statistics.fmean(xs)
+        out.dots.append(Dot(
+            (r.minutes - lo_t) / (hi_t - lo_t) * CHART_W, CHART_H - m / top * (CHART_H - 6),
+            f"A round of {len(xs)}: {_fmt(m)} shots a drink",
+        ))
     from app.stats_view import _clock
     out.dot_ticks = [((t - lo_t) / (hi_t - lo_t) * 100, _clock(t)) for t in range(lo_t - lo_t % 120 + 120, hi_t, 120)]
     out.y_ticks = [(100 - p, label) for p, label in _ticks(top, 3)]
@@ -321,13 +381,21 @@ class Attendance:
 
 
 def build_attendance(rounds: list[LoggedRound], usuals: list[Usual], viewer_id: str) -> Attendance:
-    counts = Counter(d.person for r in rounds for d in r.drinks)
+    counts = Counter(d.person for r, d in _colleague_drinks(rounds))
     out = Attendance(len(rounds) >= MIN_FOR_ATTENDANCE, len(rounds), counts.get(viewer_id) or None)
     if not out.ready or not usuals:
         return out
     per_person = [counts.get(u.user_id, 0) for u in usuals]
     points, out.gini = lorenz(per_person)
-    out.gini_low, out.gini_high = gini_interval(per_person)
+    ids = [u.user_id for u in usuals]
+    per_round = [[d.person for d in r.drinks if not d.guest] for r in rounds]
+
+    def gini_of(pool):
+        c = Counter(pool)
+        return lorenz([c.get(i, 0) for i in ids])[1]
+
+    ci = cluster_bootstrap(per_round, gini_of)
+    out.gini_low, out.gini_high = ci if ci else (None, None)
     out.half_share = share_for_half(per_person)
     out.people = len(usuals)
     out.lorenz_path = "M" + " L".join(f"{px * 200:.1f},{200 - py * 200:.1f}" for px, py in points)
@@ -335,7 +403,7 @@ def build_attendance(rounds: list[LoggedRound], usuals: list[Usual], viewer_id: 
     if len(came) >= 8:
         out.regulars_rho, out.regulars_p = spearman([c for c, _ in came], [s for _, s in came])
     census = Counter(drink_group(u.options) for u in usuals)
-    logged = Counter(drink_group(d.options) for r in rounds for d in r.drinks)
+    logged = Counter(drink_group(d.options) for _, d in _colleague_drinks(rounds))
     n_c, n_l = sum(census.values()), sum(logged.values())
     out.mix = [(g, census[g] / n_c, logged[g] / n_l if n_l else 0.0) for g in DRINK_GROUPS]
     return out
@@ -355,8 +423,11 @@ class RoundSize:
     rounds: int
     mean: Optional[float] = None
     ratio: Optional[float] = None  # variance to mean
-    ratio_p: Optional[float] = None
-    bars: list[tuple[float, float, float, int, float]] = field(default_factory=list)  # (x, w, h, k, poisson h)
+    expected_ratio: Optional[float] = None  # if each colleague joined independently
+    ratio_p: Optional[float] = None  # two-sided, observed variance against expected
+    # (x, w, h, k, expected h): rounds of each size, and the count expected
+    # if each colleague joined independently at their own rate.
+    bars: list[tuple[float, float, float, int, float]] = field(default_factory=list)
     size_ticks: list[tuple[float, str]] = field(default_factory=list)
     rtm_r: Optional[float] = None
     big: Optional[int] = None  # threshold for a "big" round
@@ -374,15 +445,25 @@ class RoundSize:
 
 
 def build_round_size(rounds: list[LoggedRound]) -> RoundSize:
-    sizes = [r.size for r in rounds]
+    """Round size as the number of colleagues' drinks, guests aside. The null
+    is a fixed roster in which each colleague joins each round independently
+    at their own observed rate: a Poisson-binomial count, whose variance is
+    Σ r(1 − r), below its mean, unlike a Poisson process's."""
+    sizes = [sum(1 for d in r.drinks if not d.guest) for r in rounds]
     out = RoundSize(len(rounds) >= MIN_FOR_SIZE, len(rounds))
     if not out.ready:
         return out
     out.mean = statistics.fmean(sizes)
-    out.ratio, out.ratio_p = dispersion(sizes)
+    joins = Counter(d.person for r, d in _colleague_drinks(rounds))
+    rates = [min(1.0, k / len(rounds)) for k in joins.values()]
+    expected_var = sum(r * (1 - r) for r in rates)
+    out.ratio = statistics.variance(sizes) / out.mean if out.mean else 1.0
+    out.expected_ratio = expected_var / sum(rates) if rates else 1.0
+    out.ratio_p = variance_test(sizes, expected_var)
     top_k = max(sizes) + 1
     seen = Counter(sizes)
-    expected = [poisson_pmf(k, out.mean) * len(sizes) for k in range(top_k + 1)]
+    dist = poisson_binomial(rates)
+    expected = [(dist[k] if k < len(dist) else 0.0) * len(sizes) for k in range(top_k + 1)]
     peak = max(max(seen.values()), max(expected))
     w = CHART_W / (top_k + 1)
     out.bars = [(k * w + 2, w - 4, seen[k] / peak, seen[k], expected[k] / peak) for k in range(top_k + 1)]
@@ -440,17 +521,18 @@ class Guests:
     fragility: Optional[int] = None
 
 
-def build_guests(rounds: list[LoggedRound]) -> Guests:
-    drinks = [d for r in rounds for d in r.drinks]
-    guests = [d for d in drinks if d.guest]
+def build_guests(rounds: list[LoggedRound], usuals: list[Usual]) -> Guests:
+    """Guests' drinks against colleagues' usual drinks, one per colleague, so
+    a regular's hundred repeat lattes count once, as one person's choice."""
+    guests = [d for r in rounds for d in r.drinks if d.guest]
     out = Guests(len(guests) >= MIN_GUESTS, len(guests))
-    if not out.ready:
+    if not out.ready or not usuals:
+        out.ready = False
         return out
-    milk = lambda d: drink_group(d.options) == "Milk coffee"
-    regulars = [d for d in drinks if not d.guest]
+    milk = lambda o: drink_group(o) == "Milk coffee"
     out.table = (
-        sum(map(milk, guests)), sum(not milk(d) for d in guests),
-        sum(map(milk, regulars)), sum(not milk(d) for d in regulars),
+        sum(1 for d in guests if milk(d.options)), sum(1 for d in guests if not milk(d.options)),
+        sum(1 for u in usuals if milk(u.options)), sum(1 for u in usuals if not milk(u.options)),
     )
     out.p = fisher_exact(*out.table)
     out.fragility = fragility_index(*out.table)
@@ -473,5 +555,5 @@ def build_round_panels(session: Session, usuals: list[Usual], viewer_id: str) ->
         next_coffee=build_next_coffee(rounds),
         attendance=build_attendance(rounds, usuals, viewer_id),
         size=build_round_size(rounds),
-        guests=build_guests(rounds),
+        guests=build_guests(rounds, usuals),
     )

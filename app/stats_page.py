@@ -66,6 +66,8 @@ def stats_context(session: Session, viewer: User, who: str, allocation: int = 1)
         "agreement": build_agreement(usuals),
         "pairs": build_pairs(usuals),
         "randomisation": build_randomisation(usuals, allocation),
+        "seen": 1,
+        "hits": 0,
         "moved_on": build_moved_on(everyone),
         "min_moved_on": MIN_MOVED_ON,
         "shot_range": MG_PER_SHOT_RANGE,

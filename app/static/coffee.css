@@ -1274,3 +1274,37 @@ article form legend {
 .nav-chip.is-current { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .stats-body article { scroll-margin-top: 6rem; }
 @media (prefers-reduced-motion: no-preference) { html:has(.stats-nav) { scroll-behavior: smooth; } }
+
+/* Inline chart legends and axis titles. */
+.chart-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.9rem; margin: 0.5rem 0 0; font-size: 0.8rem; color: var(--ink-muted); }
+.key { display: inline-block; width: 1.4rem; height: 0; margin-right: 0.35rem; vertical-align: middle; border-top: 2.5px solid var(--accent); }
+.key-prior { border-top: 2px dashed var(--ink-muted); }
+.key-post, .key-accent { border-top-color: var(--accent); }
+.key-cool { border-top-color: var(--cool); }
+.axis-title { margin: 0.1rem 0 0; font-size: 0.75rem; color: var(--ink-muted); }
+.ci-label small { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+
+/* At a glance: one fact per tile, each a way into its section. */
+.glance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 45%), 1fr));
+  gap: 0.6rem;
+  margin: 0.2rem 0 1.4rem;
+}
+.glance-tile {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: calc(var(--pico-border-radius) * 2);
+  background: var(--card-bg);
+  border: 1px solid var(--card-line);
+  box-shadow: var(--card-shadow);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.glance-tile:hover { border-color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .glance-tile:hover { transform: translateY(-1px); } }
+.glance-label { font-size: 0.78rem; color: var(--ink-muted); }
+.glance-value { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; color: var(--ink-strong); line-height: 1.25; }
+.facet-unused { margin: 0.5rem 0 0; font-size: 0.82rem; color: var(--ink-muted); }

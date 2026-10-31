@@ -214,7 +214,7 @@ WORKING = (
     ("size", "Size", SIZE_LABELS, "that come in a size"),
     ("milk", "Milk", MILK_LABELS, "made with milk"),
     ("strength", "Strength", STRENGTH_LABELS, "with a strength choice"),
-    ("temp", "Temperature", TEMP_LABELS, "that can be served extra hot or iced"),
+    ("temp", "Temperature", TEMP_LABELS, "that offer a choice of temperature"),
     ("sweetener", "Sugar", SWEETENER_LABELS, "usual drinks"),
     ("shots", "Shots", SHOT_LABELS, "espressos"),
     ("length", "Length", LENGTH_LABELS, "macchiatos"),

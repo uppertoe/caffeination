@@ -83,15 +83,18 @@
 {# A p-value as a reader would write it: three decimals, or "less than 0.001". #}
 {% macro pval(p) %}{% if p < 0.001 %}less than 0.001{% else %}{{ '%.3f' % p }}{% endif %}{% endmacro %}
 
+{# "p = 0.012" or "p < 0.001", for use inside a sentence. #}
+{% macro p_eq(p) %}{% if p < 0.001 %}p < 0.001{% else %}p = {{ '%.3f' % p }}{% endif %}{% endmacro %}
+
 {% macro pct(x) %}{{ (x * 100) | round | int }}%{% endmacro %}
 
 {# A χ² test of two options with all of its working, from
    app.stats_panels.PairView. `tests` names how many tests the Holm
    adjustment covered, or is none for a single test. #}
-{% macro pair_test(v, tests=none, independent="") %}
+{% macro pair_test(v) %}
   {% if not v.ready %}
     {% if v.n >= 12 %}
-    <p class="stats-wait">Every usual drink in this comparison has the same {{ v.row_name | lower }} or the same {{ v.col_name | lower }}, so there is nothing to compare yet.</p>
+    <p class="stats-wait">Every usual drink in this comparison falls into a single {{ v.row_name | lower }} group or a single {{ v.col_name | lower }} group, so there is nothing to compare yet.</p>
     {% else %}
     <p class="stats-wait">This comparison needs at least 12 usual drinks with both options, and the department has {{ v.n }}.</p>
     {% endif %}
@@ -99,12 +102,12 @@
   {% set t = v.test %}
   <p class="panel-lead">
     {% if v.finding %}{{ v.finding }} than chance alone would explain.
-    {% else %}The department’s choices show no clear link between {{ v.row_name | lower }} and {{ v.col_name | lower }}.{% endif %}
+    {% else %}{{ v.no_link }}{% endif %}
   </p>
   <div class="fact-grid">
     {{ fact("layers", "χ² statistic:", ('%.2f' % t.chi2) ~ " on " ~ t.df ~ (" degree" if t.df == 1 else " degrees") ~ " of freedom") }}
     {{ fact("shuffle", "Permutation p-value:", pval(t.p_permutation)) }}
-    {% if tests %}{{ fact("scale", "After Holm adjustment for " ~ tests ~ " tests:", pval(v.p_holm)) }}{% endif %}
+    {% if v.p_holm is not none and v.p_holm != t.p_permutation %}{{ fact("scale", "After Holm adjustment:", pval(v.p_holm)) }}{% endif %}
     {{ fact("gauge", "Cramér’s V, bias-corrected:", '%.2f' % t.cramers_v) }}
   </div>
 
@@ -143,11 +146,11 @@
 
   <details class="table-view working">
     <summary>How this was calculated</summary>
-    <p>{{ independent }} If {{ v.row_name | lower }} and {{ v.col_name | lower }} were chosen independently, each cell would be expected to hold its row total multiplied by its column total, divided by all {{ t.n }} drinks. That expected count is shown under each observed count.</p>
+    <p>{{ v.premise }}, each cell would be expected to hold its row total multiplied by its column total, divided by all {{ t.n }} drinks. That expected count is shown under each observed count.</p>
     <p>Each cell contributes (O − E)² ÷ E, and the contributions add up to the χ² statistic:</p>
     <p class="working-sum">χ² = {% for line in v.cells %}{% for cell in line %}{{ '%.2f' % cell.contribution }}{% if not loop.last %} + {% endif %}{% endfor %}{% if not loop.last %} + {% endif %}{% endfor %} = <strong>{{ '%.2f' % t.chi2 }}</strong></p>
-    <p>The textbook p-value compares χ² with a χ² distribution on {{ t.df }} {{ "degree" if t.df == 1 else "degrees" }} of freedom, which gives p = {{ pval(t.p_textbook) }}.{% if t.sparse_cells %} {{ t.sparse_cells }} of the {{ v.rows | length * v.cols | length }} cells are expected to hold fewer than 5 drinks, which makes the textbook p-value unreliable.{% endif %}</p>
-    <p>A permutation test makes no such assumption. It shuffles the {{ v.col_name | lower }} column {{ t.null | length }} times, keeping every row and column total fixed, and recalculates χ² for each shuffled table. {{ t.as_extreme }} of the {{ t.null | length }} shuffled tables had a χ² at least as large as the real one, so p = ({{ t.as_extreme }} + 1) ÷ {{ t.null | length + 1 }} = {{ pval(t.p_permutation) }}.</p>
+    <p>The textbook test compares χ² with a χ² distribution on {{ t.df }} {{ "degree" if t.df == 1 else "degrees" }} of freedom, which gives {{ p_eq(t.p_textbook) }}.{% if t.sparse_cells %} {{ t.sparse_cells }} of the {{ v.rows | length * v.cols | length }} cells are expected to hold fewer than 5 drinks, which makes the textbook p-value unreliable.{% endif %}</p>
+    <p>A permutation test makes no such assumption. It shuffles the {{ v.col_name | lower }} column {{ t.null | length }} times, keeping every row and column total fixed, and recalculates χ² for each shuffled table. {{ t.as_extreme }} of the {{ t.null | length }} shuffled tables had a χ² at least as large as the real one, so p = ({{ t.as_extreme }} + 1) ÷ {{ t.null | length + 1 }}{% if t.p_permutation < 0.001 %}, which is less than 0.001{% else %} = {{ '%.3f' % t.p_permutation }}{% endif %}.</p>
 
     <div class="chart hist-chart">
       <svg viewBox="0 0 {{ 600 }} 140" role="img" aria-label="The χ² statistic of each shuffled table, with the textbook χ² distribution and this department’s value marked.">
@@ -163,8 +166,6 @@
       </div>
     </div>
     <p class="chart-note">The bars count the shuffled tables at each value of χ², and the darker bars are those at least as large as the department’s. The curve is the textbook χ² distribution, and the vertical line marks the department’s χ² of {{ '%.2f' % t.chi2 }}.</p>
-    {% if tests %}<p>{{ {2: "Two", 3: "Three", 4: "Four", 5: "Five"}[tests] }} pairs of options are tested on this page. The Holm method multiplies the smallest p-value by {{ tests }}, the next by {{ tests - 1 }}, and so on, which keeps the chance of any false finding across all {{ tests }} at 5%.</p>{% endif %}
-    <p>Cramér’s V measures the strength of a link from 0, for none, to 1, for complete. This version is corrected for the upward bias that small tables produce.</p>
   </details>
   {% endif %}
 {% endmacro %}

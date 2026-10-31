@@ -332,7 +332,8 @@ def test_method_panels_render_and_reallocate():
     assert "χ² = " in page.text and "shuffled tables had a χ² at least as large" in page.text
     assert "Table 1, allocation 1" in page.text and "Across 1,000 random allocations" in page.text
     assert "A round for the whole department" in page.text
-    assert "This comparison needs at least 10 colleagues who have moved on, and 0 have so far." in page.text
+    assert "This comparison needs at least 10 inactive colleagues, and the department has 0." in page.text
+    assert "moved on" not in page.text
     assert again.status_code == 200 and "Table 1, allocation 2" in again.text
     assert "allocation=3" in again.text
 
@@ -417,7 +418,7 @@ def test_round_panels_wait_then_appear():
     assert "This curve needs at least 15 return visits" in waiting
     assert "Two intervals for the same difference" in ready
     assert "Mantel–Haenszel odds ratio, within drink groups:" in ready
-    assert "of the department’s return visits" in ready or "median time is still unknown" in ready
+    assert "Half of the gaps between a colleague’s rounds" in ready or "median gap is still unknown" in ready
     assert "account for half of the drinks in the rounds" in ready
     assert "Rounds you have been in:" in ready
     assert "Regression to the mean" in ready and "A CUSUM chart" in ready

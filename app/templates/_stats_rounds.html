@@ -1,4 +1,4 @@
-{% from "_stats_macros.html" import fact, plural, pct, pval %}
+{% from "_stats_macros.html" import fact, plural, pct, pval, p_eq %}
 {# The round-log panels: app.stats_rounds.RoundPanels. Each waits, with a
    power calculation or a count, until there are enough rounds. #}
 {% set rp = round_panels %}
@@ -11,7 +11,7 @@
 <article id="through-the-day" class="afternoon">
   <header><h2>Caffeine through the day</h2></header>
   {% if not a.ready %}
-    <p class="stats-wait">This comparison needs at least 20 drinks either side of midday, and the log has {{ a.before }} before and {{ a.after }} after. To detect a difference of half a shot a drink with 80% power, about {{ a.needed }} drinks either side would be needed if every drink were independent. Repeat drinks from the same colleagues raise that number.</p>
+    <p class="stats-wait">This comparison needs at least 20 drinks either side of midday, and {{ a.before }} have been recorded before midday and {{ a.after }} after. To detect a difference of half a shot a drink with 80% power, about {{ a.needed }} drinks either side would be needed if every drink were independent. Repeat drinks from the same colleagues raise that number.</p>
   {% else %}
     {% set d, lo, hi = a.clustered if a.clustered else (a.naive.difference, a.naive.low, a.naive.high) %}
     <p class="panel-lead">
@@ -37,9 +37,11 @@
 
     <h3>Two intervals for the same difference</h3>
     <div class="ci-chart">
-      {% for label, bar in (("Every drink counted as independent", a.bar_naive), ("Each colleague counted once, by resampling people", a.bar_clustered)) if bar %}
+      {% set rows = [("Every drink treated as independent", a.bar_naive, (a.naive.low, a.naive.high))] %}
+      {% if a.clustered %}{% set rows = rows + [("Colleagues resampled, each with all of their drinks", a.bar_clustered, (a.clustered[1], a.clustered[2]))] %}{% endif %}
+      {% for label, bar, lim in rows %}
       <div class="ci-row">
-        <span class="ci-label">{{ label }}</span>
+        <span class="ci-label">{{ label }}<br><small>{{ '%+.2f' % lim[0] }} to {{ '%+.2f' % lim[1] }} shots</small></span>
         <span class="ci-track">
           <span class="ci-zero" style="left: 50%"></span>
           <span class="sim-whisker" style="left: {{ '%.2f' % bar[1] }}%; width: {{ '%.2f' % (bar[2] - bar[1]) }}%"></span>
@@ -49,7 +51,9 @@
       {% endfor %}
       <div class="chart-ticks sim-ticks" aria-hidden="true">{% for x, t in a.axis %}<span style="left: {{ '%.2f' % x }}%">{{ t }}</span>{% endfor %}</div>
     </div>
-    <p class="chart-note">Both lines are 95% intervals for the difference in shots a drink, after midday minus before. The {{ a.before + a.after }} drinks come from only {{ a.people }} colleagues, many of them several times over, so counting every drink as separate evidence gives an interval that is too narrow. Resampling whole colleagues gives the honest width.</p>
+    <p class="chart-note">Both lines are 95% intervals for the difference in shots a drink, after midday minus before. The {{ a.before + a.after }} drinks come from only {{ a.people }} colleagues, many of them several times over, so the first interval treats repeat drinks as separate evidence when they are not.
+      {% if a.clustered_width and a.clustered_width > a.naive_width %}Resampling colleagues widens the interval to reflect that.
+      {% elif a.clustered_width %}Resampling colleagues gives a narrower interval here, because most colleagues appear both before and after midday, so each acts as their own comparison and the differences between colleagues cancel out.{% endif %}</p>
 
     {% if a.crude %}
     <h3>Confounding by the kind of drink</h3>
@@ -64,10 +68,10 @@
     </table>
     </div>
     <div class="fact-grid">
-      {{ fact("layers", "Crude odds ratio, all drinks pooled:", '%.2f' % a.crude.estimate ~ " (" ~ ci(a.crude.low, a.crude.high) ~ ")") }}
-      {{ fact("scale", "Mantel–Haenszel odds ratio, within drink groups:", '%.2f' % a.adjusted.estimate ~ " (" ~ ci(a.adjusted.low, a.adjusted.high) ~ ")") }}
+      {{ fact("layers", "Crude odds ratio, all drinks pooled:", '%.2f' % a.crude.estimate ~ ((" (" ~ ci(a.crude_ci[0], a.crude_ci[1]) ~ ")") if a.crude_ci else "")) }}
+      {{ fact("scale", "Mantel–Haenszel odds ratio, within drink groups:", '%.2f' % a.adjusted.estimate ~ ((" (" ~ ci(a.adjusted_ci[0], a.adjusted_ci[1]) ~ ")") if a.adjusted_ci else "")) }}
     </div>
-    <p class="chart-note">The crude odds ratio compares every afternoon drink with every morning one. The Mantel–Haenszel odds ratio compares them within each kind of drink, so a move towards chai or hot chocolate in the afternoon cannot pass for a change in strength. When the two disagree, the kind of drink is confounding the crude comparison.</p>
+    <p class="chart-note">The crude odds ratio compares every afternoon drink with every morning one. The Mantel–Haenszel odds ratio compares them within each kind of drink, so a move towards chai or hot chocolate in the afternoon cannot pass for a change in strength. {% if a.informative | length < 3 %}Only {{ a.informative | join(" and ") | lower if a.informative else "no group" }} {{ "contributes" if a.informative | length == 1 else "contribute" }}, because in the other groups every drink falls on the same side of two shots. {% endif %}A gap between the two ratios suggests confounding by the kind of drink, though odds ratios can also differ between pooled and stratified tables without any confounding at all. Both intervals come from resampling colleagues.</p>
     {% endif %}
 
     {% if a.posterior_input %}
@@ -93,8 +97,9 @@
         </svg>
         <div class="chart-ticks" aria-hidden="true">{% for x, t in ((0, "−1.5"), (25, "−0.75"), (50, "0"), (75, "+0.75"), (100, "+1.5")) %}<span style="left: {{ x }}%">{{ t }}</span>{% endfor %}</div>
       </div>
-      <p class="bayes-result" x-text='"The posterior puts the difference at " + (post.mean >= 0 ? "+" : "−") + Math.abs(post.mean).toFixed(2) + " shots, with a 95% credible interval of " + (post.mean - 1.96 * post.sd).toFixed(2) + " to " + (post.mean + 1.96 * post.sd).toFixed(2) + ". The probability that afternoon drinks are weaker is " + Math.round(below * 100) + "%."'></p>
-      <p class="chart-note">The dashed curve is a sceptical prior centred on no difference, and the solid curve is the posterior once the rounds are taken into account. Narrowing the prior expresses more scepticism, and the posterior then needs more data to move away from zero.</p>
+      <p class="chart-legend"><span class="key key-prior"></span>Sceptical prior <span class="key key-post"></span>Posterior</p>
+      <p class="bayes-result" x-text='"The posterior puts the difference at " + (post.mean >= 0 ? "+" : "−") + Math.abs(post.mean).toFixed(2) + " shots, with a 95% credible interval of " + (post.mean - 1.96 * post.sd).toFixed(2) + " to " + (post.mean + 1.96 * post.sd).toFixed(2) + ". The probability that afternoon drinks are weaker is " + Math.round(below * 100) + "%."'>The rounds alone put the difference at {{ '%+.2f' % est }} shots, with a standard error of {{ '%.2f' % se }}.</p>
+      <p class="chart-note">The rounds alone put the difference at {{ '%+.2f' % est }} shots, with a standard error of {{ '%.2f' % se }} from resampling colleagues. The dashed curve is a sceptical prior centred on no difference, and the solid curve is the posterior once the rounds are taken into account. Narrowing the prior expresses more scepticism, and the posterior then needs more data to move away from zero.</p>
     </div>
     {% endif %}
 
@@ -106,14 +111,14 @@
         <line class="diagonal" x1="0" y1="200" x2="200" y2="0" />
         <path class="roc-curve" d="{{ a.roc_path }}" />
       </svg>
-      <p>A drink’s caffeine predicts whether it was ordered after midday with an area under the curve of <strong>{{ '%.2f' % a.roc.auc }}</strong> ({{ ci(a.roc.low, a.roc.high) }}). An area of 0.5, the diagonal, means no better than a coin toss, and 1 means a perfect prediction. The curve plots sensitivity against one minus specificity at every caffeine threshold, as for a diagnostic test.</p>
+      <p>A drink’s caffeine predicts whether it was ordered after midday with an area under the curve of <strong>{{ '%.2f' % a.roc.auc }}</strong>{% if a.auc_ci %} ({{ ci(a.auc_ci[0], a.auc_ci[1]) }}, from resampling colleagues){% endif %}. An area of 0.5, the diagonal, means no better than a coin toss, and 1 means a perfect prediction. The curve plots sensitivity against one minus specificity at every caffeine threshold, as for a diagnostic test.</p>
     </div>
     {% endif %}
 
     <details class="table-view working">
       <summary>How this was calculated</summary>
-      <p>Each drink’s caffeine is its estimate in espresso shots. The first interval is Welch’s t interval, which treats all {{ a.before + a.after }} drinks as independent. The second resamples colleagues with replacement 2,000 times, carrying all of each colleague’s drinks together, and takes the middle 95% of the resampled differences.</p>
-      <p>The Mantel–Haenszel odds ratio pools the drink groups’ 2×2 tables with weights that favour the larger groups, and its interval uses the Robins–Breslow–Greenland variance. The Bayesian reading combines a normal prior centred on no difference with a normal likelihood built from the resampled interval. The interval on the area under the curve uses the Hanley–McNeil formula.</p>
+      <p>Each drink’s caffeine is its estimate in espresso shots. The first interval is Welch’s t interval, which treats all {{ a.before + a.after }} drinks as independent. The second resamples colleagues with replacement 2,000 times, carrying all of each colleague’s drinks together, and takes the middle 95% of the resampled differences. Guests’ drinks are left out here, as they have their own section.</p>
+      <p>The Mantel–Haenszel odds ratio pools the drink groups’ 2×2 tables with weights that favour the larger groups, and its interval uses the Robins–Breslow–Greenland variance. The Bayesian reading combines a normal prior centred on no difference with a normal likelihood built from the resampled interval. The intervals on the odds ratios and the area under the curve come from resampling colleagues 500 times, for the same reason as the second interval above.</p>
     </details>
   {% endif %}
 </article>
@@ -123,11 +128,11 @@
 <article id="next-coffee" class="next-coffee">
   <header><h2>Time to the next coffee</h2></header>
   {% if not k.ready %}
-    <p class="stats-wait">This curve needs at least 15 return visits, where a colleague appears in another round after their first, and the log has {{ k.gaps }}.</p>
+    <p class="stats-wait">This curve needs at least 15 return visits, where a colleague appears in another round after their first, and {{ k.gaps }} {{ plural(k.gaps, "has", "have") }} been recorded so far.</p>
   {% else %}
     <p class="panel-lead">
-      {% if k.median %}Half of the department’s return visits come within {{ '%.1f' % k.median }} days of the colleague’s previous round{% if k.median_low and k.median_high %} (95% interval {{ '%.1f' % k.median_low }} to {{ '%.1f' % k.median_high }} days){% endif %}.
-      {% else %}Fewer than half of the department’s return visits have happened yet, so the median time is still unknown.{% endif %}
+      {% if k.median %}Half of the gaps between a colleague’s rounds are shorter than {{ '%.1f' % k.median }} days{% if k.median_low and k.median_high %} (95% interval {{ '%.1f' % k.median_low }} to {{ '%.1f' % k.median_high }} days){% endif %}.
+      {% else %}Fewer than half of the gaps between a colleague’s rounds have closed, so the median gap is still unknown.{% endif %}
     </p>
     <div class="fact-grid">
       {{ fact("people", "Colleagues in the rounds:", k.people) }}
@@ -143,9 +148,10 @@
         <line class="baseline" x1="0" x2="{{ chart_w }}" y1="159.5" y2="159.5" />
       </svg>
       <div class="chart-ticks" aria-hidden="true">{% for x, t in k.ticks %}<span style="left: {{ '%.2f' % x }}%">{{ t }}</span>{% endfor %}</div>
+      <p class="axis-title">Days since the colleague’s previous round, counting weekends. Gaps still at risk:</p>
       <div class="chart-ticks at-risk" aria-hidden="true">{% for x, n in k.at_risk %}<span style="left: {{ '%.2f' % x }}%">{{ n }}</span>{% endfor %}</div>
     </div>
-    <p class="chart-note">The curve shows the share of gaps in which the colleague has not yet had their next coffee, by days since their previous round, with a 95% band. The second row of numbers counts the gaps still at risk on each day, and the small ticks mark censored gaps. The dashed line marks one half.</p>
+    <p class="chart-note">The curve shows the share of gaps in which the colleague has not yet had their next coffee, by calendar days since their previous round, with a 95% band. The row of numbers under the axis counts the gaps still at risk on each day, and the small ticks mark censored gaps. The dashed line marks one half.</p>
     <details class="table-view working">
       <summary>How this was calculated</summary>
       <p>Every gap between one colleague’s round and their next is a completed time. The gap since each colleague’s latest round is censored: their next coffee has not happened yet, so the log shows only that the gap is at least that long. Dropping those gaps, or treating them as finished, would bias the curve towards shorter gaps.</p>
@@ -159,13 +165,13 @@
 <article id="who-comes" class="attendance">
   <header><h2>Who comes for coffee</h2></header>
   {% if not t.ready %}
-    <p class="stats-wait">This section needs at least 20 rounds, and {{ t.rounds }} {{ plural(t.rounds, "has", "have") }} been recorded.{% if t.mine %} You have been in {{ t.mine }} {{ plural(t.mine, "round", "rounds") }} so far.{% endif %}</p>
+    <p class="stats-wait">This section needs at least 20 rounds, and {{ t.rounds }} {{ plural(t.rounds, "has", "have") }} been recorded so far.{% if t.mine %} You have been in {{ t.mine }} {{ plural(t.mine, "round", "rounds") }} so far.{% endif %}</p>
   {% else %}
     <p class="panel-lead">{{ pct(t.half_share) }} of the department’s colleagues account for half of the drinks in the rounds.</p>
     <div class="fact-grid">
       {{ fact("cup", "Rounds you have been in:", t.mine or "None yet") }}
-      {{ fact("gauge", "Gini coefficient:", '%.2f' % t.gini ~ " (" ~ ci(t.gini_low, t.gini_high) ~ ")") }}
-      {{ fact("shuffle", "Regulars and caffeine, Spearman’s ρ:", ('%.2f' % t.regulars_rho ~ ", p = " ~ pval(t.regulars_p)) if t.regulars_rho is not none else none) }}
+      {{ fact("gauge", "Gini coefficient:", '%.2f' % t.gini ~ ((" (" ~ ci(t.gini_low, t.gini_high) ~ ")") if t.gini_low is not none else "")) }}
+      {{ fact("shuffle", "Visits against caffeine, Spearman’s ρ:", ('%.2f' % t.regulars_rho ~ ", " ~ p_eq(t.regulars_p)) if t.regulars_rho is not none else none) }}
     </div>
     <div class="square-chart">
       <svg viewBox="-2 -2 204 204" role="img" aria-label="Lorenz curve of drinks across colleagues.">
@@ -189,10 +195,11 @@
       </li>
       {% endfor %}
     </ul>
-    <p class="chart-note">For each kind of drink, the upper bar is its share of the department’s usual drinks and the lower bar its share of the drinks in the rounds. The rounds draw on the colleagues who come, so their mix can drift from the department’s. That drift is selection bias: a study of the rounds alone would describe the people who come for coffee, not the department.</p>
+    <p class="chart-legend"><span class="key key-cool"></span>The department’s usual drinks <span class="key key-accent"></span>Colleagues’ drinks in the rounds</p>
+    <p class="chart-note">For each kind of drink, the upper bar is its share of the department’s usual drinks and the lower bar its share of colleagues’ drinks in the rounds, guests aside. The rounds draw on the colleagues who come, so their mix can drift from the department’s. That drift is selection bias: a study of the rounds alone would describe the people who come for coffee, not the department.</p>
     <details class="table-view working">
       <summary>How this was calculated</summary>
-      <p>The Lorenz curve counts every active colleague, including those who have not yet been in a round. The Gini interval comes from resampling colleagues 1,000 times. Spearman’s ρ ranks colleagues who have been in at least one round by how often they come and by the caffeine in their usual drink, then correlates the ranks. Its p-value comes from shuffling one ranking 999 times.</p>
+      <p>The Lorenz curve counts every active colleague, including those who have not yet been in a round. The Gini interval comes from resampling rounds 500 times, because the rounds are the sample. Spearman’s ρ ranks colleagues who have been in at least one round by how often they come and by the caffeine in their usual drink, then correlates the ranks. Its p-value tests for no association, by shuffling one ranking 999 times.</p>
     </details>
   {% endif %}
 </article>
@@ -202,18 +209,19 @@
 <article id="round-size" class="round-size">
   <header><h2>Round size</h2></header>
   {% if not z.ready %}
-    <p class="stats-wait">This section needs at least 20 rounds, and {{ z.rounds }} {{ plural(z.rounds, "has", "have") }} been recorded.</p>
+    <p class="stats-wait">This section needs at least 20 rounds, and {{ z.rounds }} {{ plural(z.rounds, "has", "have") }} been recorded so far.</p>
   {% else %}
     <p class="panel-lead">
-      {% if z.ratio_p < 0.05 and z.ratio > 1 %}Round sizes vary more than chance would produce, so rounds tend to come either big or small.
-      {% else %}Round sizes vary about as much as they would if colleagues joined each round independently of one another.{% endif %}
+      {% if z.ratio_p < 0.05 and z.ratio > z.expected_ratio %}Round sizes vary more than they would if colleagues joined independently, so colleagues tend to come together or not at all.
+      {% elif z.ratio_p < 0.05 %}Round sizes vary less than they would if colleagues joined independently, so rounds are steadier than chance alone predicts.
+      {% else %}Round sizes vary about as much as they would if each colleague joined each round independently.{% endif %}
     </p>
     <div class="fact-grid">
-      {{ fact("people", "Drinks in an average round:", '%.1f' % z.mean) }}
-      {{ fact("gauge", "Variance divided by mean:", '%.2f' % z.ratio ~ ", p = " ~ pval(z.ratio_p)) }}
+      {{ fact("people", "Colleagues’ drinks in an average round:", '%.1f' % z.mean) }}
+      {{ fact("gauge", "Variance divided by mean:", '%.2f' % z.ratio ~ ", against " ~ '%.2f' % z.expected_ratio ~ " if colleagues joined independently (" ~ p_eq(z.ratio_p) ~ ")") }}
     </div>
     <div class="chart">
-      <svg class="bar-chart" viewBox="0 0 {{ chart_w }} 120" role="img" aria-label="Rounds of each size, with the counts a Poisson process predicts.">
+      <svg class="bar-chart" viewBox="0 0 {{ chart_w }} 120" role="img" aria-label="Rounds of each size, with the counts expected if colleagues joined independently.">
         {% for x, w, h, k2, ph in z.bars %}
         <rect class="bar" x="{{ '%.1f' % x }}" y="{{ '%.1f' % (120 - h * 110) }}" width="{{ '%.1f' % w }}" height="{{ '%.1f' % (h * 110) }}" rx="2" data-tip="{{ loop.index0 }} drinks: {{ k2 }} {{ plural(k2, 'round', 'rounds') }}" />
         <line class="poisson-mark" x1="{{ '%.1f' % (x - 1) }}" x2="{{ '%.1f' % (x + w + 1) }}" y1="{{ '%.1f' % (120 - ph * 110) }}" y2="{{ '%.1f' % (120 - ph * 110) }}" />
@@ -222,7 +230,7 @@
       </svg>
       <div class="chart-ticks centred" aria-hidden="true">{% for x, t2 in z.size_ticks %}<span style="left: {{ '%.2f' % x }}%">{{ t2 }}</span>{% endfor %}</div>
     </div>
-    <p class="chart-note">The bars count rounds by the number of drinks in them, and each dark line is the count a Poisson process with the same average predicts.</p>
+    <p class="chart-note">The bars count rounds by the number of colleagues’ drinks in them. Each dark line is the count expected if every colleague joined each round independently, at their own rate.</p>
 
     {% if z.rtm_dots %}
     <h3>Regression to the mean</h3>
@@ -233,7 +241,7 @@
         {% for x, y in z.rtm_dots %}<circle class="round-dot" cx="{{ '%.1f' % x }}" cy="{{ '%.1f' % y }}" r="3" />{% endfor %}
         {% if z.rtm_line %}<line class="fit-line" x1="{{ '%.1f' % z.rtm_line[0] }}" y1="{{ '%.1f' % z.rtm_line[1] }}" x2="{{ '%.1f' % z.rtm_line[2] }}" y2="{{ '%.1f' % z.rtm_line[3] }}" />{% endif %}
       </svg>
-      <p>{% if z.after_big is not none %}Rounds of {{ z.big }} drinks or more were followed by rounds averaging {{ '%.1f' % z.after_big }} drinks, closer to the overall average of {{ '%.1f' % z.mean }}, with no cause beyond chance. {% endif %}Each dot is one round’s size across and the next round’s size up. The diagonal is where the next round matches the last, and the solid line is the trend actually seen. The correlation between one round and the next is {{ '%.2f' % z.rtm_r }}, so a big round predicts very little about the next one. A department that changed something after an unusually big round would see the next round shrink and credit the change.</p>
+      <p>{% if z.after_big is not none %}Rounds of {{ z.big }} drinks or more were followed by rounds averaging {{ '%.1f' % z.after_big }} drinks, closer to the overall average of {{ '%.1f' % z.mean }}, as chance alone predicts. {% endif %}Each dot is one round’s size across and the next round’s size up. The diagonal is where the next round matches the last, and the solid line is the trend actually seen. The correlation between one round and the next is {{ '%.2f' % z.rtm_r }}, so a big round predicts very little about the next one. A department that changed something after an unusually big round would see the next round shrink and credit the change.</p>
     </div>
     {% endif %}
 
@@ -246,19 +254,20 @@
         <line class="baseline" x1="0" x2="{{ chart_w }}" y1="159.5" y2="159.5" />
       </svg>
     </div>
-    <p class="chart-note">{% if z.cusum_signal %}The chart crossed its limit at round {{ z.cusum_signal }}, which suggests the typical round size shifted around then.{% else %}Neither line has crossed the dashed limit, so there is no sign that the typical round size has shifted.{% endif %} The caramel line accumulates rounds bigger than average and the blue line rounds smaller than average, from the first round on the left to the latest on the right. The same chart tracks a trainee’s procedural failures for a learning curve.</p>
+    <p class="chart-legend"><span class="key key-accent"></span>Rounds bigger than average <span class="key key-cool"></span>Rounds smaller than average</p>
+    <p class="chart-note">{% if z.cusum_signal %}The chart crossed its limit at round {{ z.cusum_signal }}, which suggests the typical round size shifted around then.{% else %}Neither line has crossed the dashed limit, so there is no sign that the typical round size has shifted.{% endif %} Each line accumulates departures from the average round, from the first round on the left to the latest on the right. The same chart tracks a trainee’s procedural failures for a learning curve.</p>
 
     <h3>Monday and Friday</h3>
     {% if z.mon_fri %}
       {% set w, p_tost = z.mon_fri %}
-      <p>Monday rounds differ from Friday rounds by {{ '%+.1f' % w.difference }} drinks on average. A t-test gives p = {{ pval(w.p) }}, but a large p-value cannot show that the days are the same. An equivalence test asks whether the difference lies within one drink either way, and gives p = {{ pval(p_tost) }}.{% if p_tost < 0.05 %} Monday and Friday rounds are the same size to within one drink.{% else %} The log cannot yet show that Monday and Friday rounds are the same size to within one drink.{% endif %}</p>
+      <p>Monday rounds differ from Friday rounds by {{ '%+.1f' % w.difference }} drinks on average. A t-test gives {{ p_eq(w.p) }}, but a large p-value cannot show that the days are the same. An equivalence test asks whether the difference lies within one drink either way, and gives {{ p_eq(p_tost) }}.{% if p_tost < 0.05 %} Monday and Friday rounds are the same size to within one drink.{% else %} The rounds recorded so far cannot yet show that Monday and Friday rounds are the same size to within one drink.{% endif %}</p>
     {% else %}
-      <p class="stats-wait">The comparison needs at least 5 rounds on each day, and the log has {{ z.mon_n }} on Mondays and {{ z.fri_n }} on Fridays.</p>
+      <p class="stats-wait">The comparison needs at least 5 rounds on each day, and {{ z.mon_n }} have been recorded on Mondays and {{ z.fri_n }} on Fridays.</p>
     {% endif %}
 
     <details class="table-view working">
       <summary>How this was calculated</summary>
-      <p>If colleagues joined rounds independently, round sizes would follow a Poisson distribution, whose variance equals its mean. The dispersion test compares (n − 1) times the variance-to-mean ratio with a χ² distribution on n − 1 degrees of freedom.</p>
+      <p>If each colleague joined each round independently at their own observed rate, round sizes would follow a Poisson-binomial distribution. On a fixed roster its variance, the sum of r(1 − r) over colleagues, is smaller than its mean, unlike a Poisson process’s. The test compares the observed variance with that expected variance, two-sided, using (n − 1)s² ÷ σ² on n − 1 degrees of freedom.</p>
       <p>The CUSUM chart adds up each round’s departure from the average, in standard deviations, less an allowance of half a standard deviation, and resets at zero. It signals when either sum passes 4 standard deviations.</p>
       <p>The equivalence test runs two one-sided Welch t-tests, one against a difference of one drink in each direction, and reports the larger p-value.</p>
     </details>
@@ -270,7 +279,7 @@
 <article id="guests" class="guests">
   <header><h2>Guests</h2></header>
   {% if not g.ready %}
-    <p class="stats-wait">This comparison needs at least 5 drinks for one-off guests, and the log has {{ g.guests }}.</p>
+    <p class="stats-wait">This comparison needs at least 5 drinks for one-off guests, and {{ g.guests }} {{ plural(g.guests, "has", "have") }} been recorded so far.</p>
   {% else %}
     {% set ga, gb, ra, rb = g.table %}
     <p class="panel-lead">
@@ -282,7 +291,7 @@
       <thead><tr><th scope="col">Drinks</th><th scope="col">Milk coffee</th><th scope="col">Anything else</th></tr></thead>
       <tbody>
         <tr><th scope="row">Guests</th><td>{{ ga }} ({{ pct(ga / (ga + gb)) }})</td><td>{{ gb }}</td></tr>
-        <tr><th scope="row">Colleagues</th><td>{{ ra }} ({{ pct(ra / (ra + rb)) }})</td><td>{{ rb }}</td></tr>
+        <tr><th scope="row">Colleagues’ usual drinks</th><td>{{ ra }} ({{ pct(ra / (ra + rb)) }})</td><td>{{ rb }}</td></tr>
       </tbody>
     </table>
     </div>
@@ -292,8 +301,8 @@
     </div>
     <details class="table-view working">
       <summary>How this was calculated</summary>
-      <p>Fisher’s exact test adds up the probability of every table with the same row and column totals that is no more likely than the one observed. It needs no large-sample approximation, which matters with a handful of guests.</p>
-      <p>The fragility index is the number of guests who would have had to order the other way for the result to stop being significant. Critical care and anaesthesia trials often turn out to have a fragility index of only a few patients, which says more about a result’s robustness than its p-value does.</p>
+      <p>Guests’ drinks are compared with one usual drink per colleague, so a regular who comes every day counts once, as one person’s choice. Fisher’s exact test adds up the probability of every table with the same row and column totals that is no more likely than the one observed. It needs no large-sample approximation, which matters with a handful of guests.</p>
+      <p>The fragility index is the number of guests who would have had to order the other way for the result to stop being significant. Critical care and anaesthesia trials often turn out to have a fragility index of only a few patients. The index restates a result in people, which many readers find easier to weigh, although it depends on the sample size as much as on the p-value.</p>
     </details>
   {% endif %}
 </article>
