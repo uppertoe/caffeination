@@ -9,6 +9,7 @@ from sqlmodel import Session
 
 from app.menu import DRINKS, MG_PER_SHOT, MG_PER_SHOT_RANGE
 from app.models import User
+from app.stats_rounds import build_round_panels
 from app.stats_panels import (
     MIN_MOVED_ON,
     build_caffeine_sim,
@@ -67,6 +68,7 @@ def stats_context(session: Session, viewer: User, who: str, allocation: int = 1)
         "min_moved_on": MIN_MOVED_ON,
         "shot_range": MG_PER_SHOT_RANGE,
         "rounds": build_rounds(session),
+        "round_panels": build_round_panels(session, usuals, viewer.id),
         "min_rounds": MIN_ROUNDS,
         "shot_mg": MG_PER_SHOT,
         "chart_w": CHART_W,

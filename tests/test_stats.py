@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 
 # ---------------------------------------------------------------------------
@@ -162,8 +162,7 @@ def test_round_charts_appear_from_five_rounds():
     # and three of the five rounds fall on that local day.
     import re
 
-    days = dict((d, int(c)) for c, d in re.findall(
-        r'class="day-count">(\d+)</span>\s*<span class="day-bar"[^>]*></span>\s*<span class="day-name">(\w+)<', r.text))
+    days = dict((d, int(c)) for d, c in re.findall(r'data-tip="(\w+day): (\d+) rounds?,', r.text))
     assert days == {"Monday": 0, "Tuesday": 3, "Wednesday": 2, "Thursday": 0, "Friday": 0}
     # Five rounds are too few for any day to stand out beyond chance.
     assert "No day stands out yet" in r.text
@@ -343,3 +342,86 @@ def test_order_page_offers_the_statistics():
         _onboard(me, "Me", base_id="latte")
         r = me.get("/")
     assert 'class="stats-teaser"' in r.text and 'href="/stats"' in r.text
+
+
+# ---------------------------------------------------------------------------
+# The round-log methods and panels.
+# ---------------------------------------------------------------------------
+
+
+def test_round_methods_match_reference_values():
+    from app.stats import fisher_exact, fragility_index, kaplan_meier, km_median, lorenz, t_sf, welch, wilson
+
+    assert t_sf(2.228139, 10) == pytest.approx(0.025, abs=1e-5)
+    w = welch([1, 2, 3, 4, 5], [2, 3, 4, 5, 9])  # R: t.test gives p = 0.2937, df = 6.452
+    assert w.p == pytest.approx(0.2937, abs=1e-4) and w.df == pytest.approx(6.452, abs=1e-3)
+    assert fisher_exact(1, 9, 11, 3) == pytest.approx(0.002759, abs=1e-6)  # R: fisher.test
+    assert fisher_exact(3, 1, 1, 3) == pytest.approx(0.4857, abs=1e-4)
+    assert fragility_index(1, 9, 11, 3) == 3
+    assert fragility_index(3, 1, 1, 3) is None
+    lo, hi = wilson(5, 20)
+    assert lo == pytest.approx(0.1119, abs=1e-4) and hi == pytest.approx(0.4687, abs=1e-4)
+    steps = kaplan_meier([1, 2, 2, 3, 4, 5, 6, 7, 8, 9], [1, 1, 0, 1, 1, 0, 1, 1, 1, 0])
+    assert [round(s.survival, 3) for s in steps] == [1.0, 0.9, 0.8, 0.686, 0.571, 0.429, 0.286, 0.143]
+    assert km_median(steps)[0] == 6
+    assert lorenz([0, 0, 0, 4])[1] == pytest.approx(0.75)
+
+
+def test_mantel_haenszel_removes_confounding():
+    from app.stats import mantel_haenszel
+
+    # Within each stratum the odds ratio is exactly 1, but the exposed sit
+    # mostly in the stratum with more outcomes, so the crude ratio is not.
+    crude, adjusted = mantel_haenszel([(40, 10, 8, 2), (2, 8, 10, 40)])
+    assert adjusted.estimate == pytest.approx(1.0)
+    assert crude.estimate > 3
+
+
+def _log_rounds(n: int, guests: int = 0):
+    """n rounds of the roster's usual drinks, every weekday morning and
+    afternoon, with a guest in the first few."""
+    from app.db import get_engine
+    from app.models import Round, RoundDrink, SavedDrink, User
+
+    with Session(get_engine()) as s:
+        people = s.exec(select(User.id)).all()
+        base = datetime(2026, 9, 1, 23, 0, tzinfo=timezone.utc)
+        for i in range(n):
+            placed = base + timedelta(days=i // 2, hours=4 * (i % 2))
+            rnd = Round(placed_at=placed, drink_count=0)
+            s.add(rnd)
+            s.flush()
+            chosen = [p for j, p in enumerate(people) if (i + j) % 3]
+            for uid in chosen:
+                sd = s.get(SavedDrink, uid)
+                s.add(RoundDrink(round_id=rnd.id, user_id=uid, base_id=sd.base_id, temp=sd.temp,
+                                 size=sd.size, milk=sd.milk, strength=sd.strength, sweetener=sd.sweetener))
+            if i < guests:
+                s.add(RoundDrink(round_id=rnd.id, guest=True, base_id="hot_chocolate", temp="hot",
+                                 size="regular", milk="full_cream", strength="regular", sweetener="none"))
+            rnd.drink_count = len(chosen) + (i < guests)
+        s.commit()
+
+
+
+def test_round_panels_wait_then_appear():
+    with _client() as me:
+        _onboard(me, "Me", base_id="latte", size="small", milk="full_cream")
+        for i, base in enumerate(["flat_white", "long_black", "cappuccino", "chai_latte", "piccolo", "espresso"]):
+            with _client() as c:
+                _onboard(c, f"P{i}", base_id=base, size="regular", milk="oat")
+        waiting = me.get("/stats").text
+        _log_rounds(40, guests=6)
+        ready = me.get("/stats").text
+    assert "This comparison needs at least 20 drinks either side of midday" in waiting
+    assert "This curve needs at least 15 return visits" in waiting
+    assert "Two intervals for the same difference" in ready
+    assert "Mantel–Haenszel odds ratio, within drink groups:" in ready
+    assert "of the department’s return visits" in ready or "median time is still unknown" in ready
+    assert "account for half of the drinks in the rounds" in ready
+    assert "Rounds you have been in:" in ready
+    assert "Regression to the mean" in ready and "A CUSUM chart" in ready
+    assert "Fisher’s exact p-value:" in ready
+    # Nothing on the page names a colleague.
+    for name in ("P0", "P1", "P2", "P3", "P4", "P5"):
+        assert f">{name}<" not in ready and f" {name} " not in ready

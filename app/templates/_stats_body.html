@@ -260,17 +260,35 @@
         </table>
       </details>
 
+      <details class="table-view working">
+        <summary>How the time of day is summarised</summary>
+        <p>Times of day wrap around midnight, so an ordinary average would place rounds at 11:30 pm and 12:30 am at midday. The circular mean treats each round as a direction on a clock face and averages the directions, which puts the department’s average round at {{ rounds.mean_time }}.</p>
+        <p>The mean resultant length, R = {{ '%.2f' % rounds.resultant }}, measures how tightly the rounds cluster: 0 for times spread round the clock, and 1 for every round at the same moment. The Rayleigh test asks whether times this clustered could arise if rounds were spread evenly round the clock, and gives p = {{ pval(rounds.rayleigh_p) }}.</p>
+        <p>The shaded stretch is the shortest part of the day that holds half of all rounds. Unlike a mean and standard deviation, it stays honest when rounds bunch in two places, such as mid-morning and mid-afternoon.</p>
+      </details>
+
       <h3>Day of the week</h3>
-      <div class="day-chart" style="grid-template-columns: repeat({{ rounds.days | length }}, 1fr)">
-        {% for day, count, h in rounds.days %}
-        <div class="day-col" data-tip="{{ day }}: {{ count }} {{ plural(count, 'round', 'rounds') }}">
-          <span class="day-count">{{ count }}</span>
-          <span class="day-bar" style="height: {{ '%.1f' % (h * 100) }}%"></span>
-          <span class="day-name">{{ day }}</span>
+      <div class="chart">
+        <svg class="bar-chart" viewBox="0 0 {{ chart_w }} 140" role="img" aria-label="Each weekday’s share of rounds with its 95% interval, against an even spread.">
+          {% set w = chart_w / rounds.day_shares | length %}
+          {% for day, count, share, lo, hi in rounds.day_shares %}
+          {% set x = loop.index0 * w %}
+          <rect class="bar" x="{{ '%.1f' % (x + w * 0.2) }}" y="{{ '%.1f' % (140 - share / rounds.day_scale * 128) }}" width="{{ '%.1f' % (w * 0.6) }}" height="{{ '%.1f' % (share / rounds.day_scale * 128) }}" rx="3" data-tip="{{ day }}: {{ count }} {{ plural(count, 'round', 'rounds') }}, {{ pct(share) }} (95% interval {{ pct(lo) }} to {{ pct(hi) }})" />
+          <line class="error-bar" x1="{{ '%.1f' % (x + w / 2) }}" x2="{{ '%.1f' % (x + w / 2) }}" y1="{{ '%.1f' % (140 - lo / rounds.day_scale * 128) }}" y2="{{ '%.1f' % (140 - hi / rounds.day_scale * 128) }}" />
+          <line class="error-cap" x1="{{ '%.1f' % (x + w / 2 - 6) }}" x2="{{ '%.1f' % (x + w / 2 + 6) }}" y1="{{ '%.1f' % (140 - hi / rounds.day_scale * 128) }}" y2="{{ '%.1f' % (140 - hi / rounds.day_scale * 128) }}" />
+          <line class="error-cap" x1="{{ '%.1f' % (x + w / 2 - 6) }}" x2="{{ '%.1f' % (x + w / 2 + 6) }}" y1="{{ '%.1f' % (140 - lo / rounds.day_scale * 128) }}" y2="{{ '%.1f' % (140 - lo / rounds.day_scale * 128) }}" />
+          {% endfor %}
+          <line class="expected" x1="0" x2="{{ chart_w }}" y1="{{ '%.1f' % (140 - rounds.even_share / rounds.day_scale * 128) }}" y2="{{ '%.1f' % (140 - rounds.even_share / rounds.day_scale * 128) }}" />
+          <line class="baseline" x1="0" x2="{{ chart_w }}" y1="139.5" y2="139.5" />
+        </svg>
+        <div class="chart-ticks centred" aria-hidden="true">
+          {% for day, count, share, lo, hi in rounds.day_shares %}<span style="left: {{ '%.2f' % ((loop.index0 + 0.5) / rounds.day_shares | length * 100) }}%">{{ day[:3] }}</span>{% endfor %}
         </div>
-        {% endfor %}
       </div>
+      <p class="chart-note">Each bar is a weekday’s share of rounds, with its 95% Wilson interval. The dashed line is the share each day would have if rounds were spread evenly. A χ² goodness-of-fit test against that even spread gives p = {{ pval(rounds.even_spread_p) }}{% if not rounds.busiest_day %}, so no day stands out yet{% endif %}.</p>
     {% endif %}
   </article>
+
+  {% include "_stats_rounds.html" %}
 
 </div>

@@ -38,7 +38,7 @@ from app.menu import (
 )
 from app.models import Round, SavedDrink, User
 from app.orders import ACTIVE_WINDOW
-from app.stats import UnusualnessModel, even_spread_p, half_window
+from app.stats import UnusualnessModel, even_spread_p, half_window, rayleigh, wilson
 from app.users import ROSTER_FILTER, _as_naive_utc
 
 MIN_ROUNDS = 5  # round charts appear from this many rounds
@@ -449,6 +449,15 @@ class Rounds:
     time_ticks: list[tuple[float, str]] = field(default_factory=list)
     band: Optional[tuple[float, float]] = None
     days: list[tuple[str, int, float]] = field(default_factory=list)  # (day, count, height 0..1)
+    # Each day's share of rounds with its Wilson interval, as heights 0..1
+    # of the day chart: (day, count, share, low, high).
+    day_shares: list[tuple[str, int, float, float, float]] = field(default_factory=list)
+    even_share: float = 0.0  # each day's share if rounds were spread evenly
+    day_scale: float = 1.0  # the share drawn at full height
+    even_spread_p: Optional[float] = None
+    mean_time: Optional[str] = None  # circular mean, "10:20 am"
+    resultant: Optional[float] = None  # mean resultant length R, 0..1
+    rayleigh_p: Optional[float] = None
 
 
 def _clock(minutes: float) -> str:
@@ -501,6 +510,14 @@ def build_rounds(session: Session) -> Rounds:
     shown = range(7) if days[5] or days[6] else range(5)
     top = max(days.values())
     out.days = [(WEEKDAYS[d], days[d], days[d] / top) for d in shown]
-    if even_spread_p([days[d] for d in shown]) < 0.05:
+    out.even_spread_p = even_spread_p([days[d] for d in shown])
+    if out.even_spread_p < 0.05:
         out.busiest_day = WEEKDAYS[max(days, key=days.get)]
+    n = len(local)
+    shares = [(WEEKDAYS[d], days[d], days[d] / n, *wilson(days[d], n)) for d in shown]
+    out.day_scale = max(hi for *_, hi in shares)
+    out.day_shares = shares
+    out.even_share = 1 / len(shown)
+    mean, out.resultant, out.rayleigh_p = rayleigh(minutes)
+    out.mean_time = _clock(mean)
     return out
