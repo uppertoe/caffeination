@@ -88,36 +88,34 @@
 
 {% macro pct(x) %}{{ (x * 100) | round | int }}%{% endmacro %}
 
-{# A χ² test of two options with all of its working, from
-   app.stats_panels.PairView. `tests` names how many tests the Holm
-   adjustment covered, or is none for a single test. #}
-{% macro pair_test(v) %}
-  {% if not v.ready %}
-    {% if v.n >= 12 %}
-    <p class="stats-wait">Every usual drink in this comparison falls into a single {{ v.row_name | lower }} group or a single {{ v.col_name | lower }} group, so there is nothing to compare yet.</p>
-    {% else %}
-    <p class="stats-wait">This comparison needs at least 12 usual drinks with both options, and the department has {{ v.n }}.</p>
-    {% endif %}
-  {% else %}
+{# A χ² test of two options, from app.stats_panels.PairView, in two halves
+   for the two columns of a section: the finding, facts and working, and
+   the table and permutation histogram. #}
+{% macro pair_text(v) %}
   {% set t = v.test %}
-  <p class="panel-lead">
-    {% if v.finding %}{{ v.finding }} than chance alone would explain.
-    {% else %}{{ v.no_link }}{% endif %}
-  </p>
-  <div class="fact-grid">
+  <p class="headline">{% if v.finding %}{{ v.finding }} than chance alone would explain.{% else %}{{ v.no_link }}{% endif %}</p>
+  <div class="fact-row">
     {{ fact("layers", "χ² statistic:", ('%.2f' % t.chi2) ~ " on " ~ t.df ~ (" degree" if t.df == 1 else " degrees") ~ " of freedom") }}
     {{ fact("shuffle", "Permutation p-value:", pval(t.p_permutation)) }}
     {% if v.p_holm is not none and v.p_holm != t.p_permutation %}{{ fact("scale", "After Holm adjustment:", pval(v.p_holm)) }}{% endif %}
     {{ fact("gauge", "Cramér’s V, bias-corrected:", '%.2f' % t.cramers_v) }}
   </div>
+  <details class="table-view working">
+    <summary>How this was calculated</summary>
+    <p>{{ v.premise }}, each cell would hold its row total multiplied by its column total, divided by all {{ t.n }} drinks. Each cell then contributes (O − E)² ÷ E, and the contributions add up to χ²:</p>
+    <p class="working-sum">χ² = {% for line in v.cells %}{% for cell in line %}{{ '%.2f' % cell.contribution }}{% if not loop.last %} + {% endif %}{% endfor %}{% if not loop.last %} + {% endif %}{% endfor %} = <strong>{{ '%.2f' % t.chi2 }}</strong></p>
+    <p>The textbook test compares χ² with a χ² distribution on {{ t.df }} {{ "degree" if t.df == 1 else "degrees" }} of freedom, which gives {{ p_eq(t.p_textbook) }}.{% if t.sparse_cells %} {{ t.sparse_cells }} of the {{ v.rows | length * v.cols | length }} cells are expected to hold fewer than 5 drinks, which makes that figure unreliable.{% endif %} The permutation test shuffles the {{ v.col_name | lower }} column {{ t.null | length }} times, keeping every total fixed, and {{ t.as_extreme }} of the shuffled tables had a χ² at least as large as the department’s.</p>
+  </details>
+{% endmacro %}
 
+{% macro pair_figure(v) %}
+  {% set t = v.test %}
   <div class="xtab-wrap">
   <table class="xtab">
     <thead>
       <tr>
         <th scope="col" class="xtab-corner">{{ v.row_name }} by {{ v.col_name | lower }}</th>
         {% for c in v.cols %}<th scope="col">{{ c }}</th>{% endfor %}
-        <th scope="col" class="xtab-total">Total</th>
       </tr>
     </thead>
     <tbody>
@@ -125,47 +123,43 @@
       <tr>
         <th scope="row">{{ r }}</th>
         {% for cell in v.cells[i] %}
-        <td class="xcell xcell-{{ cell.tone }}" style="--s: {{ '%.2f' % cell.strength }}"
+        <td class="xcell xcell-{{ cell.tone }}" style="--s: {{ '%.2f' % cell.strength }}; --i: {{ loop.index0 + i * 3 }}"
             data-tip="{{ r }}, {{ v.cols[loop.index0] | lower }}: {{ cell.observed }} observed, {{ '%.1f' % cell.expected }} expected">
           <span class="xcell-o">{{ cell.observed }}</span>
           <span class="xcell-e">expected {{ '%.1f' % cell.expected }}</span>
         </td>
         {% endfor %}
-        <td class="xtab-total">{{ v.row_totals[i] }}</td>
       </tr>
       {% endfor %}
-      <tr class="xtab-total">
-        <th scope="row">Total</th>
-        {% for n in v.col_totals %}<td>{{ n }}</td>{% endfor %}
-        <td>{{ t.n }}</td>
-      </tr>
     </tbody>
   </table>
   </div>
-  <p class="chart-note">Caramel cells hold more drinks than independence predicts, and blue cells hold fewer. The deeper the shade, the larger the difference.</p>
-
-  <details class="table-view working">
-    <summary>How this was calculated</summary>
-    <p>{{ v.premise }}, each cell would be expected to hold its row total multiplied by its column total, divided by all {{ t.n }} drinks. That expected count is shown under each observed count.</p>
-    <p>Each cell contributes (O − E)² ÷ E, and the contributions add up to the χ² statistic:</p>
-    <p class="working-sum">χ² = {% for line in v.cells %}{% for cell in line %}{{ '%.2f' % cell.contribution }}{% if not loop.last %} + {% endif %}{% endfor %}{% if not loop.last %} + {% endif %}{% endfor %} = <strong>{{ '%.2f' % t.chi2 }}</strong></p>
-    <p>The textbook test compares χ² with a χ² distribution on {{ t.df }} {{ "degree" if t.df == 1 else "degrees" }} of freedom, which gives {{ p_eq(t.p_textbook) }}.{% if t.sparse_cells %} {{ t.sparse_cells }} of the {{ v.rows | length * v.cols | length }} cells are expected to hold fewer than 5 drinks, which makes the textbook p-value unreliable.{% endif %}</p>
-    <p>A permutation test makes no such assumption. It shuffles the {{ v.col_name | lower }} column {{ t.null | length }} times, keeping every row and column total fixed, and recalculates χ² for each shuffled table. {{ t.as_extreme }} of the {{ t.null | length }} shuffled tables had a χ² at least as large as the real one, so p = ({{ t.as_extreme }} + 1) ÷ {{ t.null | length + 1 }}{% if t.p_permutation < 0.001 %}, which is less than 0.001{% else %} = {{ '%.3f' % t.p_permutation }}{% endif %}.</p>
-
-    <div class="chart hist-chart">
-      <svg viewBox="0 0 {{ 600 }} 140" role="img" aria-label="The χ² statistic of each shuffled table, with the textbook χ² distribution and this department’s value marked.">
-        {% for b in v.hist %}
-        <rect class="bar{% if b.as_extreme %} bar-extreme{% endif %}" x="{{ '%.1f' % b.x }}" y="{{ '%.1f' % (140 - b.h * 136) }}" width="{{ '%.1f' % b.w }}" height="{{ '%.1f' % (b.h * 136) }}" rx="2" />
-        {% endfor %}
-        <path class="density" d="{{ v.curve }}" />
-        <line class="marker" x1="{{ '%.1f' % v.marker_x }}" x2="{{ '%.1f' % v.marker_x }}" y1="0" y2="140" />
-        <line class="baseline" x1="0" x2="600" y1="139.5" y2="139.5" />
-      </svg>
-      <div class="chart-ticks" aria-hidden="true">
-        {% for x, text in v.ticks %}<span style="left: {{ '%.2f' % x }}%">{{ text }}</span>{% endfor %}
-      </div>
+  <p class="chart-legend"><span class="swatch swatch-above"></span>More than independence predicts <span class="swatch swatch-below"></span>Fewer</p>
+  <div class="chart hist-chart">
+    <svg viewBox="0 0 600 140" role="img" aria-label="The χ² statistic of each shuffled table, with the textbook χ² distribution and the department’s value marked.">
+      {% for b in v.hist %}
+      <rect class="bar grow{% if b.as_extreme %} bar-extreme{% endif %}" style="--i: {{ loop.index0 }}" x="{{ '%.1f' % b.x }}" y="{{ '%.1f' % (140 - b.h * 136) }}" width="{{ '%.1f' % b.w }}" height="{{ '%.1f' % (b.h * 136) }}" rx="2" />
+      {% endfor %}
+      <path class="density draw" pathLength="1" d="{{ v.curve }}" />
+      <line class="marker" x1="{{ '%.1f' % v.marker_x }}" x2="{{ '%.1f' % v.marker_x }}" y1="0" y2="140" />
+      <line class="baseline" x1="0" x2="600" y1="139.5" y2="139.5" />
+    </svg>
+    <div class="chart-ticks" aria-hidden="true">
+      {% for x, text in v.ticks %}<span style="left: {{ '%.2f' % x }}%">{{ text }}</span>{% endfor %}
     </div>
-    <p class="chart-note">The bars count the shuffled tables at each value of χ², and the darker bars are those at least as large as the department’s. The curve is the textbook χ² distribution, and the vertical line marks the department’s χ² of {{ '%.2f' % t.chi2 }}.</p>
-  </details>
-  {% endif %}
+  </div>
+  <p class="chart-note">The bars count {{ t.null | length }} shuffled tables by their χ², and the darker bars are those at least as large as the department’s. The curve is the textbook χ² distribution, and the dashed line marks the department’s χ² of {{ '%.2f' % t.chi2 }}.</p>
+{% endmacro %}
+
+{# A section still waiting on rounds: what it will show, and a meter of how
+   far the log has come. #}
+{% macro waiting(title, sentence, have, need, unit) %}
+<div class="wait-row">
+  <h3>{{ title }}</h3>
+  <p>{{ sentence }}</p>
+  <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="{{ need }}" aria-valuenow="{{ [have, need] | min }}" aria-label="{{ title }}: {{ have }} of {{ need }} {{ unit }}">
+    <span class="meter-fill" style="width: {{ '%.0f' % ([have / need, 1] | min * 100) }}%"></span>
+  </div>
+  <p class="meter-label">{{ [have, need] | min }} of {{ need }} {{ unit }}</p>
+</div>
 {% endmacro %}

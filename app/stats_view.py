@@ -347,6 +347,69 @@ def build_board(usuals: list[Usual]) -> Board:
     )
 
 
+@dataclass
+class Segment:
+    label: str
+    count: int
+    share: float
+    start: float  # percent along the bar
+    colour: int  # 1–5, a categorical slot; 0 for "Other"
+    mine: bool  # the viewer's own choice
+    tip: str
+
+
+@dataclass
+class FingerprintRow:
+    tab: str
+    n: int
+    segments: list[Segment]
+
+
+# A stacked bar holds at most this many named options; the rest fold into
+# "Other", so no option ever needs a sixth, generated hue.
+MAX_SEGMENTS = 5
+
+_BASIS = {
+    "base_id": "usual drinks", "milk": "usual drinks made with milk",
+    "size": "usual drinks that come in a size", "strength": "usual drinks with a strength choice",
+    "temp": "usual drinks that offer a choice of temperature", "sweetener": "usual drinks",
+}
+
+
+def build_fingerprint(board: Board, own: Optional[dict]) -> list[FingerprintRow]:
+    """The department's drinks as one 100% bar per option, most chosen first
+    for unordered options, with small shares folded into Other."""
+    rows = []
+    labels_by_key = {key: labels for key, _, labels, _ in FACETS}
+    for facet in board.facets:
+        chosen = [r for r in facet.rows if r.count]
+        if not chosen:
+            continue
+        named, rest = chosen[:MAX_SEGMENTS], chosen[MAX_SEGMENTS:]
+        if rest:
+            named = chosen[:MAX_SEGMENTS - 1]
+            rest = chosen[MAX_SEGMENTS - 1:]
+        mine_label = None
+        if own and own.get(facet.key) is not None:
+            mine_label = labels_by_key[facet.key].get(own[facet.key])
+        segs, start = [], 0.0
+        basis = _BASIS[facet.key]
+        for i, r in enumerate(named):
+            segs.append(Segment(
+                r.label, r.count, r.share, start * 100, i + 1, r.label == mine_label,
+                f"{r.label}: {r.count} of {facet.n} {basis}",
+            ))
+            start += r.share
+        if rest:
+            k = sum(r.count for r in rest)
+            segs.append(Segment(
+                "Other", k, k / facet.n, start * 100, 0, mine_label in {r.label for r in rest},
+                "Other: " + ", ".join(f"{r.label} {r.count}" for r in rest),
+            ))
+        rows.append(FingerprintRow(facet.tab, facet.n, segs))
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # Caffeine.
 # ---------------------------------------------------------------------------
@@ -455,6 +518,11 @@ class Rounds:
     even_share: float = 0.0  # each day's share if rounds were spread evenly
     day_scale: float = 1.0  # the share drawn at full height
     even_spread_p: Optional[float] = None
+    # A 24-hour dial: one wedge per quarter hour with rounds in it, the
+    # half-of-rounds stretch as an arc, and hour labels placed by percent.
+    dial: list[tuple[str, str]] = field(default_factory=list)  # (path, tooltip)
+    dial_arc: str = ""
+    dial_labels: list[tuple[float, float, str]] = field(default_factory=list)
     mean_time: Optional[str] = None  # circular mean, "10:20 am"
     resultant: Optional[float] = None  # mean resultant length R, 0..1
     rayleigh_p: Optional[float] = None
@@ -469,6 +537,39 @@ def _clock(minutes: float) -> str:
         return "midnight"
     hour = (h - 1) % 12 + 1
     return f"{hour}{f':{m:02d}' if m else ''} {'am' if h < 12 else 'pm'}"
+
+
+DIAL_C, DIAL_IN, DIAL_LEN = 120, 46, 66
+
+
+def _polar(minute: float, r: float) -> tuple[float, float]:
+    a = minute / 1440 * 2 * math.pi - math.pi / 2  # midnight at the top
+    return DIAL_C + r * math.cos(a), DIAL_C + r * math.sin(a)
+
+
+def _dial(minutes: list[int], window: tuple[int, int]):
+    per_slot = Counter(m // 15 for m in minutes)
+    peak = max(per_slot.values())
+    wedges = []
+    for slot, k in sorted(per_slot.items()):
+        a0, a1 = slot * 15 + 1.5, slot * 15 + 13.5
+        r1 = DIAL_IN + k / peak * DIAL_LEN
+        (x0, y0), (x1, y1) = _polar(a0, DIAL_IN), _polar(a1, DIAL_IN)
+        (x2, y2), (x3, y3) = _polar(a1, r1), _polar(a0, r1)
+        path = (f"M{x0:.1f},{y0:.1f} A{DIAL_IN},{DIAL_IN} 0 0 1 {x1:.1f},{y1:.1f} "
+                f"L{x2:.1f},{y2:.1f} A{r1:.1f},{r1:.1f} 0 0 0 {x3:.1f},{y3:.1f} Z")
+        t0 = slot * 15
+        wedges.append((path, f"{_clock(t0)} to {_clock(t0 + 15)}: {k} round{'s' if k != 1 else ''}"))
+    start, end = window
+    r = DIAL_IN - 7
+    (sx, sy), (ex, ey) = _polar(start, r), _polar(end, r)
+    large = 1 if (end - start) % 1440 > 720 else 0
+    arc = f"M{sx:.1f},{sy:.1f} A{r},{r} 0 {large} 1 {ex:.1f},{ey:.1f}"
+    labels = []
+    for h in range(0, 24, 3):
+        x, y = _polar(h * 60, DIAL_IN + DIAL_LEN + 12)
+        labels.append((x / (2 * DIAL_C) * 100, y / (2 * DIAL_C) * 100, _clock(h * 60).replace(" ", " ")))
+    return wedges, arc, labels
 
 
 def build_rounds(session: Session) -> Rounds:
@@ -518,6 +619,7 @@ def build_rounds(session: Session) -> Rounds:
     out.day_scale = max(hi for *_, hi in shares)
     out.day_shares = shares
     out.even_share = 1 / len(shown)
+    out.dial, out.dial_arc, out.dial_labels = _dial(minutes, (w_start, w_end))
     mean, out.resultant, out.rayleigh_p = rayleigh(minutes)
     out.mean_time = _clock(mean)
     return out

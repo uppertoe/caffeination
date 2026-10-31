@@ -1,7 +1,12 @@
-{% from "_stats_macros.html" import fact, plural, pct, pval, p_eq, pair_test %}
+{% from "_stats_macros.html" import fact, plural, pct, pval, p_eq, pair_text, pair_figure, waiting %}
+{# The statistics page as an infographic: each section pairs its finding
+   and working with a figure, the two swapping sides down the page on a wide
+   screen. Each section wears one categorical colour (--sc). stats.js marks
+   a section .in-view the first time it scrolls into sight, which plays its
+   one entrance animation. #}
 <div id="stats" class="stats-body">
-{# Contents: every section, grouped by part, sticky under the header. The
-   section in view is marked by stats.js. #}
+
+{# Contents: every section, grouped by part, sticky under the header. #}
 {% macro nav_link(id, label) %}<a href="#{{ id }}" class="nav-chip">{{ label }}</a>{% endmacro %}
 <nav class="stats-nav" aria-label="Sections">
   {% if board.n %}
@@ -10,23 +15,19 @@
     {{ nav_link("drinks", "What the department drinks") }}
     {{ nav_link("unusual", "How unusual a drink is") }}
     {{ nav_link("caffeine", "Caffeine") }}
-    {% if agreement %}{{ nav_link("references", "Two caffeine references") }}{% endif %}
     {{ nav_link("pairs", "Options that go together") }}
     {% if randomisation %}{{ nav_link("randomisation", "Randomisation") }}{% endif %}
-    {{ nav_link("inactive", "Active and inactive colleagues") }}
   </div>
   {% endif %}
   <div class="nav-group">
     <span class="nav-part">Rounds over time:</span>
-    {{ nav_link("rounds", "Rounds") }}
+    {{ nav_link("rounds", "When rounds happen") }}
     {{ nav_link("through-the-day", "Caffeine through the day") }}
     {{ nav_link("next-coffee", "Time to the next coffee") }}
     {{ nav_link("who-comes", "Who comes for coffee") }}
     {{ nav_link("round-size", "Round size") }}
-    {{ nav_link("guests", "Guests") }}
   </div>
 </nav>
-
 
 {% if board.n == 0 %}
   <article class="stats-empty">
@@ -34,82 +35,60 @@
   </article>
 {% else %}
 
-  {# ---- At a glance: one fact from each part, each a way into its section. #}
-  {% set top = board.facets[0].rows[0] %}
-  <div class="glance">
-    <a class="glance-tile" href="#drinks"><span class="glance-label">Most common usual drink:</span><span class="glance-value">{{ top.label }}, {{ pct(top.share) }}</span></a>
-    <a class="glance-tile" href="#unusual"><span class="glance-label">Your usual drink:</span><span class="glance-value">{% if has_own and unusual %}More unusual than {{ unusual.more_ordinary }} of {{ unusual.n }}{% else %}No usual drink saved{% endif %}</span></a>
-    <a class="glance-tile" href="#caffeine"><span class="glance-label">A typical usual drink:</span><span class="glance-value">{{ caffeine.typical | capitalize }}</span></a>
-    {% if caffeine_sim %}<a class="glance-tile" href="#caffeine"><span class="glance-label">A round for the whole department:</span><span class="glance-value">About {{ '%.1f' % caffeine_sim.estimate_g }} g of caffeine</span></a>{% endif %}
-    <a class="glance-tile" href="#rounds"><span class="glance-label">Rounds recorded:</span><span class="glance-value">{{ rounds.n }}</span></a>
-    <a class="glance-tile" href="#rounds"><span class="glance-label">Busiest stretch of the day:</span><span class="glance-value">{{ rounds.half_window or "Not enough rounds yet" }}</span></a>
-  </div>
-
   <header class="part-head">
     <h2 class="part-title">The department now</h2>
-    <p>The sections in this part use every colleague’s usual drink. Because the usual drinks cover the whole department rather than a sample of it, the shares carry no error bars.</p>
+    <p>The sections in this part use every colleague’s usual drink, which covers the whole department rather than a sample, so the shares carry no error bars.</p>
   </header>
 
-  {# ---- What the department drinks: exact shares (a census, so no
-     intervals). Leads because every reader found it the most useful. #}
-  <article id="drinks" class="palate" x-data="{ tab: 'base_id', numbers: false }">
-    <header><h2>What the department drinks</h2></header>
-    <div class="fact-grid">
-      {{ fact("cup", "Usual drinks saved:", board.n) }}
-      {{ fact("layers", "Exact orders no one else shares:", board.unique ~ " of " ~ board.n) }}
-      {{ fact("star", "Most common exact order:", (board.top_line ~ ", chosen by " ~ board.top_count ~ " people") if board.top_line else "No single exact order leads yet") }}
+  {# ---- What the department drinks -------------------------------------- #}
+  {% set top = board.facets[0].rows[0] %}
+  <section id="drinks" class="story" style="--sc: var(--c1)">
+    <div class="story-text">
+      <h2 class="story-title">What the department drinks</h2>
+      <p class="headline"><strong class="num">{{ top.label }}</strong> is the department’s most common usual drink, chosen by {{ pct(top.share) }} of colleagues.</p>
+      <div class="fact-row">
+        {{ fact("cup", "Usual drinks saved:", board.n) }}
+        {{ fact("layers", "Exact orders no one else shares:", board.unique ~ " of " ~ board.n) }}
+        {{ fact("star", "Most common exact order:", (board.top_line ~ ", chosen by " ~ board.top_count ~ " colleagues") if board.top_line else "No exact order is more common than the rest") }}
+      </div>
     </div>
-    <div class="tabs" role="tablist" aria-label="Drink option">
-      {% for f in board.facets %}
-      <button type="button" role="tab" class="tab"
-        :aria-selected="tab === '{{ f.key }}'" aria-selected="{{ 'true' if loop.first else 'false' }}"
-        @click="tab = '{{ f.key }}'">{{ f.tab }}</button>
-      {% endfor %}
-    </div>
-    {% for f in board.facets %}
-    <div role="tabpanel" x-show="tab === '{{ f.key }}'" {% if not loop.first %}x-cloak{% endif %}>
-      <p class="facet-basis">
-        {% if f.key in ("base_id", "sweetener") %}Shares of all {{ f.n }} usual drinks.
-        {% elif f.key == "milk" %}Shares of the {{ f.n }} usual drinks made with milk.
-        {% elif f.key == "size" %}Shares of the {{ f.n }} usual drinks that come in a size.
-        {% elif f.key == "strength" %}Shares of the {{ f.n }} usual drinks with a strength choice.
-        {% else %}Shares of the {{ f.n }} usual drinks that offer a choice of temperature.{% endif %}
-      </p>
-      <ul class="share-list">
-        {% for r in f.rows if r.count %}
-        <li class="share-row" data-tip="{{ r.count }} of {{ f.n }} usual drinks">
-          <span class="share-label">{{ r.label }}</span>
-          <span class="share-track" aria-hidden="true"><span class="share-bar" style="width: {{ '%.2f' % (r.share * 100) }}%"></span></span>
-          <span class="share-value">{{ pct(r.share) }}</span>
+    <div class="story-figure">
+      <ul class="print-list" aria-label="The department’s usual drinks by each option">
+        {% for row in fingerprint %}
+        <li class="print-row">
+          <span class="print-label">{{ row.tab }}</span>
+          <span class="print-bar">
+            {% for seg in row.segments %}
+            <span class="print-seg c{{ seg.colour }}{% if seg.mine %} is-mine{% endif %}" style="left: {{ '%.2f' % seg.start }}%; width: {{ '%.2f' % (seg.share * 100) }}%; --i: {{ loop.index0 }}" data-tip="{{ seg.tip }}">
+              {% if seg.share >= 0.13 %}<span class="print-text">{{ seg.label }} {{ pct(seg.share) }}</span>{% endif %}
+            </span>
+            {% endfor %}
+          </span>
         </li>
         {% endfor %}
       </ul>
-      {% set unused = f.rows | selectattr("count", "equalto", 0) | map(attribute="label") | list %}
-      {% if unused %}<p class="facet-unused">Options no one has chosen yet: {{ unused[:-1] | join(", ") }}{{ " and " if unused | length > 1 }}{{ unused[-1] }}.</p>{% endif %}
-      {# One open state for every tab, so the numbers stay open across tabs. #}
-      <details class="table-view" :open="numbers" @toggle="numbers = $el.open">
+      <p class="chart-note">Each bar splits the department’s usual drinks by one option, among the drinks that offer it{% if has_own %}, and your own choices are outlined{% endif %}. Hover over or tap a segment for its count.</p>
+      <details class="table-view">
         <summary>Show the numbers</summary>
-        <table>
-          <thead><tr><th scope="col">{{ f.tab }}</th><th scope="col">Usual drinks</th><th scope="col">Share</th></tr></thead>
-          <tbody>
-            {% for r in f.rows %}
-            <tr><th scope="row">{{ r.label }}</th><td>{{ r.count }}</td><td>{{ pct(r.share) }}</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <div class="numbers-grid">
+        {% for f in board.facets %}
+          <table>
+            <thead><tr><th scope="col">{{ f.tab }}</th><th scope="col" class="num">Usual drinks</th><th scope="col" class="num">Share</th></tr></thead>
+            <tbody>
+              {% for r in f.rows if r.count %}<tr><th scope="row">{{ r.label }}</th><td class="num">{{ r.count }}</td><td class="num">{{ pct(r.share) }}</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        {% endfor %}
+        </div>
       </details>
     </div>
-    {% endfor %}
-  </article>
+  </section>
 
-  {# ---- How unusual a drink is ------------------------------------------ #}
-  <article id="unusual" class="unusual">
-    <header><h2>How unusual a drink is</h2></header>
-    <p class="panel-intro">
-      {% if has_own %}The controls are set to your usual drink.{% else %}The controls are set to the department’s most common usual drink.{% endif %}
-      Change any option to see how another drink compares.
-    </p>
-    <div class="unusual-layout">
+  {# ---- How unusual a drink is ------------------------------------------- #}
+  <section id="unusual" class="story" style="--sc: var(--c2)">
+    <div class="story-text">
+      <h2 class="story-title">How unusual a drink is</h2>
+      <p>{% if has_own %}The controls start on your usual drink.{% else %}The controls start on the department’s most common usual drink.{% endif %} Change any option to see how another drink compares.</p>
       <form
         class="unusual-controls"
         hx-get="/stats/unusual"
@@ -141,273 +120,106 @@
         <input type="hidden" name="who" value="{{ who }}" />
         {% with without_notes = true %}{% include "_drink_fields.html" %}{% endwith %}
       </form>
+      <details class="table-view working">
+        <summary>How the score is calculated</summary>
+        <p>Each option scores −log₂ of its share among the usual drinks it applies to, so an option chosen by half the department scores 1 bit and one chosen by an eighth scores 3 bits. A drink’s score is the sum of its options’ bits, which treats the options as independent of one another.</p>
+        <p>Each share includes an allowance of half a drink for every possible choice, so an option no one has chosen scores high rather than infinitely, and the bits differ slightly from the counts beside them.</p>
+      </details>
+    </div>
+    <div class="story-figure">
       {% include "_stats_unusual.html" %}
     </div>
-    <p class="chart-note">Each bean is one colleague’s usual drink{% if has_own %}, and the ringed bean is yours{% endif %}.</p>
-    <details class="table-view working">
-      <summary>How the score is calculated</summary>
-      <p>Each option scores −log₂ of its share among the usual drinks it applies to. An option chosen by half the department scores 1 bit, one chosen by a quarter scores 2 bits, and one chosen by an eighth scores 3 bits.</p>
-      <p>A drink’s score is the sum of its options’ bits, so several slightly uncommon options can outweigh one rare one. Adding the bits treats the options as independent of one another, which the section on options that go together tests.</p>
-      <p>Each share includes an allowance of half a drink for every possible choice, so an option no one has chosen scores high rather than infinitely. The bits therefore differ slightly from the counts shown beside them.</p>
-    </details>
-  </article>
+  </section>
 
-  {# ---- Caffeine, in shots first ----------------------------------------- #}
-  <article id="caffeine" class="caffeine">
-    <header><h2>Caffeine</h2></header>
-    <p class="panel-lead">{{ caffeine.lead }}</p>
-    <div class="fact-grid">
-      {{ fact("bolt", "Typical drink, by the median:", caffeine.typical) }}
-      {{ fact("bean", "Your usual drink:", caffeine.mine or "No usual drink saved") }}
-      {{ fact("moon", "Decaf usual drinks:", caffeine.decaf) }}
-    </div>
-    <ul class="bean-rows" aria-label="Colleagues’ usual drinks by estimated caffeine">
-      {% for row in caffeine.rows %}
-      <li class="bean-row{% if not row.beans %} is-empty{% endif %}">
-        <span class="bean-row-label">{{ row.label }}</span>
-        <span class="bean-row-beans">
-          {% for tip, mine in row.beans %}<svg class="bean{% if mine %} bean-mine{% endif %}" viewBox="0 0 15 10" data-tip="{{ tip }}" aria-hidden="true"><use href="#bean" /></svg>{% endfor %}
-          <span class="bean-row-count">{{ row.beans | length }}</span>
-        </span>
-      </li>
-      {% endfor %}
-    </ul>
-    <p class="chart-note">Each bean is one colleague’s usual drink{% if caffeine.mine %}, and the ringed bean is yours{% endif %}. Little or none covers decaf, hot chocolate and the tea-based drinks.</p>
-    <details class="table-view">
-      <summary>How the estimate is made</summary>
-      <p class="chart-note">The typical drink is the median of the department’s usual drinks. Small and regular milk drinks are counted as one espresso shot, and large milk drinks and long blacks as two. An extra shot adds one, and a weak drink takes off half. A café espresso shot averaged {{ shot_mg }} mg in Australian testing, though single shots have measured anywhere from {{ shot_range[0] }} to {{ shot_range[1] }} mg (Desbrow and colleagues, 2007).</p>
-    </details>
-
-    {% if caffeine_sim %}{% set sim = caffeine_sim %}
-    <h3>A round for the whole department</h3>
-    <p>A round of every colleague’s usual drink would contain about <strong>{{ '%.1f' % sim.estimate_g }} g</strong> of caffeine, from about {{ sim.shots | round | int }} espresso shots.</p>
-    <div class="sim-chart">
-      {% for sc in sim.scenarios %}
-      <div class="sim-row">
-        <span class="sim-label">{{ "Every shot as strong as every other" if sc.key == "one_cafe" else "Each drink from a different café" }}</span>
-        <span class="sim-track" data-tip="95% of simulated rounds: {{ '%.1f' % (sc.interval.low / 1000) }} to {{ '%.1f' % (sc.interval.high / 1000) }} g">
-          {% for x, h in sc.strip %}<span class="sim-strip" style="left: {{ '%.2f' % x }}%; height: {{ '%.0f' % (h * 50) }}%"></span>{% endfor %}
-          <span class="sim-whisker" style="left: {{ '%.2f' % sc.low_x }}%; width: {{ '%.2f' % (sc.high_x - sc.low_x) }}%"></span>
-          <span class="sim-dot" style="left: {{ '%.2f' % sc.estimate_x }}%"></span>
-        </span>
+  {# ---- Caffeine ----------------------------------------------------------- #}
+  <section id="caffeine" class="story" style="--sc: var(--c4)">
+    <div class="story-text">
+      <h2 class="story-title">Caffeine</h2>
+      <p class="headline">The department’s typical usual drink holds <strong class="num">{{ caffeine.typical }}</strong> of espresso.</p>
+      <div class="fact-row">
+        {{ fact("bean", "Your usual drink:", caffeine.mine or "No usual drink saved") }}
+        {{ fact("moon", "Decaf usual drinks:", caffeine.decaf) }}
       </div>
-      {% endfor %}
-      <div class="chart-ticks sim-ticks" aria-hidden="true">
-        {% for x, text in sim.ticks %}<span style="left: {{ '%.2f' % x }}%">{{ text }}</span>{% endfor %}
-      </div>
+      <details class="table-view working">
+        <summary>How the estimate is made</summary>
+        <p>The typical drink is the median of the department’s usual drinks. Small and regular milk drinks count as one espresso shot, and large milk drinks and long blacks as two. An extra shot adds one, and a weak drink takes off half. Each shot counts as {{ shot_mg }} mg, the average measured in Australian cafés, so every figure is an estimate rather than a measurement.</p>
+      </details>
     </div>
-    {% set one, sep = sim.scenarios[0].interval, sim.scenarios[1].interval %}
-    <p class="chart-note">Each strip shows 2,000 simulated rounds, and the line spans the middle 95% of them. If every shot in the round shared one strength, the round could hold anywhere from {{ '%.1f' % (one.low / 1000) }} to {{ '%.1f' % (one.high / 1000) }} g, because the errors would all move together. If each drink came from a different café, the errors would partly cancel and the range would narrow to {{ '%.1f' % (sep.low / 1000) }} to {{ '%.1f' % (sep.high / 1000) }} g. A real round from one café lies between the two.</p>
-    <details class="table-view working">
-      <summary>How the simulation works</summary>
-      <p>Each simulated shot’s caffeine is drawn from a gamma distribution with a mean of {{ shot_mg }} mg and a standard deviation of {{ sim.shot_sd }} mg. Those are the mean and standard deviation of 97 café espressos measured on the Gold Coast by Desbrow and colleagues in 2007. Drinks without espresso keep their fixed estimate.</p>
-      <p>In the first case, one draw sets the strength of every shot in the round. In the second, each drink draws its own. Desbrow’s spread mixes differences between cafés with differences between shots at the same café, so the first range is an upper bound for a round from one café and the second a lower bound. Errors that move together do not average out, which is why the first range is so much wider.</p>
-    </details>
-    {% endif %}
-  </article>
-
-  {# ---- Two caffeine references: Bland–Altman and kappa ----------------- #}
-  {% set ag = agreement %}
-  {% if ag %}
-  <article id="references" class="agreement">
-    <header><h2>Two caffeine references</h2></header>
-    <p class="panel-intro">The caffeine estimates on this page come from café espressos measured on the Gold Coast. Food Standards Australia New Zealand publishes its own figures in AUSNUT, and this section compares the two for each usual drink that both cover.</p>
-    {% if not ag.ba %}
-      <p class="stats-wait">This comparison needs at least 12 usual drinks that both references cover, and the department has {{ ag.n }}.</p>
-    {% else %}
-    {% set ba = ag.ba %}
-    {% set same = namespace(n=0) %}{% for i in range(ag.table | length) %}{% set same.n = same.n + ag.table[i][i] %}{% endfor %}
-    <p class="panel-lead">The two references rank the department’s drinks {{ "almost identically" if ba.r >= 0.9 else "similarly" }}, yet AUSNUT’s figures are {{ ((ag.gm_ratio - 1) | abs * 100) | round | int }}% {{ "higher" if ag.gm_ratio >= 1 else "lower" }} on average, and the two place only {{ same.n }} of {{ ag.n }} usual drinks in the same shot band.</p>
-    <div class="fact-grid">
-      {{ fact("shuffle", "Correlation between the references:", "r = " ~ '%.2f' % ba.r) }}
-      {{ fact("scale", "AUSNUT divided by Desbrow, geometric mean:", '%.2f' % ag.gm_ratio ~ " (95% of drinks between " ~ '%.2f' % ag.ratio_low ~ " and " ~ '%.2f' % ag.ratio_high ~ ")") }}
-      {{ fact("layers", "Average difference, AUSNUT minus Desbrow:", '%+.0f' % ba.bias ~ " mg (95% of drinks between " ~ '%+.0f' % ba.lower ~ " and " ~ '%+.0f' % ba.upper ~ " mg)") }}
-      {{ fact("gauge", "Cohen’s kappa for the shot bands:", '%.2f' % ag.kappa) }}
-    </div>
-
-    <div class="square-chart">
-      <svg viewBox="-2 -2 204 204" role="img" aria-label="AUSNUT’s caffeine figure against the Desbrow-based estimate for each usual drink.">
-        <rect class="square-frame" x="0" y="0" width="200" height="200" />
-        <line class="diagonal" x1="0" y1="200" x2="200" y2="0" />
-        {% for x, y, r in ag.scatter %}<circle class="round-dot" cx="{{ '%.1f' % x }}" cy="{{ '%.1f' % y }}" r="{{ '%.1f' % r }}" />{% endfor %}
-      </svg>
-      <p>Plotted against each other, with Desbrow across and AUSNUT up, the two references fall close to a straight line, with r = {{ '%.2f' % ba.r }}. Yet almost every dot sits above the diagonal, where the references would agree. A high correlation shows only that two methods move together, not that either could replace the other.</p>
-    </div>
-
-    <h3>The Bland–Altman plot</h3>
-    <div class="chart ba-chart">
-      <svg class="bar-chart" viewBox="0 0 600 200" role="img" aria-label="Difference between the references against their average, with the average difference and the 95% limits of agreement.">
-        <line class="midday" x1="0" x2="600" y1="{{ '%.1f' % ag.zero_y }}" y2="{{ '%.1f' % ag.zero_y }}" />
-        <line class="ba-limit" x1="0" x2="600" y1="{{ '%.1f' % ag.upper_y }}" y2="{{ '%.1f' % ag.upper_y }}" />
-        <line class="ba-limit" x1="0" x2="600" y1="{{ '%.1f' % ag.lower_y }}" y2="{{ '%.1f' % ag.lower_y }}" />
-        <line class="ba-bias" x1="0" x2="600" y1="{{ '%.1f' % ag.bias_y }}" y2="{{ '%.1f' % ag.bias_y }}" />
-        {% if ag.trend %}<line class="fit-line" x1="{{ '%.1f' % ag.trend[0] }}" y1="{{ '%.1f' % ag.trend[1] }}" x2="{{ '%.1f' % ag.trend[2] }}" y2="{{ '%.1f' % ag.trend[3] }}" />{% endif %}
-        {% for x, y, r, tip in ag.points %}<circle class="round-dot" cx="{{ '%.1f' % x }}" cy="{{ '%.1f' % y }}" r="{{ '%.1f' % r }}" data-tip="{{ tip }}" />{% endfor %}
-      </svg>
-      <div class="chart-ticks" aria-hidden="true">{% for x, t in ag.x_ticks %}<span style="left: {{ '%.2f' % x }}%">{{ t }} mg</span>{% endfor %}</div>
-      <p class="axis-title">Average of the two references, in mg. The height of each dot is AUSNUT minus Desbrow, in mg.</p>
-    </div>
-    <p class="chart-note">Each dot is one kind of usual drink, drawn larger where several colleagues share it. The solid line is the average difference of {{ '%+.0f' % ba.bias }} mg, and the dashed lines bound 95% of the drinks’ differences. The sloping line shows the difference growing with the size of the drink. When the gap grows like this, Bland and Altman recommend comparing ratios instead, and AUSNUT’s figure is {{ '%.2f' % ag.gm_ratio }} times Desbrow’s on average.</p>
-
-    <h3>Agreement on the shot bands</h3>
-    {% set used = [] %}{% for i in range(ag.bands | length) %}{% if ag.table[i] | sum or ag.table | map(attribute=i) | sum %}{% set _ = used.append(i) %}{% endif %}{% endfor %}
-    <div class="xtab-wrap">
-    <table class="xtab agree-table">
-      <thead><tr><th scope="col" class="xtab-corner">Desbrow by AUSNUT</th>{% for j in used %}<th scope="col">{{ ag.bands[j] }}</th>{% endfor %}</tr></thead>
-      <tbody>
-        {% for i in used %}
-        <tr><th scope="row">{{ ag.bands[i] }}</th>{% for j in used %}<td class="{% if i == j %}agree-diag{% endif %}">{{ ag.table[i][j] or "" }}</td>{% endfor %}</tr>
+    <div class="story-figure">
+      <ul class="bean-rows" aria-label="Colleagues’ usual drinks by estimated caffeine">
+        {% for row in caffeine.rows %}
+        <li class="bean-row{% if not row.beans %} is-empty{% endif %}">
+          <span class="bean-row-label">{{ row.label }}</span>
+          <span class="bean-row-beans">
+            {% for tip, mine in row.beans %}<svg class="bean{% if mine %} bean-mine{% endif %}" style="--i: {{ loop.index0 }}" viewBox="0 0 15 10" data-tip="{{ tip }}" aria-hidden="true"><use href="#bean" /></svg>{% endfor %}
+            <span class="bean-row-count">{{ row.beans | length }}</span>
+          </span>
+        </li>
         {% endfor %}
-      </tbody>
-    </table>
+      </ul>
+      <p class="chart-note">Each bean is one colleague’s usual drink{% if caffeine.mine %}, and the ringed bean is yours{% endif %}. Little or none covers decaf, hot chocolate and the tea-based drinks.</p>
     </div>
-    <p class="chart-note">Each usual drink is placed in a shot band by both references, and drinks on the outlined diagonal land in the same band. Cohen’s kappa is {{ '%.2f' % ag.kappa }}, where 0 is the agreement chance alone would produce and 1 is perfect. Weighted kappa, {{ '%.2f' % ag.wkappa }}, gives partial credit to a drink placed one band out.</p>
+  </section>
 
-    <details class="table-view working">
-      <summary>Why the references disagree</summary>
-      <p>AUSNUT builds every espresso drink from one laboratory-analysed espresso of 2,900 mg a litre, at 50 g a shot, which gives 145 mg a shot. Desbrow and colleagues measured 97 café espressos at an average of 2,473 mg a litre and 106 mg a serve, which implies a shot of about 43 mL. AUSNUT’s shot is both stronger and larger.</p>
-      <p>Both references are tables rather than measurements of the department’s actual cups, so the difference for each kind of drink is fixed by their recipes, and the analysis shows the pattern rather than measurement error. Bland and Altman introduced the plot in The Lancet in 1986 to compare clinical measurement methods, such as two monitors of the same variable. The limits of agreement show how far apart two methods might be for a single measurement, which is what matters when deciding whether one could replace the other.</p>
-      <p>{{ ag.left_out }} {{ plural(ag.left_out, "usual drink is", "usual drinks are") }} left out because AUSNUT has no entry for weak, decaf, filter, cold brew or matcha drinks.</p>
-    </details>
-    {% endif %}
-  </article>
-  {% endif %}
-
-  {# ---- Options that go together: a χ² test with all of its working. Only
-     pairs that can be tested get a tab, strongest evidence first. ---- #}
+  {# ---- Options that go together ------------------------------------------ #}
   {% set ready_pairs = pairs | selectattr("ready") | list %}
-  <article id="pairs" class="pairs" x-data='{ pair: {{ (ready_pairs[0].key if ready_pairs else "") | tojson }} }'>
-    <header><h2>Options that go together</h2></header>
-    <p class="panel-intro">Each tab tests whether two options are chosen independently of each other, using a χ² test on the department’s usual drinks.</p>
-    {% if not ready_pairs %}
-      <p class="stats-wait">These tests need at least 12 usual drinks with both options, and the department does not have enough yet.</p>
-    {% else %}
-    <div class="tabs" role="tablist" aria-label="Pair of options">
+  <section id="pairs" class="story" style="--sc: var(--c5)" x-data='{ pair: {{ (ready_pairs[0].key if ready_pairs else "") | tojson }} }'>
+    <div class="story-text">
+      <h2 class="story-title">Options that go together</h2>
+      <p>Each tab tests whether two options are chosen independently of each other, using a χ² test on the department’s usual drinks.</p>
+      {% if not ready_pairs %}
+        <p class="stats-wait">These tests need at least 12 usual drinks with both options, and the department does not have enough yet.</p>
+      {% else %}
+      <div class="tabs" role="tablist" aria-label="Pair of options">
+        {% for v in ready_pairs %}
+        <button type="button" role="tab" class="tab"
+          :aria-selected="pair === '{{ v.key }}'" aria-selected="{{ 'true' if loop.first else 'false' }}"
+          @click="pair = '{{ v.key }}'">{{ v.tab }}</button>
+        {% endfor %}
+      </div>
       {% for v in ready_pairs %}
-      <button type="button" role="tab" class="tab"
-        :aria-selected="pair === '{{ v.key }}'" aria-selected="{{ 'true' if loop.first else 'false' }}"
-        @click="pair = '{{ v.key }}'">{{ v.tab }}</button>
+      <div role="tabpanel" x-show="pair === '{{ v.key }}'" {% if not loop.first %}x-cloak{% endif %}>{{ pair_text(v) }}</div>
+      {% endfor %}
+      <details class="table-view working">
+        <summary>What every tab has in common</summary>
+        <p>The usual drinks are the whole department, so the tests do not generalise to a wider population. Each asks whether a pattern this strong would be likely if every colleague had chosen the two options independently.</p>
+        {% if ready_pairs | length > 1 %}<p>{{ ready_pairs | length }} pairs are tested in this section. The Holm method multiplies the smallest p-value by {{ ready_pairs | length }}, the next by {{ ready_pairs | length - 1 }}, and so on, which keeps the chance of any false finding across the section at 5% or less.</p>{% endif %}
+        <p>Cramér’s V measures the strength of a link from 0, for none, to 1, for complete, corrected for the upward bias that small tables produce.</p>
+      </details>
+      {% endif %}
+    </div>
+    <div class="story-figure">
+      {% for v in ready_pairs %}
+      <div x-show="pair === '{{ v.key }}'" {% if not loop.first %}x-cloak{% endif %}>{{ pair_figure(v) }}</div>
       {% endfor %}
     </div>
-    {% for v in ready_pairs %}
-    <div role="tabpanel" x-show="pair === '{{ v.key }}'" {% if not loop.first %}x-cloak{% endif %}>
-      {{ pair_test(v) }}
-    </div>
-    {% endfor %}
-    <details class="table-view working">
-      <summary>What every tab has in common</summary>
-      <p>The usual drinks are the whole department, so the tests do not generalise to a wider population. Each asks whether a pattern this strong would be likely if every colleague had chosen the two options independently.</p>
-      {% if ready_pairs | length > 1 %}<p>{{ ready_pairs | length }} pairs of options are tested in this section. The Holm method multiplies the smallest p-value by {{ ready_pairs | length }}, the next by {{ ready_pairs | length - 1 }}, and so on, which keeps the chance of any false finding across the section at 5% or less.</p>{% endif %}
-      <p>Cramér’s V measures the strength of a link from 0, for none, to 1, for complete. The version shown is corrected for the upward bias that small tables produce.</p>
-    </details>
-    {% endif %}
-  </article>
+  </section>
 
-  {# ---- Randomisation and the baseline table ---------------------------- #}
+  {# ---- Randomisation and the baseline table ------------------------------ #}
   {% if randomisation %}
-  <article id="randomisation" class="randomise-panel">
-    <header><h2>Randomisation and the baseline table</h2></header>
-    <p class="panel-intro">This section splits the department into two arms at random, as a trial would, and compares the arms on their usual drinks.</p>
-    {% include "_stats_randomise.html" %}
-  </article>
+  <section id="randomisation" class="story" style="--sc: var(--c3)">
+    <div class="story-text">
+      <h2 class="story-title">Randomisation and the baseline table</h2>
+      <p class="headline"><strong class="num">{{ pct(randomisation.tables_with_any) }}</strong> of a thousand random splits of the department into two arms show a “significant” difference at baseline, although every difference is chance.</p>
+      <p>Allocate the department again to draw another trial’s Table 1, and keep count of how often chance alone produces a p-value below 0.05.</p>
+      <details class="table-view working">
+        <summary>Why baseline p-values mean nothing</summary>
+        <p>When people are allocated at random, any baseline difference between the arms is chance by construction, so baseline p-values should spread evenly between 0 and 1. The CONSORT statement advises against testing them for this reason.</p>
+        <p>Carlisle turned the same fact around. In a 2017 analysis of more than 5,000 trials in anaesthetic and general medical journals, he looked for baseline tables whose p-values were too evenly matched, or too extreme, to have come from random allocation, and found trials whose data were later shown to be flawed or fabricated.</p>
+        <p>{% if randomisation.share_below > 0.055 %}Slightly more than 5% of the department’s p-values fall below 0.05, because the textbook χ² test overstates significance when cells are sparse. {% endif %}With only {{ randomisation.n }} colleagues, each test can also produce only a limited set of p-values, so the bars are lumpier than a large trial would show.</p>
+      </details>
+    </div>
+    <div class="story-figure">
+      {% include "_stats_randomise.html" %}
+    </div>
+  </section>
   {% endif %}
-
-  {# ---- Active and inactive colleagues: attrition ----------------------- #}
-  <article id="inactive" class="inactive">
-    <header><h2>Active and inactive colleagues</h2></header>
-    <p class="panel-intro">Colleagues who have not used the app, or been added to an order, in the last 90 days are listed as inactive, as registrars and fellows are once a rotation ends. Comparing their usual drinks with active colleagues’ shows whether the department today differs from everyone who has used the app, a small-scale version of attrition bias.</p>
-    {% set m = moved_on %}
-    {% if not m.ready %}
-      <p class="stats-wait">This comparison needs at least {{ min_moved_on }} inactive colleagues, and the department has {{ m.inactive }}.
-      {% if m.plant_active is not none %}
-        {% if m.needed %}To detect a plant-milk share 20 percentage points away from active colleagues’ {{ pct(m.plant_active) }} with 80% power, about {{ m.needed }} inactive colleagues would be needed.
-        {% else %}Detecting a plant-milk share 20 percentage points away from active colleagues’ {{ pct(m.plant_active) }} with 80% power would need more inactive colleagues than the department is likely to have.{% endif %}
-      {% endif %}</p>
-    {% else %}
-      {{ pair_test(m.pair) }}
-      <p class="chart-note">The test treats active and inactive colleagues as two groups from the same department. Cramér’s V measures the strength of the difference from 0, for none, to 1, for complete.</p>
-    {% endif %}
-  </article>
 {% endif %}
 
   <header class="part-head">
     <h2 class="part-title">Rounds over time</h2>
-    <p>The sections in this part use the rounds recorded so far, which are a sample of the department’s coffee runs. Estimates from the rounds carry 95% intervals, which narrow as more rounds are recorded.</p>
+    <p>The sections in this part use the rounds recorded so far, which are a sample of the department’s coffee runs, so their estimates carry 95% intervals.</p>
   </header>
-
-  {# ---- Rounds ----------------------------------------------------------- #}
-  <article id="rounds" class="rounds">
-    <header><h2>Rounds</h2></header>
-    <p class="panel-intro">A round is recorded when an order is cleared, or when it expires 12 hours after the first person is added.</p>
-    {% if not rounds.ready %}
-      <p class="stats-wait">
-        {% if rounds.n == 0 %}No rounds have been recorded yet.
-        {% else %}{{ rounds.n }} {{ plural(rounds.n, "round has", "rounds have") }} been recorded so far.{% endif %}
-        The round charts will appear once {{ min_rounds }} rounds have been recorded.
-      </p>
-    {% else %}
-      <div class="fact-grid fact-grid-4">
-        {{ fact("layers", "Rounds recorded:", rounds.n) }}
-        {{ fact("people", "Drinks in a typical round:", rounds.typical_drinks) }}
-        {{ fact("clock", "Busiest stretch, holding half of all rounds:", rounds.half_window) }}
-        {{ fact("calendar", "Busiest day:", rounds.busiest_day or "No day stands out yet") }}
-      </div>
-
-      <h3>Time of day</h3>
-      <div class="chart">
-        <svg class="bar-chart" viewBox="0 0 {{ chart_w }} 120" role="img" aria-label="Rounds in each quarter hour of the day.">
-          {% if rounds.band %}
-          <rect class="time-band" x="{{ '%.1f' % rounds.band[0] }}" y="0" width="{{ '%.1f' % (rounds.band[1] - rounds.band[0]) }}" height="120" />
-          {% endif %}
-          {% for b in rounds.time_bars if b.count %}
-          <rect class="bar" x="{{ '%.1f' % b.x }}" y="{{ '%.1f' % (120 - b.h * 108) }}" width="{{ '%.1f' % b.w }}" height="{{ '%.1f' % (b.h * 108) }}" rx="3" data-tip="{{ b.tip }}" />
-          {% endfor %}
-          <line class="baseline" x1="0" x2="{{ chart_w }}" y1="119.5" y2="119.5" />
-        </svg>
-        <div class="chart-ticks" aria-hidden="true">
-          {% for x, text in rounds.time_ticks %}<span style="left: {{ '%.2f' % (x / chart_w * 100) }}%">{{ text }}</span>{% endfor %}
-        </div>
-      </div>
-      {% if rounds.band %}<p class="chart-note">The shaded band is the shortest stretch of the day that holds half of all rounds.</p>{% endif %}
-      <details class="table-view">
-        <summary>Show the numbers</summary>
-        <table>
-          <thead><tr><th scope="col">Quarter hour</th><th scope="col">Rounds</th></tr></thead>
-          <tbody>
-            {% for b in rounds.time_bars if b.count %}<tr><th scope="row">{{ b.label }}</th><td>{{ b.count }}</td></tr>{% endfor %}
-          </tbody>
-        </table>
-      </details>
-
-      <details class="table-view working">
-        <summary>How the time of day is summarised</summary>
-        <p>Times of day wrap around midnight, so an ordinary average would place rounds at 11:30 pm and 12:30 am at midday. The circular mean treats each round as a direction on a clock face and averages the directions, which puts the department’s average round at {{ rounds.mean_time }}.</p>
-        <p>When rounds bunch in two places, such as mid-morning and mid-afternoon, the circular mean can fall in the quiet stretch between them, as an ordinary mean can between two peaks.</p>
-        <p>The mean resultant length, R = {{ '%.2f' % rounds.resultant }}, measures how tightly the rounds cluster: 0 for times spread round the clock, and 1 for every round at the same moment. The Rayleigh test asks whether times this clustered could arise if rounds were spread evenly round the clock, and gives {{ p_eq(rounds.rayleigh_p) }}. No one expects a round at 3 am, so passing that test is easy, and the test is shown for its method rather than its finding.</p>
-        <p>The shaded stretch is the shortest part of the day that holds half of all rounds. Unlike a mean and standard deviation, it stays honest when rounds bunch in two places, such as mid-morning and mid-afternoon.</p>
-      </details>
-
-      <h3>Day of the week</h3>
-      <div class="chart">
-        <svg class="bar-chart" viewBox="0 0 {{ chart_w }} 140" role="img" aria-label="Each weekday’s share of rounds with its 95% interval, against an even spread.">
-          {% set w = chart_w / rounds.day_shares | length %}
-          {% for day, count, share, lo, hi in rounds.day_shares %}
-          {% set x = loop.index0 * w %}
-          <rect class="bar" x="{{ '%.1f' % (x + w * 0.2) }}" y="{{ '%.1f' % (140 - share / rounds.day_scale * 128) }}" width="{{ '%.1f' % (w * 0.6) }}" height="{{ '%.1f' % (share / rounds.day_scale * 128) }}" rx="3" data-tip="{{ day }}: {{ count }} {{ plural(count, 'round', 'rounds') }}, {{ pct(share) }} (95% interval {{ pct(lo) }} to {{ pct(hi) }})" />
-          <line class="error-bar" x1="{{ '%.1f' % (x + w / 2) }}" x2="{{ '%.1f' % (x + w / 2) }}" y1="{{ '%.1f' % (140 - lo / rounds.day_scale * 128) }}" y2="{{ '%.1f' % (140 - hi / rounds.day_scale * 128) }}" />
-          <line class="error-cap" x1="{{ '%.1f' % (x + w / 2 - 6) }}" x2="{{ '%.1f' % (x + w / 2 + 6) }}" y1="{{ '%.1f' % (140 - hi / rounds.day_scale * 128) }}" y2="{{ '%.1f' % (140 - hi / rounds.day_scale * 128) }}" />
-          <line class="error-cap" x1="{{ '%.1f' % (x + w / 2 - 6) }}" x2="{{ '%.1f' % (x + w / 2 + 6) }}" y1="{{ '%.1f' % (140 - lo / rounds.day_scale * 128) }}" y2="{{ '%.1f' % (140 - lo / rounds.day_scale * 128) }}" />
-          {% endfor %}
-          <line class="expected" x1="0" x2="{{ chart_w }}" y1="{{ '%.1f' % (140 - rounds.even_share / rounds.day_scale * 128) }}" y2="{{ '%.1f' % (140 - rounds.even_share / rounds.day_scale * 128) }}" />
-          <line class="baseline" x1="0" x2="{{ chart_w }}" y1="139.5" y2="139.5" />
-        </svg>
-        <div class="chart-ticks centred" aria-hidden="true">
-          {% for day, count, share, lo, hi in rounds.day_shares %}<span style="left: {{ '%.2f' % ((loop.index0 + 0.5) / rounds.day_shares | length * 100) }}%">{{ day[:3] }}</span>{% endfor %}
-        </div>
-      </div>
-      <p class="chart-note">Each bar is a weekday’s share of rounds, with its 95% Wilson interval. The dashed line is the share each day would have if rounds were spread evenly. A χ² goodness-of-fit test against that even spread gives {{ p_eq(rounds.even_spread_p) }}{% if not rounds.busiest_day %}, so no day stands out yet{% endif %}.</p>
-    {% endif %}
-  </article>
 
   {% include "_stats_rounds.html" %}
 

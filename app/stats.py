@@ -4,7 +4,8 @@ values, no database: app.stats_view loads the data and calls these.
 Department samples are small (tens of people), so each method is chosen to
 stay honest at that size: permutation tests and a bias-corrected Cramér's V
 beside the χ² asymptotics, a smoothed model for how unusual a drink is,
-simulation for uncertainty, and circular statistics for time of day. Each
+resampling by person for the round log, and circular statistics for time
+of day. Each
 returns its working as well as its answer, because the page shows both.
 """
 
@@ -20,7 +21,7 @@ from typing import Optional
 
 
 # ---------------------------------------------------------------------------
-# Association between two categorical options.
+# A χ² test of independence between two categorical options.
 # ---------------------------------------------------------------------------
 
 
@@ -178,35 +179,6 @@ def chi_square(
     )
 
 
-@dataclass(frozen=True)
-class Association:
-    n: int
-    cramers_v: float
-    p_value: float
-    # The (row, column) cell furthest above what independence predicts,
-    # by Pearson residual, and that residual.
-    standout: tuple[Hashable, Hashable]
-    standout_residual: float
-
-
-def association(
-    pairs: Sequence[tuple[Hashable, Hashable]],
-    permutations: int = 499,
-    seed: int = 0,
-) -> Optional[Association]:
-    """The summary of chi_square that the findings need: bias-corrected
-    Cramér's V, the permutation p-value, and the standout cell."""
-    test = chi_square(pairs, permutations, seed)
-    if test is None:
-        return None
-    cells = [(i, j) for i in range(len(test.rows)) for j in range(len(test.cols))]
-    i, j = max(cells, key=lambda ij: test.residual(*ij))
-    return Association(
-        test.n, test.cramers_v, test.p_permutation,
-        (test.rows[i], test.cols[j]), test.residual(i, j),
-    )
-
-
 # ---------------------------------------------------------------------------
 # Randomisation and the baseline table. Allocating people to two arms at
 # random and testing the arms against each other at baseline produces
@@ -297,19 +269,6 @@ def randomised_baseline_ps(
     return out
 
 
-# ---------------------------------------------------------------------------
-# Uncertainty in a caffeine estimate, propagated by simulation.
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Interval:
-    estimate: float
-    low: float  # 2.5th percentile
-    high: float  # 97.5th percentile
-    samples: tuple[float, ...]
-
-
 def _percentile(sorted_xs: Sequence[float], q: float) -> float:
     """Linear interpolation between closest ranks."""
     if not sorted_xs:
@@ -318,40 +277,6 @@ def _percentile(sorted_xs: Sequence[float], q: float) -> float:
     lo = math.floor(pos)
     hi = min(lo + 1, len(sorted_xs) - 1)
     return sorted_xs[lo] + (sorted_xs[hi] - sorted_xs[lo]) * (pos - lo)
-
-
-def _interval(samples: list[float], estimate: float) -> Interval:
-    ordered = sorted(samples)
-    return Interval(estimate, _percentile(ordered, 0.025), _percentile(ordered, 0.975), tuple(samples))
-
-
-def simulate_caffeine(
-    drinks: Sequence[tuple[float, float]],
-    shot_mean: float,
-    shot_sd: float,
-    simulations: int = 2000,
-    seed: int = 0,
-) -> dict[str, Interval]:
-    """Total caffeine of a set of drinks, each given as (espresso shots,
-    other mg), with the caffeine in a shot drawn from a gamma distribution
-    of the given mean and SD. Two scenarios, in milligrams:
-
-    "separate": each drink comes from a different café, so each draws its
-    own shot strength and the errors partly cancel across drinks;
-    "one_cafe": the whole round comes from one café, so one draw scales
-    every shot and nothing cancels. A real round is the second case.
-    """
-    shape = (shot_mean / shot_sd) ** 2
-    scale = shot_sd ** 2 / shot_mean
-    shots = sum(s for s, _ in drinks)
-    other = sum(o for _, o in drinks)
-    estimate = shots * shot_mean + other
-    rng = random.Random(seed)
-    separate, one_cafe = [], []
-    for _ in range(simulations):
-        separate.append(other + sum(s * rng.gammavariate(shape, scale) for s, _ in drinks if s))
-        one_cafe.append(other + shots * rng.gammavariate(shape, scale))
-    return {"separate": _interval(separate, estimate), "one_cafe": _interval(one_cafe, estimate)}
 
 
 # ---------------------------------------------------------------------------
@@ -474,32 +399,6 @@ def half_window(minutes: Sequence[int], step: int = 15) -> Optional[tuple[int, i
 
 Z_975 = 1.959964  # two-sided 5%
 Z_80 = 0.841621  # 80% power
-
-
-def _normal_cdf(z: float) -> float:
-    return 0.5 * math.erfc(-z / math.sqrt(2))
-
-
-def power_two_proportions(p1: float, p2: float, n1: int, n2: int) -> float:
-    """Power of a two-sided 5% test to detect proportions p1 and p2 in groups
-    of n1 and n2, by the usual normal approximation."""
-    if n1 <= 0 or n2 <= 0:
-        return 0.0
-    pbar = (p1 * n1 + p2 * n2) / (n1 + n2)
-    null_se = math.sqrt(pbar * (1 - pbar) * (1 / n1 + 1 / n2))
-    alt_se = math.sqrt(p1 * (1 - p1) / n1 + p2 * (1 - p2) / n2)
-    if alt_se == 0:
-        return 1.0 if p1 != p2 else 0.0
-    return _normal_cdf((abs(p1 - p2) - Z_975 * null_se) / alt_se)
-
-
-def n2_for_power(p1: float, p2: float, n1: int, target: float = 0.8, cap: int = 2000) -> Optional[int]:
-    """The smallest second group that gives the target power against a first
-    group of fixed size n1, or None if no group up to cap is enough."""
-    for n2 in range(2, cap + 1):
-        if power_two_proportions(p1, p2, n1, n2) >= target:
-            return n2
-    return None
 
 
 def n_per_group_for_means(difference: float, sd: float) -> int:
@@ -625,18 +524,6 @@ def welch(a: Sequence[float], b: Sequence[float]) -> Optional[Welch]:
     return Welch(diff, se, df, min(1.0, 2 * t_sf(abs(diff) / se, df)), diff - tq * se, diff + tq * se)
 
 
-def tost(a: Sequence[float], b: Sequence[float], margin: float) -> Optional[tuple[Welch, float]]:
-    """Two one-sided tests for equivalence within ±margin: the larger of the
-    two one-sided p-values. Below 0.05 means the groups are shown to be the
-    same to within the margin, which a non-significant t-test never shows."""
-    w = welch(a, b)
-    if w is None or w.se == 0:
-        return None
-    p_lower = t_sf((w.difference + margin) / w.se, w.df)
-    p_upper = t_sf((margin - w.difference) / w.se, w.df)
-    return w, max(p_lower, p_upper)
-
-
 def cluster_bootstrap_diff(
     items: Sequence[tuple[Hashable, int, float]], resamples: int = 2000, seed: int = 0
 ) -> Optional[tuple[float, float, float]]:
@@ -668,52 +555,6 @@ def cluster_bootstrap_diff(
             out.append(d)
     out.sort()
     return est, _percentile(out, 0.025), _percentile(out, 0.975)
-
-
-@dataclass(frozen=True)
-class OddsRatio:
-    estimate: float
-    low: float
-    high: float
-
-
-def _woolf(a: float, b: float, c: float, d: float) -> OddsRatio:
-    """Odds ratio ad/bc with Woolf's interval; half is added to every cell
-    when one is empty (Haldane–Anscombe)."""
-    if 0 in (a, b, c, d):
-        a, b, c, d = a + 0.5, b + 0.5, c + 0.5, d + 0.5
-    or_ = a * d / (b * c)
-    se = math.sqrt(1 / a + 1 / b + 1 / c + 1 / d)
-    return OddsRatio(or_, or_ * math.exp(-Z_975 * se), or_ * math.exp(Z_975 * se))
-
-
-def mantel_haenszel(strata: Sequence[tuple[int, int, int, int]]) -> Optional[tuple[OddsRatio, OddsRatio]]:
-    """Crude and Mantel–Haenszel odds ratios from 2×2 strata (a, b, c, d):
-    a = exposed with the outcome, b = exposed without, c = unexposed with,
-    d = unexposed without. The crude ratio pools the strata; the MH ratio
-    compares like with like inside each stratum, removing confounding by
-    whatever the strata are. MH interval by Robins, Breslow and Greenland."""
-    strata = [s for s in strata if sum(s) > 0]
-    a, b, c, d = (sum(s[i] for s in strata) for i in range(4))
-    if not strata or min(a + b, c + d, a + c, b + d) == 0:
-        return None
-    crude = _woolf(a, b, c, d)
-    num = den = 0.0
-    p_r = ps_qr = q_s = 0.0
-    for sa, sb, sc, sd in strata:
-        n = sa + sb + sc + sd
-        r, s = sa * sd / n, sb * sc / n
-        p, q = (sa + sd) / n, (sb + sc) / n
-        num, den = num + r, den + s
-        p_r += p * r
-        ps_qr += p * s + q * r
-        q_s += q * s
-    if num == 0 or den == 0:
-        return crude, _woolf(a, b, c, d)
-    or_mh = num / den
-    var = p_r / (2 * num * num) + ps_qr / (2 * num * den) + q_s / (2 * den * den)
-    se = math.sqrt(var)
-    return crude, OddsRatio(or_mh, or_mh * math.exp(-Z_975 * se), or_mh * math.exp(Z_975 * se))
 
 
 @dataclass(frozen=True)
@@ -793,220 +634,6 @@ def share_for_half(values: Sequence[float]) -> float:
     return 1.0
 
 
-def gini_interval(values: Sequence[float], resamples: int = 1000, seed: int = 0) -> tuple[float, float]:
-    rng = random.Random(seed)
-    n = len(values)
-    out = sorted(lorenz([values[rng.randrange(n)] for _ in range(n)])[1] for _ in range(resamples))
-    return _percentile(out, 0.025), _percentile(out, 0.975)
-
-
-def _ranks(xs: Sequence[float]) -> list[float]:
-    order = sorted(range(len(xs)), key=lambda i: xs[i])
-    ranks = [0.0] * len(xs)
-    i = 0
-    while i < len(order):
-        j = i
-        while j + 1 < len(order) and xs[order[j + 1]] == xs[order[i]]:
-            j += 1
-        for k in range(i, j + 1):
-            ranks[order[k]] = (i + j) / 2 + 1
-        i = j + 1
-    return ranks
-
-
-def _pearson(x: Sequence[float], y: Sequence[float]) -> float:
-    mx, my = statistics.fmean(x), statistics.fmean(y)
-    sxy = sum((a - mx) * (b - my) for a, b in zip(x, y))
-    sxx = sum((a - mx) ** 2 for a in x)
-    syy = sum((b - my) ** 2 for b in y)
-    return sxy / math.sqrt(sxx * syy) if sxx and syy else 0.0
-
-
-def spearman(x: Sequence[float], y: Sequence[float], permutations: int = 999, seed: int = 0) -> tuple[float, float]:
-    """Spearman's rank correlation with a two-sided permutation p-value."""
-    if len(x) < 3:
-        return 0.0, 1.0
-    rx, ry = _ranks(x), _ranks(y)
-    rho = _pearson(rx, ry)
-    rng = random.Random(seed)
-    shuffled = list(ry)
-    at_least = 0
-    for _ in range(permutations):
-        rng.shuffle(shuffled)
-        if abs(_pearson(rx, shuffled)) >= abs(rho) - 1e-12:
-            at_least += 1
-    return rho, (at_least + 1) / (permutations + 1)
-
-
-def dispersion(counts: Sequence[int]) -> tuple[float, float]:
-    """Variance-to-mean ratio of counts and the p-value against a Poisson
-    process, for which the ratio is 1: (n − 1) × ratio follows χ² on n − 1
-    degrees of freedom. Above 1, counts clump more than chance predicts."""
-    n = len(counts)
-    if n < 2:
-        return 1.0, 1.0
-    mean = statistics.fmean(counts)
-    ratio = statistics.variance(counts) / mean if mean else 1.0
-    return ratio, chi2_sf((n - 1) * ratio, n - 1)
-
-
-def poisson_pmf(k: int, lam: float) -> float:
-    return math.exp(k * math.log(lam) - lam - math.lgamma(k + 1)) if lam > 0 else float(k == 0)
-
-
-def cusum(values: Sequence[float], target: float, sd: float, k: float = 0.5, h: float = 4.0) -> list[tuple[float, float, bool]]:
-    """Tabular CUSUM: for each value, the upper and lower cumulative sums of
-    standardised departures from target beyond an allowance of k SDs, and
-    whether either has crossed the decision limit h. The same chart tracks
-    a trainee's procedural failures for a learning curve."""
-    hi = lo = 0.0
-    out = []
-    for v in values:
-        z = (v - target) / sd if sd else 0.0
-        hi = max(0.0, hi + z - k)
-        lo = max(0.0, lo - z - k)
-        out.append((hi, lo, hi > h or lo > h))
-    return out
-
-
-def fisher_exact(a: int, b: int, c: int, d: int) -> float:
-    """Two-sided Fisher's exact p for the 2×2 table [[a, b], [c, d]]: the sum
-    of every table with the same margins that is no more likely."""
-    r1, c1, n = a + b, a + c, a + b + c + d
-    lo, hi = max(0, r1 + c1 - n), min(r1, c1)
-    log_p = lambda x: (
-        math.lgamma(r1 + 1) + math.lgamma(n - r1 + 1) + math.lgamma(c1 + 1) + math.lgamma(n - c1 + 1)
-        - math.lgamma(n + 1) - math.lgamma(x + 1) - math.lgamma(r1 - x + 1)
-        - math.lgamma(c1 - x + 1) - math.lgamma(n - r1 - c1 + x + 1)
-    )
-    observed = log_p(a)
-    return min(1.0, sum(math.exp(log_p(x)) for x in range(lo, hi + 1) if log_p(x) <= observed + 1e-9))
-
-
-def fragility_index(a: int, b: int, c: int, d: int) -> Optional[int]:
-    """For a significant 2×2 result, how many members of the group with fewer
-    events would have to switch from no event to event (in the direction
-    that weakens the result) before p reaches 0.05. None if p ≥ 0.05."""
-    if fisher_exact(a, b, c, d) >= 0.05:
-        return None
-    flips = 0
-    # Move the group with the lower event rate towards the other.
-    while fisher_exact(a, b, c, d) < 0.05:
-        if a / max(a + b, 1) < c / max(c + d, 1):
-            if b == 0:
-                return None
-            a, b = a + 1, b - 1
-        else:
-            if d == 0:
-                return None
-            c, d = c + 1, d - 1
-        flips += 1
-    return flips
-
-
-@dataclass(frozen=True)
-class Roc:
-    points: list[tuple[float, float]]  # (1 − specificity, sensitivity)
-    auc: float
-    low: float
-    high: float
-
-
-def roc(scores: Sequence[float], positive: Sequence[bool]) -> Optional[Roc]:
-    """ROC curve for a score predicting a binary label, with the AUC (the
-    chance a random positive scores above a random negative, ties counting
-    half) and the Hanley–McNeil 95% interval."""
-    pos = [s for s, y in zip(scores, positive) if y]
-    neg = [s for s, y in zip(scores, positive) if not y]
-    if not pos or not neg:
-        return None
-    thresholds = sorted(set(scores), reverse=True)
-    points = [(0.0, 0.0)]
-    for t in thresholds:
-        points.append((sum(s >= t for s in neg) / len(neg), sum(s >= t for s in pos) / len(pos)))
-    auc = sum((s > n) + 0.5 * (s == n) for s in pos for n in neg) / (len(pos) * len(neg))
-    q1, q2 = auc / (2 - auc), 2 * auc * auc / (1 + auc)
-    var = (auc * (1 - auc) + (len(pos) - 1) * (q1 - auc ** 2) + (len(neg) - 1) * (q2 - auc ** 2)) / (len(pos) * len(neg))
-    se = math.sqrt(max(var, 0.0))
-    return Roc(points, auc, max(0.0, auc - Z_975 * se), min(1.0, auc + Z_975 * se))
-
-
-def normal_posterior(estimate: float, se: float, prior_sd: float) -> tuple[float, float]:
-    """Posterior mean and SD for a difference, from a normal likelihood
-    (estimate, se) and a sceptical normal prior centred on no difference."""
-    w_prior, w_data = 1 / prior_sd ** 2, 1 / se ** 2
-    sd = math.sqrt(1 / (w_prior + w_data))
-    return estimate * w_data * sd * sd, sd
-
-
-# ---------------------------------------------------------------------------
-# Agreement between two methods of measuring the same thing.
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class BlandAltman:
-    n: int
-    bias: float  # mean of (b − a)
-    sd: float
-    lower: float  # bias − 1.96 SD: the 95% limits of agreement
-    upper: float
-    slope: float  # of the difference on the mean: proportional bias
-    slope_p: float
-    r: float  # Pearson correlation of a and b, for contrast
-
-
-def bland_altman(a: Sequence[float], b: Sequence[float]) -> Optional[BlandAltman]:
-    """Bland and Altman's analysis of b against a: the mean difference, the
-    limits within which 95% of differences fall, and whether the difference
-    grows with the size of the measurement."""
-    n = len(a)
-    if n < 3:
-        return None
-    diffs = [y - x for x, y in zip(a, b)]
-    means = [(x + y) / 2 for x, y in zip(a, b)]
-    bias, sd = statistics.fmean(diffs), statistics.stdev(diffs)
-    mx = statistics.fmean(means)
-    sxx = sum((m - mx) ** 2 for m in means)
-    slope = sum((m - mx) * (d - bias) for m, d in zip(means, diffs)) / sxx if sxx else 0.0
-    resid = [d - bias - slope * (m - mx) for m, d in zip(means, diffs)]
-    s2 = sum(e * e for e in resid) / (n - 2) if n > 2 else 0.0
-    se = math.sqrt(s2 / sxx) if sxx and s2 else 0.0
-    slope_p = 2 * t_sf(abs(slope) / se, n - 2) if se else (0.0 if slope else 1.0)
-    return BlandAltman(n, bias, sd, bias - Z_975 * sd, bias + Z_975 * sd, slope, min(1.0, slope_p), _pearson(a, b))
-
-
-def cohen_kappa(a: Sequence[int], b: Sequence[int], categories: int, weighted: bool = False) -> float:
-    """Cohen's kappa for two ratings of the same items on categories 0..k−1:
-    agreement beyond what chance would produce, from 0 (chance) to 1
-    (perfect). Weighted, a near miss counts as partial agreement, in
-    proportion to how near (linear weights)."""
-    n = len(a)
-    if n == 0:
-        return math.nan
-    w = lambda i, j: 1 - abs(i - j) / (categories - 1) if weighted else float(i == j)
-    pa = Counter(a)
-    pb = Counter(b)
-    observed = sum(w(i, j) for i, j in zip(a, b)) / n
-    expected = sum(w(i, j) * pa[i] * pb[j] for i in range(categories) for j in range(categories)) / (n * n)
-    return (observed - expected) / (1 - expected) if expected < 1 else 1.0
-
-
-def kappa_interval(a: Sequence[int], b: Sequence[int], categories: int, weighted: bool,
-                   resamples: int = 1000, seed: int = 0) -> tuple[float, float]:
-    """95% bootstrap interval for kappa, resampling the rated items."""
-    rng = random.Random(seed)
-    n = len(a)
-    out = []
-    for _ in range(resamples):
-        idx = [rng.randrange(n) for _ in range(n)]
-        k = cohen_kappa([a[i] for i in idx], [b[i] for i in idx], categories, weighted)
-        if not math.isnan(k):
-            out.append(k)
-    out.sort()
-    return _percentile(out, 0.025), _percentile(out, 0.975)
-
-
 def cluster_bootstrap(
     clusters: Sequence[Sequence], stat, resamples: int = 500, seed: int = 0
 ) -> Optional[tuple[float, float]]:
@@ -1027,18 +654,6 @@ def cluster_bootstrap(
         return None
     out.sort()
     return _percentile(out, 0.025), _percentile(out, 0.975)
-
-
-def auc(scores: Sequence[float], positive: Sequence[bool]) -> Optional[float]:
-    """Area under the ROC curve by ranks (the Mann–Whitney U over n₁n₀), so
-    it is fast enough to bootstrap."""
-    n1 = sum(1 for y in positive if y)
-    n0 = len(positive) - n1
-    if n1 == 0 or n0 == 0:
-        return None
-    ranks = _ranks(scores)
-    r1 = sum(r for r, y in zip(ranks, positive) if y)
-    return (r1 - n1 * (n1 + 1) / 2) / (n1 * n0)
 
 
 def poisson_binomial(rates: Sequence[float]) -> list[float]:

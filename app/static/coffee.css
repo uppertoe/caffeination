@@ -1232,12 +1232,6 @@ article form legend {
 .cusum-hi { fill: none; stroke: var(--accent); stroke-width: 2; }
 .cusum-lo { fill: none; stroke: var(--cool); stroke-width: 2; }
 
-/* Agreement: Bland–Altman lines and the band table's diagonal. */
-.ba-bias { stroke: var(--ink-strong); stroke-width: 1.6; }
-.ba-limit { stroke: var(--ink-strong); stroke-width: 1.2; stroke-dasharray: 6 4; }
-.agree-table td { font-weight: 600; }
-.agree-diag { background: var(--row-tint) !important; box-shadow: inset 0 0 0 2px var(--accent); border-radius: 0.3rem; }
-
 /* Contents bar, sticky at the top of the page while reading. */
 .stats-nav {
   position: sticky;
@@ -1284,27 +1278,181 @@ article form legend {
 .axis-title { margin: 0.1rem 0 0; font-size: 0.75rem; color: var(--ink-muted); }
 .ci-label small { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 
-/* At a glance: one fact per tile, each a way into its section. */
-.glance {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 45%), 1fr));
-  gap: 0.6rem;
-  margin: 0.2rem 0 1.4rem;
+/* ===========================================================================
+   Statistics as an infographic.
+   Five categorical colours, validated for colour-vision deficiency in both
+   themes (dataviz validator); each section wears one as --sc. Text and
+   figure sit side by side on a wide screen and swap sides down the page.
+   =========================================================================== */
+:root:not([data-theme="dark"]) {
+  --c1: #d9692b; --c2: #2a78d6; --c3: #1baf7a; --c4: #eda100; --c5: #e87ba4; --c0: #b9ab9c;
+  --c-ink: #ffffff; --c4-ink: #2b1d0e;
 }
-.glance-tile {
+:root[data-theme="dark"] {
+  --c1: #d95926; --c2: #3987e5; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c0: #6b5b4b;
+  --c-ink: #ffffff; --c4-ink: #1a1208;
+}
+
+main.container:has(.stats-page) { max-width: 74rem; }
+.stats-head, .stats-nav, .part-head { max-width: 74rem; }
+
+.part-head { margin: 3.2rem 0 1.4rem; text-align: left; }
+.part-title { font-size: clamp(1.7rem, 3.4vw, 2.4rem); }
+
+.story {
+  --sc: var(--c1);
   display: grid;
-  gap: 0.15rem;
-  padding: 0.75rem 0.9rem;
-  border-radius: calc(var(--pico-border-radius) * 2);
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(1.2rem, 3vw, 2.8rem);
+  align-items: start;
+  margin: 0 0 1.4rem;
+  padding: clamp(1.1rem, 2.6vw, 2.1rem);
+  border-radius: 1.1rem;
   background: var(--card-bg);
   border: 1px solid var(--card-line);
+  border-top: 5px solid var(--sc);
   box-shadow: var(--card-shadow);
-  color: inherit;
-  text-decoration: none;
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  scroll-margin-top: 6rem;
 }
-.glance-tile:hover { border-color: var(--accent); }
-@media (prefers-reduced-motion: no-preference) { .glance-tile:hover { transform: translateY(-1px); } }
-.glance-label { font-size: 0.78rem; color: var(--ink-muted); }
-.glance-value { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; color: var(--ink-strong); line-height: 1.25; }
-.facet-unused { margin: 0.5rem 0 0; font-size: 0.82rem; color: var(--ink-muted); }
+.story:nth-of-type(even) > .story-text { order: 2; }
+.story-text > :last-child, .story-figure > :last-child { margin-bottom: 0; }
+.story-title {
+  font-size: 1.35rem;
+  margin: 0 0 0.7rem;
+  color: var(--heading);
+}
+.story .headline {
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 1.9vw, 1.4rem);
+  line-height: 1.35;
+  margin: 0 0 1rem;
+  color: var(--ink-strong);
+}
+.story .headline .num {
+  display: inline-block;
+  font-size: 1.55em;
+  line-height: 1.05;
+  font-weight: 700;
+  color: var(--sc);
+  filter: saturate(1.05);
+}
+.story-figure { min-width: 0; }
+.fact-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.5rem; margin: 0 0 1rem; }
+.fact-row .fact { border-left: 3px solid var(--sc); }
+.fact-row .fact-icon { stroke: var(--sc); }
+.story .tab[aria-selected="true"] { background: var(--sc); border-color: var(--sc); color: var(--c-ink); }
+.story .bar { fill: var(--sc); }
+.story .bar-extreme { fill: var(--ink-strong); }
+.story .round-dot { fill: var(--sc); }
+.story .km-curve, .story .lorenz-curve, .story .post-curve { stroke: var(--sc); }
+.story .km-band { fill: var(--sc); }
+.story .share-bar { background: var(--sc); }
+.story .bits-bar { background: var(--sc); }
+.story .working-table tr.is-rarest th, .story .working-table tr.is-rarest td { background: color-mix(in srgb, var(--sc) 14%, transparent); }
+.key-section { border-top-color: var(--sc); }
+.allocate-btn { background: var(--sc); border-color: var(--sc); color: var(--c-ink); }
+.allocate-btn:hover { filter: brightness(1.08); }
+.tally { margin: 0.8rem 0; padding: 0.55rem 0.8rem; border-radius: 0.6rem; background: var(--row-tint); font-size: 0.9rem; }
+.tally.is-hit { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+
+@media (max-width: 860px) {
+  .story { grid-template-columns: minmax(0, 1fr); }
+  .story:nth-of-type(even) > .story-text { order: 0; }
+}
+
+/* The department fingerprint: one 100% bar per option. */
+.print-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
+.print-row { list-style: none; display: grid; grid-template-columns: 6.4rem 1fr; gap: 0.7rem; align-items: center; }
+.print-label { font-size: 0.85rem; color: var(--ink-muted); text-align: right; }
+.print-bar { position: relative; height: 2.1rem; border-radius: 0.55rem; overflow: hidden; background: var(--row-tint); }
+.print-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  border-right: 2px solid var(--card-bg);
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: default;
+}
+.print-seg.c1 { background: var(--c1); color: var(--c-ink); }
+.print-seg.c2 { background: var(--c2); color: var(--c-ink); }
+.print-seg.c3 { background: var(--c3); color: var(--c-ink); }
+.print-seg.c4 { background: var(--c4); color: var(--c4-ink); }
+.print-seg.c5 { background: var(--c5); color: var(--c-ink); }
+.print-seg.c0 { background: var(--c0); color: var(--c-ink); }
+.print-seg.is-mine { box-shadow: inset 0 0 0 3px var(--ink-strong); }
+.print-seg.is-hot { filter: brightness(1.1); }
+.print-text { font-size: 0.78rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 480px) { .print-row { grid-template-columns: 1fr; gap: 0.2rem; } .print-label { text-align: left; } }
+.numbers-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.4rem 1rem; }
+.numbers-grid .num { text-align: right; }
+
+/* The 24-hour dial. */
+.dial-wrap { position: relative; width: min(100%, 22rem); margin: 0 auto 1rem; aspect-ratio: 1; }
+.dial { width: 100%; height: 100%; overflow: visible; }
+.dial-face { fill: var(--row-tint); stroke: var(--soft-line); }
+.dial-ring { fill: var(--card-bg); stroke: var(--soft-line); }
+.dial-wedge { fill: var(--sc); }
+.dial-wedge.is-hot { fill: var(--ink-strong); }
+.dial-arc { fill: none; stroke: var(--ink-strong); stroke-width: 5; stroke-linecap: round; }
+.dial-label { position: absolute; transform: translate(-50%, -50%); font-size: 0.7rem; color: var(--ink-muted); white-space: nowrap; }
+.dial-centre {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: grid; justify-items: center; line-height: 1;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.6rem; color: var(--sc);
+}
+.dial-centre small { font-family: inherit; font-weight: 400; font-size: 0.7rem; color: var(--ink-muted); margin-top: 0.2rem; }
+
+/* Waiting for rounds: one card, a meter per section. */
+.waiting-card {
+  margin: 0 0 1.4rem;
+  padding: clamp(1.1rem, 2.6vw, 2rem);
+  border-radius: 1.1rem;
+  border: 1px dashed var(--soft-line);
+  background: var(--card-bg);
+}
+.waiting-card > p { color: var(--ink-muted); max-width: 46rem; }
+.wait-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem 1.6rem; margin-top: 1rem; }
+.wait-row h3 { font-size: 1rem; margin: 0 0 0.3rem; }
+.wait-row p { font-size: 0.86rem; margin: 0 0 0.5rem; }
+.wait-row:nth-child(1) { --sc: var(--c2); }
+.wait-row:nth-child(2) { --sc: var(--c4); }
+.wait-row:nth-child(3) { --sc: var(--c3); }
+.wait-row:nth-child(4) { --sc: var(--c5); }
+.wait-row:nth-child(5) { --sc: var(--c1); }
+.meter { height: 0.55rem; border-radius: 1rem; background: var(--row-tint); overflow: hidden; }
+.meter-fill { display: block; height: 100%; border-radius: inherit; background: var(--sc); }
+.wait-row .meter-label { font-size: 0.78rem; color: var(--ink-muted); margin: 0.3rem 0 0; }
+
+.swatch { display: inline-block; width: 0.9rem; height: 0.9rem; border-radius: 0.2rem; margin-right: 0.3rem; vertical-align: -0.12rem; }
+.swatch-above { background: var(--accent); }
+.swatch-below { background: var(--cool); }
+.bayes { margin: 1rem 0; padding: 0.9rem 1rem; border-radius: 0.8rem; background: var(--row-tint); }
+.bayes h3 { margin-top: 0; font-size: 1rem; }
+.bayes-chart { margin-top: 0.4rem; }
+
+/* ---- Motion: one entrance per section, the first time it scrolls into
+   view. Bars grow from the baseline, segments and intervals from the left,
+   wedges and dots pop, lines draw. Nothing moves for reduced motion. ---- */
+@media (prefers-reduced-motion: no-preference) {
+  html.motion .story { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  html.motion .story.in-view { opacity: 1; transform: none; }
+
+  html.motion .story .grow { transform: scaleY(0); transform-box: fill-box; transform-origin: 50% 100%; transition: transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) calc(0.15s + var(--i, 0) * 30ms); }
+  html.motion .story.in-view .grow { transform: scaleY(1); }
+  html.motion .story .print-seg, .story .grow-x { transform: scaleX(0); transform-origin: 0 50%; transition: transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) calc(0.2s + var(--i, 0) * 90ms); }
+  html.motion .story.in-view .print-seg, .story.in-view .grow-x { transform: scaleX(1); }
+  html.motion .story .pop { transform: scale(0); transform-box: fill-box; transform-origin: center; transition: transform 0.5s cubic-bezier(0.3, 1.4, 0.5, 1) calc(0.2s + var(--i, 0) * 18ms); }
+  html.motion .story .dial-wedge.pop { transform-box: view-box; transform-origin: 120px 120px; }
+  html.motion .story.in-view .pop { transform: scale(1); }
+  html.motion .story .draw { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.3s ease 0.3s; }
+  html.motion .story.in-view .draw { stroke-dashoffset: 0; }
+  html.motion .story .bean { opacity: 0; transform: translateY(-8px); transition: opacity 0.4s ease, transform 0.4s ease; transition-delay: calc(0.15s + var(--i, 0) * 25ms); }
+  html.motion .story.in-view .bean { opacity: 1; transform: none; }
+  html.motion .story .xcell::before { transform: scale(0.6); opacity: 0; transition: transform 0.5s ease, opacity 0.5s ease; transition-delay: calc(0.2s + var(--i, 0) * 60ms); }
+  html.motion .story.in-view .xcell::before { transform: none; opacity: calc(0.12 + var(--s) * 0.55); }
+  .meter-fill { transition: width 1s ease 0.2s; }
+}

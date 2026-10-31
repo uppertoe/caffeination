@@ -22,26 +22,16 @@ from app.config import get_settings
 from app.models import Round, RoundDrink
 from app.rounds import DRINK_FIELDS
 from app.stats import (
-    OddsRatio,
-    Roc,
     Welch,
-    auc,
     cluster_bootstrap,
     cluster_bootstrap_diff,
-    cusum,
-    poisson_binomial,
-    variance_test,
-    fisher_exact,
-    fragility_index,
     kaplan_meier,
     km_median,
     lorenz,
-    mantel_haenszel,
     n_per_group_for_means,
-    roc,
+    poisson_binomial,
     share_for_half,
-    spearman,
-    tost,
+    variance_test,
     welch,
 )
 from app.stats_panels import DRINK_GROUPS, drink_group, shots_of
@@ -136,18 +126,7 @@ class Afternoon:
     people: int = 0
     naive_width: Optional[float] = None
     clustered_width: Optional[float] = None
-    crude: Optional[OddsRatio] = None  # odds of a stronger drink after midday
-    adjusted: Optional[OddsRatio] = None  # Mantel–Haenszel, within drink groups
-    # Intervals from resampling colleagues, in place of the textbook ones
-    # that treat every drink as independent.
-    crude_ci: Optional[tuple[float, float]] = None
-    adjusted_ci: Optional[tuple[float, float]] = None
-    auc_ci: Optional[tuple[float, float]] = None
-    informative: list[str] = field(default_factory=list)
-    strata: list[tuple[str, int, int, int, int]] = field(default_factory=list)
     posterior_input: Optional[tuple[float, float]] = None  # (difference, SE) for the slider
-    roc: Optional[Roc] = None
-    roc_path: str = ""
     dots: list[Dot] = field(default_factory=list)  # each round's mean, by time of day
     dot_ticks: list[tuple[float, str]] = field(default_factory=list)
     y_ticks: list[tuple[float, str]] = field(default_factory=list)
@@ -166,43 +145,6 @@ def _colleague_drinks(rounds: list[LoggedRound]) -> list[tuple[LoggedRound, Logg
     """Colleagues' drinks only: guests have their own section, and a guest's
     drink would otherwise count as a colleague who came once."""
     return [(r, d) for r in rounds for d in r.drinks if not d.guest]
-
-
-@lru_cache(maxsize=4)
-def _afternoon_intervals(items: tuple[tuple[str, bool, float, str], ...]):
-    """Person-resampled intervals for the odds ratios and the AUC. Items are
-    (person, afternoon, shots, drink group)."""
-    by_person: dict[str, list] = defaultdict(list)
-    for it in items:
-        by_person[it[0]].append(it)
-    clusters = list(by_person.values())
-
-    def strata(pool):
-        out = []
-        for group in DRINK_GROUPS:
-            cell = [it for it in pool if it[3] == group]
-            out.append((
-                sum(1 for it in cell if it[1] and it[2] >= 2), sum(1 for it in cell if it[1] and it[2] < 2),
-                sum(1 for it in cell if not it[1] and it[2] >= 2), sum(1 for it in cell if not it[1] and it[2] < 2),
-            ))
-        return out
-
-    def crude(pool):
-        res = mantel_haenszel(strata(pool))
-        return res[0].estimate if res else None
-
-    def adjusted(pool):
-        res = mantel_haenszel(strata(pool))
-        return res[1].estimate if res else None
-
-    def area(pool):
-        return auc([it[2] for it in pool], [it[1] for it in pool])
-
-    return (
-        cluster_bootstrap(clusters, crude),
-        cluster_bootstrap(clusters, adjusted),
-        cluster_bootstrap(clusters, area),
-    )
 
 
 def build_afternoon(rounds: list[LoggedRound], usuals: list[Usual]) -> Afternoon:
@@ -224,31 +166,9 @@ def build_afternoon(rounds: list[LoggedRound], usuals: list[Usual]) -> Afternoon
     out.naive_width = out.naive.high - out.naive.low
     out.clustered_width = (out.clustered[2] - out.clustered[1]) if out.clustered else None
 
-    # Odds of a stronger drink after midday, crude and within drink groups.
-    strata = []
-    for group in DRINK_GROUPS:
-        cell = [r_d for r_d in drinks if drink_group(r_d[1].options) == group]
-        a = sum(1 for r, d in cell if r.afternoon and _stronger(d))
-        b = sum(1 for r, d in cell if r.afternoon and not _stronger(d))
-        c = sum(1 for r, d in cell if not r.afternoon and _stronger(d))
-        dd = sum(1 for r, d in cell if not r.afternoon and not _stronger(d))
-        strata.append((group, a, b, c, dd))
-    out.strata = strata
-    mh = mantel_haenszel([s[1:] for s in strata])
-    if mh:
-        out.crude, out.adjusted = mh
-    # Strata in which every drink falls on one side carry no information.
-    out.informative = [g for g, sa, sb, sc, sd in strata if (sa + sc) and (sb + sd) and (sa + sb) and (sc + sd)]
-    items = tuple(sorted((d.person, r.afternoon, d.shots, drink_group(d.options)) for r, d in drinks))
-    out.crude_ci, out.adjusted_ci, out.auc_ci = _afternoon_intervals(items)
-
     if out.clustered:
         est, lo, hi = out.clustered
         out.posterior_input = (est, max((hi - lo) / (2 * 1.96), 1e-3))
-
-    out.roc = roc([d.shots for _, d in drinks], [r.afternoon for r, _ in drinks])
-    if out.roc:
-        out.roc_path = "M" + " L".join(f"{x * 200:.1f},{200 - y * 200:.1f}" for x, y in out.roc.points)
 
     # Each round's mean shots against its time of day.
     lo_t = min(7 * 60, min(r.minutes for r in rounds))
@@ -357,8 +277,8 @@ def build_next_coffee(rounds: list[LoggedRound], now: Optional[datetime] = None)
 
 
 # ---------------------------------------------------------------------------
-# Who comes for coffee: how concentrated the drinks are, whether regulars
-# drink stronger coffee, and how the rounds' mix differs from the census.
+# Who comes for coffee: how concentrated the drinks are, and how the rounds'
+# mix differs from the census.
 # ---------------------------------------------------------------------------
 
 MIN_FOR_ATTENDANCE = 20  # rounds
@@ -374,8 +294,6 @@ class Attendance:
     gini_high: Optional[float] = None
     half_share: Optional[float] = None  # share of colleagues behind half the drinks
     people: int = 0  # colleagues on the roster in the comparison
-    regulars_rho: Optional[float] = None
-    regulars_p: Optional[float] = None
     lorenz_path: str = ""
     mix: list[tuple[str, float, float]] = field(default_factory=list)  # (group, census, rounds)
 
@@ -399,9 +317,6 @@ def build_attendance(rounds: list[LoggedRound], usuals: list[Usual], viewer_id: 
     out.half_share = share_for_half(per_person)
     out.people = len(usuals)
     out.lorenz_path = "M" + " L".join(f"{px * 200:.1f},{200 - py * 200:.1f}" for px, py in points)
-    came = [(counts[u.user_id], shots_of(u.options)) for u in usuals if counts.get(u.user_id)]
-    if len(came) >= 8:
-        out.regulars_rho, out.regulars_p = spearman([c for c, _ in came], [s for _, s in came])
     census = Counter(drink_group(u.options) for u in usuals)
     logged = Counter(drink_group(d.options) for _, d in _colleague_drinks(rounds))
     n_c, n_l = sum(census.values()), sum(logged.values())
@@ -410,8 +325,7 @@ def build_attendance(rounds: list[LoggedRound], usuals: list[Usual], viewer_id: 
 
 
 # ---------------------------------------------------------------------------
-# Round size: Poisson or not, regression to the mean, a CUSUM chart, and
-# whether Monday and Friday rounds are the same size.
+# Round size: against independent joining, and regression to the mean.
 # ---------------------------------------------------------------------------
 
 MIN_FOR_SIZE = 20
@@ -435,13 +349,6 @@ class RoundSize:
     rtm_dots: list[tuple[float, float]] = field(default_factory=list)
     rtm_line: Optional[tuple[float, float, float, float]] = None
     rtm_max: int = 0
-    cusum_hi: str = ""
-    cusum_lo: str = ""
-    cusum_limit_y: float = 0.0
-    cusum_signal: Optional[int] = None  # first round number to cross the limit
-    mon_fri: Optional[tuple[Welch, float]] = None  # (Welch, TOST p) within one drink
-    mon_n: int = 0
-    fri_n: int = 0
 
 
 def build_round_size(rounds: list[LoggedRound]) -> RoundSize:
@@ -485,57 +392,6 @@ def build_round_size(rounds: list[LoggedRound]) -> RoundSize:
         out.rtm_dots = [(scale(a), 200 - scale(b)) for a, b in pairs]
         out.rtm_line = (0, 200 - scale(my - slope * mx), 200, 200 - scale(my + slope * (m - mx)))
 
-    sd = statistics.stdev(sizes) if len(sizes) > 1 else 1.0
-    chart = cusum(sizes, out.mean, sd)
-    limit = 4.0
-    top = max(limit * 1.3, max(max(h, l) for h, l, _ in chart))
-    x = lambda i: i / max(len(chart) - 1, 1) * CHART_W
-    y = lambda v: CHART_H - v / top * (CHART_H - 4)
-    out.cusum_hi = "M" + " L".join(f"{x(i):.1f},{y(h):.1f}" for i, (h, _, _) in enumerate(chart))
-    out.cusum_lo = "M" + " L".join(f"{x(i):.1f},{y(l):.1f}" for i, (_, l, _) in enumerate(chart))
-    out.cusum_limit_y = y(limit)
-    out.cusum_signal = next((i + 1 for i, (_, _, s) in enumerate(chart) if s), None)
-
-    mon = [r.size for r in rounds if r.placed.weekday() == 0]
-    fri = [r.size for r in rounds if r.placed.weekday() == 4]
-    out.mon_n, out.fri_n = len(mon), len(fri)
-    if len(mon) >= 5 and len(fri) >= 5:
-        out.mon_fri = tost(mon, fri, 1.0)
-    return out
-
-
-# ---------------------------------------------------------------------------
-# Guests: do one-off guests order differently? Fisher's exact test, with the
-# fragility index when the result is significant.
-# ---------------------------------------------------------------------------
-
-MIN_GUESTS = 5
-
-
-@dataclass
-class Guests:
-    ready: bool
-    guests: int
-    table: Optional[tuple[int, int, int, int]] = None  # guest milk coffee, guest other, regular milk coffee, regular other
-    p: Optional[float] = None
-    fragility: Optional[int] = None
-
-
-def build_guests(rounds: list[LoggedRound], usuals: list[Usual]) -> Guests:
-    """Guests' drinks against colleagues' usual drinks, one per colleague, so
-    a regular's hundred repeat lattes count once, as one person's choice."""
-    guests = [d for r in rounds for d in r.drinks if d.guest]
-    out = Guests(len(guests) >= MIN_GUESTS, len(guests))
-    if not out.ready or not usuals:
-        out.ready = False
-        return out
-    milk = lambda o: drink_group(o) == "Milk coffee"
-    out.table = (
-        sum(1 for d in guests if milk(d.options)), sum(1 for d in guests if not milk(d.options)),
-        sum(1 for u in usuals if milk(u.options)), sum(1 for u in usuals if not milk(u.options)),
-    )
-    out.p = fisher_exact(*out.table)
-    out.fragility = fragility_index(*out.table)
     return out
 
 
@@ -545,7 +401,6 @@ class RoundPanels:
     next_coffee: NextCoffee
     attendance: Attendance
     size: RoundSize
-    guests: Guests
 
 
 def build_round_panels(session: Session, usuals: list[Usual], viewer_id: str) -> RoundPanels:
@@ -555,5 +410,4 @@ def build_round_panels(session: Session, usuals: list[Usual], viewer_id: str) ->
         next_coffee=build_next_coffee(rounds),
         attendance=build_attendance(rounds, usuals, viewer_id),
         size=build_round_size(rounds),
-        guests=build_guests(rounds, usuals),
     )

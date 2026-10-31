@@ -49,7 +49,9 @@
   const arm = () => {
     observer?.disconnect();
     const links = new Map(
-      [...document.querySelectorAll(".stats-nav a")].map((a) => [a.hash.slice(1), a])
+      [...document.querySelectorAll(".stats-nav a")]
+        .filter((a) => document.getElementById(a.hash.slice(1)))
+        .map((a) => [a.hash.slice(1), a])
     );
     if (!links.size) return;
     const visible = new Set();
@@ -81,4 +83,47 @@
   };
   arm();
   document.addEventListener("htmx:afterSettle", arm);
+})();
+
+/* Sections play their entrance once, the first time they come into view,
+   and headline numbers count up as they do. Re-armed after htmx swaps. */
+(() => {
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const countUp = (el) => {
+    const text = el.textContent.trim();
+    const m = text.match(/^(\d+(?:\.\d+)?)(.*)$/);
+    if (still || !m) return;
+    const target = parseFloat(m[1]);
+    const places = (m[1].split(".")[1] || "").length;
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / 900);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = (target * eased).toFixed(places) + m[2];
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+  let observer = null;
+  const arm = () => {
+    observer?.disconnect();
+    observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          e.target.classList.add("in-view");
+          e.target.querySelectorAll(".headline .num").forEach(countUp);
+          observer.unobserve(e.target);
+        }
+      },
+      { threshold: 0.12 }
+    );
+    document.querySelectorAll(".story:not(.in-view)").forEach((s) => observer.observe(s));
+  };
+  arm();
+  document.addEventListener("htmx:afterSettle", (e) => {
+    // A swapped-in fragment inside a section that has already played shows at once.
+    e.target.closest?.(".story")?.classList.add("in-view");
+    arm();
+  });
 })();

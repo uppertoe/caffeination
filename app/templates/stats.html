@@ -4,6 +4,9 @@
 {% block title %}Department statistics, {{ app_name }}{% endblock %}
 
 {% block content %}
+{# Sections are hidden for their entrance animation only once this has run,
+   so the page reads in full without JavaScript. #}
+<script>document.documentElement.classList.add("motion");</script>
 {{ bean_defs() }}
 <div class="stats-page">
   <header class="stats-head">
