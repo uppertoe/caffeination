@@ -7,6 +7,10 @@
   :class="{ 'is-open': open }"
   @keydown.escape.window="open = false">
   <header><h2>This order:</h2></header>
+  {# Shown by coffee.js while order changes are waiting for the server, so
+     outside the branches: the first add can be the unsaved one. #}
+  <p class="save-note unsaved-note">This order has changes that have not been saved yet. The summary will update once they are.</p>
+  <p class="save-note failed-note">Your recent changes could not be saved. Please try again.</p>
   {% if till_lines %}
     <textarea
       readonly

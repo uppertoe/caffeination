@@ -1246,7 +1246,18 @@ article form legend {
   white-space: nowrap;
 }
 .nav-group::-webkit-scrollbar { display: none; }
-.nav-part { font-size: 0.78rem; color: var(--ink-muted); margin-right: 0.15rem; flex: none; }
+/* The part's label stays at the left of its row while the links scroll
+   sideways beneath it, so it is never left scrolled out of sight. */
+.nav-part {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: none;
+  padding-right: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  background: linear-gradient(to right, var(--page-bg) calc(100% - 0.5rem), transparent);
+}
 .nav-chip {
   flex: none;
   padding: 0.18rem 0.65rem;
@@ -1746,6 +1757,12 @@ article form legend {
    out while the request is in flight. */
 .roster-list li.is-pending { pointer-events: none; }
 #order-list li.is-leaving { opacity: 0.35; transition: opacity 0.15s ease; pointer-events: none; }
+/* Changes waiting for the server (see coffee.js): the row's tick and tint
+   are drawn dashed, and the till summary says the order isn't saved yet. */
+.roster-list li.is-unsaved { outline: 1px dashed color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: -1px; }
+.save-note { display: none; margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--ink-muted); }
+html.has-unsaved .unsaved-note, html.save-failed .failed-note { display: block; }
+html.save-failed .failed-note { color: var(--ink-strong); }
 
 /* ---- The header stays in view on a wide screen --------------------------- *
    From 1,000px the site header is sticky on every page. coffee.js measures

@@ -89,39 +89,169 @@ document.addEventListener("alpine:init", () => {
 /* Optimistic order changes: a roster row turns selected (or back) and a row
    in "Your order" fades out the moment its button is tapped, rather than
    after the round trip, which is noticeable on a slow network. The server's
-   response then confirms the state as before; if the request fails, the row
-   is put back as it was. */
+   response then confirms the state as before.
+
+   If the server can't be reached (no response, or a 5xx while it restarts),
+   the change is kept rather than undone: the row is marked unsaved and the
+   change is retried until the server answers again. While anything is
+   unsaved, every further tap is queued the same way, so tapping a row twice
+   simply cancels its change. A person's saved state is which URL their
+   roster button posts to, since that is what the server last rendered; the
+   wanted state is kept here and put back on the rows after any re-render.
+   After about a minute without a response the rows are put back and the
+   till summary says so. A refusal from the server (4xx) is undone straight
+   away, as before. */
 (() => {
+  const GIVE_UP_MS = 60000;
   const rosterButton = (el) => el.closest?.(".roster-list li button[hx-post]");
   const orderButton = (el) => el.closest?.('#order-list li button[hx-post^="/order/remove/"]');
+  const rosterRow = (id) => document.getElementById(`roster-${id}`);
+  const listRow = (id) =>
+    document.querySelector(`#order-list li button[hx-post^="/order/remove/${id}?"]`)?.closest("li");
+  const idOf = (button) => button.getAttribute("hx-post").match(/\/order\/(?:add|remove)\/([^/?]+)/)[1];
+
+  const unsaved = new Map(); // person id -> wanted in the order
+  let since = 0;
+  let timer = null;
+  let delay = 0;
+  let flushing = false;
+  let sending = null; // the person whose change is on its way to the server
+
+  const savedIn = (li) => !!li.querySelector('button[hx-post^="/order/remove/"]');
+  const wantedIn = (li) => li.classList.contains("is-selected");
+
+  // Show a roster row as selected or not, without touching what it posts.
+  const show = (li, selected) => {
+    li.classList.toggle("is-selected", selected);
+    const button = li.querySelector("button[hx-post]");
+    if (button) button.textContent = selected ? "Remove" : "Add";
+  };
+
+  const note = () => document.documentElement.classList.toggle("has-unsaved", unsaved.size > 0);
+
+  // Put the unsaved changes back on the rows, after anything re-rendered them.
+  const mark = () => {
+    for (const [id, wanted] of unsaved) {
+      const li = rosterRow(id);
+      if (li) { show(li, wanted); li.classList.add("is-unsaved"); }
+      listRow(id)?.classList.toggle("is-leaving", !wanted);
+    }
+    note();
+  };
+
+  // A row now shows the state wanted for it; remember it if the server
+  // hasn't got that state yet, or forget it if the server already has.
+  const track = (id) => {
+    const li = rosterRow(id);
+    if (!li) return;
+    li.classList.remove("is-pending");
+    const wanted = wantedIn(li);
+    // While their change is out, the saved state is about to flip, so a
+    // second tap must be kept even though it matches the row as rendered.
+    if (wanted !== savedIn(li) || id === sending) {
+      if (!unsaved.size) { since = Date.now(); delay = 0; }
+      unsaved.set(id, wanted);
+    } else {
+      unsaved.delete(id);
+      li.classList.remove("is-unsaved");
+      listRow(id)?.classList.remove("is-leaving");
+    }
+    mark();
+    schedule();
+  };
+
+  // Retry after a second, backing off to eight while the server stays away.
+  const schedule = (failed = false) => {
+    clearTimeout(timer);
+    if (!unsaved.size || flushing) return;
+    if (failed || !delay) delay = Math.min(delay ? delay * 2 : 1000, 8000);
+    timer = setTimeout(flush, delay);
+  };
+
+  const giveUp = () => {
+    for (const id of unsaved.keys()) {
+      const li = rosterRow(id);
+      if (li) { show(li, savedIn(li)); li.classList.remove("is-unsaved"); }
+      listRow(id)?.classList.remove("is-leaving");
+    }
+    unsaved.clear();
+    note();
+    document.documentElement.classList.add("save-failed");
+  };
+
+  // Send each unsaved change, one at a time, in the shape a roster tap sends.
+  const flush = async () => {
+    flushing = true;
+    let failed = false;
+    try {
+      for (const [id, wanted] of [...unsaved]) {
+        const li = rosterRow(id);
+        if (!li || wanted === savedIn(li)) { li?.classList.remove("is-unsaved"); unsaved.delete(id); continue; }
+        let response;
+        sending = id;
+        try {
+          response = await fetch(`/order/${wanted ? "add" : "remove"}/${id}`, {
+            method: "POST",
+            headers: { "HX-Request": "true", "HX-Target": `roster-${id}` },
+          });
+        } catch { response = null; }
+        sending = null;
+        if (!response || response.status >= 500) { failed = true; break; }
+        delay = 0;
+        const html = await response.text();
+        // Tapped again while the request was out: keep that newer change.
+        if (unsaved.get(id) === wanted) unsaved.delete(id);
+        if (response.ok) htmx.swap(`#roster-${id}`, html, { swapStyle: "outerHTML" });
+        mark();
+      }
+    } finally {
+      flushing = false;
+    }
+    if (unsaved.size && Date.now() - since > GIVE_UP_MS) giveUp();
+    note();
+    schedule(failed);
+  };
+
+  document.addEventListener("htmx:afterSettle", () => { if (unsaved.size) mark(); });
+  window.addEventListener("online", () => { if (unsaved.size) { delay = 0; clearTimeout(timer); flush(); } });
 
   document.addEventListener("htmx:beforeRequest", (e) => {
     const roster = rosterButton(e.target);
+    const order = orderButton(e.target);
+    if (!roster && !order) return;
+    document.documentElement.classList.remove("save-failed");
     if (roster) {
       const li = roster.closest("li");
-      const adding = !li.classList.contains("is-selected");
-      li.classList.toggle("is-selected", adding);
-      roster.dataset.label = roster.textContent;
-      roster.textContent = adding ? "Remove" : "Add";
+      show(li, !wantedIn(li));
+      if (unsaved.size) { e.preventDefault(); track(idOf(roster)); return; }
       li.classList.add("is-pending");
       return;
     }
-    const order = orderButton(e.target);
-    if (order) order.closest("li").classList.add("is-leaving");
+    const id = idOf(order);
+    if (unsaved.size && rosterRow(id)) { e.preventDefault(); show(rosterRow(id), false); track(id); return; }
+    order.closest("li").classList.add("is-leaving");
   });
 
   document.addEventListener("htmx:afterRequest", (e) => {
     if (e.detail.successful) return;
     const roster = rosterButton(e.target);
-    if (roster) {
-      const li = roster.closest("li");
-      li.classList.toggle("is-selected");
-      li.classList.remove("is-pending");
-      if (roster.dataset.label) roster.textContent = roster.dataset.label;
+    const order = orderButton(e.target);
+    if (!roster && !order) return;
+    const status = e.detail.xhr?.status ?? 0;
+    const unreachable = status === 0 || status >= 500;
+    const id = idOf(roster || order);
+    if (unreachable && rosterRow(id)) {
+      if (order) show(rosterRow(id), false);
+      track(id);
       return;
     }
-    const order = orderButton(e.target);
-    if (order) order.closest("li").classList.remove("is-leaving");
+    if (roster) {
+      const li = roster.closest("li");
+      show(li, savedIn(li));
+      li.classList.remove("is-pending");
+      return;
+    }
+    order.closest("li").classList.remove("is-leaving");
   });
 })();
 

@@ -65,11 +65,16 @@
           if (on) a.setAttribute("aria-current", "true");
           else a.removeAttribute("aria-current");
           if (on) {
-            // Scroll the bar sideways only, never the page.
+            // Scroll the bar sideways only, never the page, keeping the chip
+            // clear of the part's label pinned at the left. The first chip
+            // takes the bar right back to its start.
             const bar = a.parentElement;
+            const label = bar.querySelector(".nav-part")?.offsetWidth ?? 0;
+            const first = a === bar.querySelector(".nav-chip");
             const left = a.offsetLeft - bar.offsetLeft;
-            if (left < bar.scrollLeft || left + a.offsetWidth > bar.scrollLeft + bar.clientWidth) {
-              bar.scrollTo({ left: left - 24, behavior: "smooth" });
+            const target = first ? 0 : left - label - 12;
+            if (first ? bar.scrollLeft > 0 : left < bar.scrollLeft + label || left + a.offsetWidth > bar.scrollLeft + bar.clientWidth) {
+              bar.scrollTo({ left: target, behavior: "smooth" });
             }
           }
         }
