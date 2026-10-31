@@ -1,10 +1,11 @@
 import hashlib
+import re
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import configure_mappers
@@ -90,6 +91,34 @@ def asset(path: str) -> str:
 
 
 templates.env.globals["asset"] = asset
+
+
+# Stylesheets whose url() references are fingerprinted on the way out. The
+# file on disk refers to its fonts and background images by plain /static
+# path; served raw, those would carry no ?v= tag, so the scaffold's caching
+# rule would never apply and the browser would revalidate every one of them
+# on every page load (through the gateway, off the office network).
+_CSS_URL = re.compile(r"""url\((["']?)/static/([^"')?]+)\1\)""")
+
+
+@lru_cache(maxsize=8)
+def _fingerprinted_css(rel_path: str) -> tuple[str, str]:
+    """A stylesheet with every url(/static/...) rewritten to its asset() URL,
+    and the first 8 hex of the rewritten text's SHA-256. Cached for the
+    process lifetime, like the asset fingerprints themselves."""
+    text = (STATIC_DIR / rel_path).read_text()
+    text = _CSS_URL.sub(lambda m: f'url("{asset(m.group(2))}")', text)
+    return text, hashlib.sha256(text.encode()).hexdigest()[:8]
+
+
+def css_asset(path: str) -> str:
+    """URL of a stylesheet served through /assets with its url() references
+    fingerprinted: /assets/coffee.css?v=<hash of the rewritten text>."""
+    _, fingerprint = _fingerprinted_css(path)
+    return f"/assets/{path}?v={fingerprint}"
+
+
+templates.env.globals["css_asset"] = css_asset
 
 
 def warm_up() -> None:
@@ -290,6 +319,16 @@ def create_app() -> FastAPI:
     app.add_middleware(IdentityMiddleware)
     app.add_middleware(ServerTimingMiddleware)
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+    @app.get("/assets/coffee.css", include_in_schema=False)
+    def coffee_css(v: str = "") -> Response:
+        """The stylesheet with its fonts and images fingerprinted (see
+        _fingerprinted_css). A request for the current fingerprint may be
+        cached for good; the scaffold's Caddy rule says the same in
+        production, where it matches any ?v= stylesheet."""
+        text, fingerprint = _fingerprinted_css("coffee.css")
+        headers = {"Cache-Control": "private, max-age=31536000, immutable"} if v == fingerprint else {}
+        return Response(text, media_type="text/css", headers=headers)
 
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict[str, str]:
