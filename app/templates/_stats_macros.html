@@ -78,6 +78,10 @@
 </div>
 {% endmacro %}
 
+{# The capitalised article for a drink's name, to start a sentence: "A"
+   before "latte", "An" before "espresso". #}
+{% macro a_drink_parts(label) %}{% set l = label | lower %}{{ "An" if l[:1] in "aeiou" else "A" }}{% endmacro %}
+
 {% macro plural(n, one, many) %}{{ one if n == 1 else many }}{% endmacro %}
 
 {# A p-value as a reader would write it: three decimals, or "less than 0.001". #}

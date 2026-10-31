@@ -1,4 +1,4 @@
-{% from "_stats_macros.html" import fact, plural, pct, pval, p_eq, pair_text, pair_figure, waiting %}
+{% from "_stats_macros.html" import fact, plural, pct, pval, p_eq, pair_text, pair_figure, waiting, a_drink_parts %}
 {# The statistics page as an infographic: each section pairs its finding
    and working with a figure, the two swapping sides down the page on a wide
    screen. Each section wears one categorical colour (--sc). stats.js marks
@@ -45,7 +45,7 @@
   <section id="drinks" class="story" style="--sc: var(--c1)">
     <div class="story-text">
       <h2 class="story-title">What the department drinks</h2>
-      <p class="headline"><strong class="num">{{ top.label }}</strong> is the department’s most common usual drink, chosen by {{ pct(top.share) }} of colleagues.</p>
+      <p class="headline">{{ a_drink_parts(top.label) }} <strong class="num">{{ top.label | lower }}</strong> is the department’s most common order, chosen by {{ pct(top.share) }} of colleagues.</p>
       <div class="fact-row">
         {{ fact("cup", "Usual drinks saved:", board.n) }}
         {{ fact("layers", "Exact orders no one else shares:", board.unique ~ " of " ~ board.n) }}
