@@ -215,7 +215,7 @@ WORKING = (
     ("milk", "Milk", MILK_LABELS, "made with milk"),
     ("strength", "Strength", STRENGTH_LABELS, "with a strength choice"),
     ("temp", "Temperature", TEMP_LABELS, "that offer a choice of temperature"),
-    ("sweetener", "Sugar", SWEETENER_LABELS, "usual drinks"),
+    ("sweetener", "Sweetener", SWEETENER_LABELS, "usual drinks"),
     ("shots", "Shots", SHOT_LABELS, "espressos"),
     ("length", "Length", LENGTH_LABELS, "macchiatos"),
 )
@@ -322,6 +322,8 @@ class Board:
     top_line: Optional[str]  # None unless one exact order is clearly ahead
     top_count: int
     facets: list[Facet]
+    tied: int = 0  # exact orders tied for most common, when none leads
+    tied_count: int = 0  # colleagues sharing each of those
 
 
 def build_board(usuals: list[Usual]) -> Board:
@@ -344,6 +346,8 @@ def build_board(usuals: list[Usual]) -> Board:
         top_line=ranked[0][0] if clear else None,
         top_count=ranked[0][1] if clear else 0,
         facets=facets,
+        tied=sum(1 for c in lines.values() if ranked and c == ranked[0][1]) if not clear else 0,
+        tied_count=ranked[0][1] if ranked and not clear else 0,
     )
 
 
@@ -506,7 +510,7 @@ class Rounds:
     n: int
     ready: bool
     typical_drinks: Optional[int] = None
-    half_window: Optional[str] = None  # "9:30 am and 11 am"
+    half_window: Optional[tuple[str, str]] = None  # ("9:30 am", "11 am")
     busiest_day: Optional[str] = None  # None unless one day stands out beyond chance
     time_bars: list[Bar] = field(default_factory=list)
     time_ticks: list[tuple[float, str]] = field(default_factory=list)
@@ -584,7 +588,7 @@ def build_rounds(session: Session) -> Rounds:
     minutes = [t.hour * 60 + t.minute for t in local]
     out.typical_drinks = int(statistics.median(c for _, c in rows))
     w_start, w_end = half_window(minutes)
-    out.half_window = f"{_clock(w_start)} to {_clock(w_end)}"
+    out.half_window = (_clock(w_start), _clock(w_end))
 
     # Quarter-hour bars, the resolution rounds are logged at, so the shaded
     # half-window lines up with whole bars. Widened to take in any outliers.

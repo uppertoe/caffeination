@@ -84,7 +84,10 @@
 {% macro pval(p) %}{% if p < 0.001 %}less than 0.001{% else %}{{ '%.3f' % p }}{% endif %}{% endmacro %}
 
 {# "p = 0.012" or "p < 0.001", for use inside a sentence. #}
-{% macro p_eq(p) %}{% if p < 0.001 %}p < 0.001{% else %}p = {{ '%.3f' % p }}{% endif %}{% endmacro %}
+{% macro p_eq(p) %}{% if p < 0.001 %}p &lt; 0.001{% else %}p = {{ '%.3f' % p }}{% endif %}{% endmacro %}
+
+{# A signed number with a true minus sign, not a hyphen. #}
+{% macro signed(x, places=2) %}{{ (('%+.' ~ places ~ 'f') % x) | replace("-", "−") }}{% endmacro %}
 
 {% macro pct(x) %}{{ (x * 100) | round | int }}%{% endmacro %}
 
@@ -97,14 +100,15 @@
   <div class="fact-row">
     {{ fact("layers", "χ² statistic:", ('%.2f' % t.chi2) ~ " on " ~ t.df ~ (" degree" if t.df == 1 else " degrees") ~ " of freedom") }}
     {{ fact("shuffle", "Permutation p-value:", pval(t.p_permutation)) }}
-    {% if v.p_holm is not none and v.p_holm != t.p_permutation %}{{ fact("scale", "After Holm adjustment:", pval(v.p_holm)) }}{% endif %}
+    {% if v.tests > 1 %}{{ fact("scale", "p-value after Holm adjustment:", pval(v.p_holm)) }}{% endif %}
     {{ fact("gauge", "Cramér’s V, bias-corrected:", '%.2f' % t.cramers_v) }}
   </div>
   <details class="table-view working">
     <summary>How this was calculated</summary>
-    <p>{{ v.premise }}, each cell would hold its row total multiplied by its column total, divided by all {{ t.n }} drinks. Each cell then contributes (O − E)² ÷ E, and the contributions add up to χ²:</p>
+    <p>{{ v.premise }}, each cell would hold its row total multiplied by its column total, divided by all {{ t.n }} drinks. That expected count, E, is shown under each observed count, O. Each cell contributes (O − E)² ÷ E, and the contributions add up to χ²:</p>
     <p class="working-sum">χ² = {% for line in v.cells %}{% for cell in line %}{{ '%.2f' % cell.contribution }}{% if not loop.last %} + {% endif %}{% endfor %}{% if not loop.last %} + {% endif %}{% endfor %} = <strong>{{ '%.2f' % t.chi2 }}</strong></p>
-    <p>The textbook test compares χ² with a χ² distribution on {{ t.df }} {{ "degree" if t.df == 1 else "degrees" }} of freedom, which gives {{ p_eq(t.p_textbook) }}.{% if t.sparse_cells %} {{ t.sparse_cells }} of the {{ v.rows | length * v.cols | length }} cells are expected to hold fewer than 5 drinks, which makes that figure unreliable.{% endif %} The permutation test shuffles the {{ v.col_name | lower }} column {{ t.null | length }} times, keeping every total fixed, and {{ t.as_extreme }} of the shuffled tables had a χ² at least as large as the department’s.</p>
+    <p>The textbook test compares χ² with a χ² distribution on {{ t.df }} {{ "degree" if t.df == 1 else "degrees" }} of freedom, which gives {{ p_eq(t.p_textbook) }}.{% if t.sparse_cells %} Because {{ t.sparse_cells }} of the {{ v.rows | length * v.cols | length }} cells are expected to hold fewer than 5 drinks, that figure is unreliable.{% endif %}</p>
+    <p>The permutation test shuffles the {{ v.col_name | lower }} column {{ t.null | length }} times, keeping every total fixed. {{ t.as_extreme }} of the shuffled tables had a χ² at least as large as the department’s, which gives the permutation p-value of {{ pval(t.p_permutation) }}.</p>
   </details>
 {% endmacro %}
 
@@ -134,7 +138,7 @@
     </tbody>
   </table>
   </div>
-  <p class="chart-legend"><span class="swatch swatch-above"></span>More than independence predicts <span class="swatch swatch-below"></span>Fewer</p>
+  <p class="chart-legend"><span class="swatch swatch-above"></span>More than independence predicts <span class="swatch swatch-below"></span>Fewer than independence predicts</p>
   <div class="chart hist-chart">
     <svg viewBox="0 0 600 140" role="img" aria-label="The χ² statistic of each shuffled table, with the textbook χ² distribution and the department’s value marked.">
       {% for b in v.hist %}

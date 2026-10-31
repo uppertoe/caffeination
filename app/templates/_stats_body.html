@@ -16,7 +16,7 @@
     {{ nav_link("unusual", "How unusual a drink is") }}
     {{ nav_link("caffeine", "Caffeine") }}
     {{ nav_link("pairs", "Options that go together") }}
-    {% if randomisation %}{{ nav_link("randomisation", "Randomisation") }}{% endif %}
+    {% if randomisation %}{{ nav_link("randomisation", "Randomisation and the baseline table") }}{% endif %}
   </div>
   {% endif %}
   <div class="nav-group">
@@ -37,7 +37,7 @@
 
   <header class="part-head">
     <h2 class="part-title">The department now</h2>
-    <p>The sections in this part use every colleague’s usual drink, which covers the whole department rather than a sample, so the shares carry no error bars.</p>
+    <p>The sections in this part count the usual drinks of every colleague included above. Because the count covers the whole group rather than a sample, the shares carry no error bars.</p>
   </header>
 
   {# ---- What the department drinks -------------------------------------- #}
@@ -49,7 +49,7 @@
       <div class="fact-row">
         {{ fact("cup", "Usual drinks saved:", board.n) }}
         {{ fact("layers", "Exact orders no one else shares:", board.unique ~ " of " ~ board.n) }}
-        {{ fact("star", "Most common exact order:", (board.top_line ~ ", chosen by " ~ board.top_count ~ " colleagues") if board.top_line else "No exact order is more common than the rest") }}
+        {{ fact("star", "Most common exact order:", (board.top_line ~ ", chosen by " ~ board.top_count ~ " colleagues") if board.top_line else (("No two colleagues share an exact order") if board.tied_count < 2 else (board.tied ~ " exact orders are tied, each shared by " ~ board.tied_count ~ " colleagues"))) }}
       </div>
     </div>
     <div class="story-figure">
@@ -67,7 +67,7 @@
         </li>
         {% endfor %}
       </ul>
-      <p class="chart-note">Each bar splits the department’s usual drinks by one option, among the drinks that offer it{% if has_own %}, and your own choices are outlined{% endif %}. Hover over or tap a segment for its count.</p>
+      <p class="chart-note">Each bar divides the department’s usual drinks by one option, counting only the drinks that offer it.{% if has_own %} Your own choices are outlined.{% endif %} Hover over or tap a segment to see its count.</p>
       <details class="table-view">
         <summary>Show the numbers</summary>
         <div class="numbers-grid">
@@ -123,7 +123,7 @@
       <details class="table-view working">
         <summary>How the score is calculated</summary>
         <p>Each option scores −log₂ of its share among the usual drinks it applies to, so an option chosen by half the department scores 1 bit and one chosen by an eighth scores 3 bits. A drink’s score is the sum of its options’ bits, which treats the options as independent of one another.</p>
-        <p>Each share includes an allowance of half a drink for every possible choice, so an option no one has chosen scores high rather than infinitely, and the bits differ slightly from the counts beside them.</p>
+        <p>Each share includes an allowance of half a drink for every possible choice, so an option no one has chosen scores high rather than infinitely, and the bits differ slightly from what the counts alone would give.</p>
       </details>
     </div>
     <div class="story-figure">
@@ -138,11 +138,11 @@
       <p class="headline">The department’s typical usual drink holds <strong class="num">{{ caffeine.typical }}</strong> of espresso.</p>
       <div class="fact-row">
         {{ fact("bean", "Your usual drink:", caffeine.mine or "No usual drink saved") }}
-        {{ fact("moon", "Decaf usual drinks:", caffeine.decaf) }}
       </div>
       <details class="table-view working">
         <summary>How the estimate is made</summary>
-        <p>The typical drink is the median of the department’s usual drinks. Small and regular milk drinks count as one espresso shot, and large milk drinks and long blacks as two. An extra shot adds one, and a weak drink takes off half. Each shot counts as {{ shot_mg }} mg, the average measured in Australian cafés, so every figure is an estimate rather than a measurement.</p>
+        <p>The typical drink is the median of the department’s usual drinks. Small and regular milk drinks, piccolos, macchiatos and single espressos count as one shot. Large milk drinks, long blacks, magics and double espressos count as two, and a large long black as three. An extra shot adds one, and a weak drink takes off half.</p>
+        <p>The estimates are given in shots rather than milligrams, because the caffeine in a café shot varies widely from one café to the next.</p>
       </details>
     </div>
     <div class="story-figure">
@@ -157,7 +157,7 @@
         </li>
         {% endfor %}
       </ul>
-      <p class="chart-note">Each bean is one colleague’s usual drink{% if caffeine.mine %}, and the ringed bean is yours{% endif %}. Little or none covers decaf, hot chocolate and the tea-based drinks.</p>
+      <p class="chart-note">Each bean is one colleague’s usual drink{% if caffeine.mine %}, and the ringed bean is yours{% endif %}. The row for little or none covers decaf, hot chocolate and the tea-based drinks.</p>
     </div>
   </section>
 
@@ -166,7 +166,7 @@
   <section id="pairs" class="story" style="--sc: var(--c5)" x-data='{ pair: {{ (ready_pairs[0].key if ready_pairs else "") | tojson }} }'>
     <div class="story-text">
       <h2 class="story-title">Options that go together</h2>
-      <p>Each tab tests whether two options are chosen independently of each other, using a χ² test on the department’s usual drinks.</p>
+      <p>Each tab uses a χ² test to ask whether the department chooses two options independently of each other.</p>
       {% if not ready_pairs %}
         <p class="stats-wait">These tests need at least 12 usual drinks with both options, and the department does not have enough yet.</p>
       {% else %}
@@ -183,7 +183,7 @@
       <details class="table-view working">
         <summary>What every tab has in common</summary>
         <p>The usual drinks are the whole department, so the tests do not generalise to a wider population. Each asks whether a pattern this strong would be likely if every colleague had chosen the two options independently.</p>
-        {% if ready_pairs | length > 1 %}<p>{{ ready_pairs | length }} pairs are tested in this section. The Holm method multiplies the smallest p-value by {{ ready_pairs | length }}, the next by {{ ready_pairs | length - 1 }}, and so on, which keeps the chance of any false finding across the section at 5% or less.</p>{% endif %}
+        {% if ready_pairs | length > 1 %}<p>This section tests {{ ready_pairs | length }} pairs. The Holm method multiplies the smallest p-value by {{ ready_pairs | length }}, the next by {{ ready_pairs | length - 1 }}, and so on, which keeps the chance of any false finding across the section at 5% or less.</p>{% endif %}
         <p>Cramér’s V measures the strength of a link from 0, for none, to 1, for complete, corrected for the upward bias that small tables produce.</p>
       </details>
       {% endif %}
@@ -200,13 +200,13 @@
   <section id="randomisation" class="story" style="--sc: var(--c3)">
     <div class="story-text">
       <h2 class="story-title">Randomisation and the baseline table</h2>
-      <p class="headline"><strong class="num">{{ pct(randomisation.tables_with_any) }}</strong> of a thousand random splits of the department into two arms show a “significant” difference at baseline, although every difference is chance.</p>
-      <p>Allocate the department again to draw another trial’s Table 1, and keep count of how often chance alone produces a p-value below 0.05.</p>
+      <p class="headline"><strong class="num">{{ pct(randomisation.tables_with_any) }}</strong> of a thousand random splits of the department into two arms have at least one baseline p-value below 0.05 among their five rows, although every difference is chance.</p>
+      <p>Select Allocate again to draw another Table 1. The page keeps count of how often chance alone produces a p-value below 0.05.</p>
       <details class="table-view working">
-        <summary>Why baseline p-values mean nothing</summary>
+        <summary>Why baseline differences should not be tested</summary>
         <p>When people are allocated at random, any baseline difference between the arms is chance by construction, so baseline p-values should spread evenly between 0 and 1. The CONSORT statement advises against testing them for this reason.</p>
         <p>Carlisle turned the same fact around. In a 2017 analysis of more than 5,000 trials in anaesthetic and general medical journals, he looked for baseline tables whose p-values were too evenly matched, or too extreme, to have come from random allocation, and found trials whose data were later shown to be flawed or fabricated.</p>
-        <p>{% if randomisation.share_below > 0.055 %}Slightly more than 5% of the department’s p-values fall below 0.05, because the textbook χ² test overstates significance when cells are sparse. {% endif %}With only {{ randomisation.n }} colleagues, each test can also produce only a limited set of p-values, so the bars are lumpier than a large trial would show.</p>
+        <p>{% if randomisation.share_below > 0.055 %}Across all the allocations, {{ pct(randomisation.share_below) }} of individual baseline p-values fall below 0.05, more than the 5% chance predicts, because the textbook χ² test overstates significance when cells are sparse. {% endif %}With only {{ randomisation.n }} colleagues, each test can also produce only a limited set of p-values, so the bars are lumpier than a large trial would show.</p>
       </details>
     </div>
     <div class="story-figure">
@@ -218,7 +218,7 @@
 
   <header class="part-head">
     <h2 class="part-title">Rounds over time</h2>
-    <p>The sections in this part use the rounds recorded so far, which are a sample of the department’s coffee runs, so their estimates carry 95% intervals.</p>
+    <p>{% if rounds.n == 0 %}The sections in this part will use the rounds as they are recorded. The rounds are a sample of the department’s coffee runs, so their estimates will carry 95% intervals.{% else %}The sections in this part use the rounds recorded so far. The rounds are a sample of the department’s coffee runs, so their estimates carry 95% intervals.{% endif %}</p>
   </header>
 
   {% include "_stats_rounds.html" %}

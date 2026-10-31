@@ -155,7 +155,7 @@ def test_round_charts_appear_from_five_rounds():
             s.commit()
         r = me.get("/stats")
     assert "When rounds happen" in r.text and 'class="dial"' in r.text
-    assert "Drinks in a typical round:" in r.text
+    assert "Rounds recorded:" in r.text
     assert "Half of all rounds fall between" in r.text
     # 23:00 UTC on Monday 26 October is 10 am on Tuesday in Melbourne (AEDT),
     # and three of the five rounds fall on that local day.
@@ -218,7 +218,7 @@ def test_the_working_shows_what_each_option_adds_to_the_score():
     assert "Shots" not in by_label  # options that do not apply are left out
     # Milk is 1 of 3 with six milks and half a drink each: −log₂(1.5 / 6) = 2 bits.
     assert ">2.0</td>" in body
-    assert "This drink scores 2.6 bits, as surprising as a 1 in" in r.text or "bits, as surprising as a 1 in" in r.text
+    assert "bits, which is as surprising as a 1-in-" in r.text
 
 
 def test_someone_without_a_drink_starts_on_the_most_common_one():
@@ -238,7 +238,7 @@ def test_someone_without_a_drink_sees_the_page_when_no_order_leads():
         _onboard(me, "Me")
         r = me.get("/stats")
     assert r.status_code == 200
-    assert "No exact order is more common than the rest" in r.text
+    assert "No two colleagues share an exact order" in r.text
     assert "The controls start on the department’s most common usual drink." in r.text
 
 
@@ -384,14 +384,14 @@ def test_round_panels_wait_then_appear():
         waiting = me.get("/stats").text
         _log_rounds(40, guests=6)
         ready = me.get("/stats").text
-    assert "Waiting for more rounds" in waiting
-    assert "The curve of time between rounds appears once colleagues have made 15 return visits." in waiting
+    assert "Waiting for rounds" in waiting
+    assert "appears once colleagues have come back for another round 15 times." in waiting
     assert "Colleagues resampled, each with all of their drinks" in ready
     assert "A Bayesian reading" in ready
     assert "Half of the gaps between a colleague’s rounds" in ready or "median gap is still unknown" in ready
     assert "account for half of the drinks in the rounds" in ready
     assert "Rounds you have been in:" in ready
-    assert "regression to the mean" in ready and "Waiting for more rounds" not in ready
+    assert "regression to the mean" in ready and "Waiting for" not in ready
     # Nothing on the page names a colleague.
     for name in ("P0", "P1", "P2", "P3", "P4", "P5"):
         assert f">{name}<" not in ready and f" {name} " not in ready

@@ -23,7 +23,7 @@
   {% endcall %}
 
   <table class="working-table">
-    <caption>This drink scores {{ '%.1f' % unusual.bits }} bits, as surprising as a 1 in {{ unusual.one_in }} chance, made up as follows:</caption>
+    <caption>This drink scores {{ '%.1f' % unusual.bits }} bits, which is as surprising as a 1-in-{{ unusual.one_in }} chance. The table shows what each option adds:</caption>
     <thead><tr><th scope="col">Option</th><th scope="col">This drink</th><th scope="col">Usual drinks with it</th><th scope="col" class="num">Bits</th></tr></thead>
     <tbody>
       {% for o in unusual.working if o.value is not none %}

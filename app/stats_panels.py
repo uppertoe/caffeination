@@ -50,9 +50,9 @@ def drink_group(o: dict) -> str:
 
 def strength_group(o: dict) -> Optional[str]:
     if o["shots"] == 2 or o["strength"] == Strength.EXTRA_SHOT.value:
-        return "Stronger"
+        return "Extra shot or double"
     if o["strength"] in (Strength.WEAK.value, Strength.DECAF.value):
-        return "Milder"
+        return "Weak or decaf"
     if o["strength"] is None and o["shots"] is None:
         return None
     return "Regular strength"
@@ -93,7 +93,7 @@ class Pair:
     premise: str = ""  # the null hypothesis, as the working states it
 
 
-_STRENGTH_PHRASE = {"Milder": "weak or decaf", "Stronger": "made stronger", "Regular strength": "regular strength"}
+_STRENGTH_PHRASE = {"Weak or decaf": "weak or decaf", "Extra shot or double": "made with an extra shot or as a double", "Regular strength": "regular strength"}
 
 PAIRS: tuple[Pair, ...] = (
     Pair(
@@ -113,7 +113,7 @@ PAIRS: tuple[Pair, ...] = (
     ),
     Pair(
         "strength_size", "Strength and size", "Strength", "Size",
-        lambda o: (strength_group(o), size(o)), ("Milder", "Regular strength", "Stronger"), SIZES,
+        lambda o: (strength_group(o), size(o)), ("Weak or decaf", "Regular strength", "Extra shot or double"), SIZES,
         lambda r, c: f"{c} drinks are {_STRENGTH_PHRASE[r]} more often",
         "The department’s choice of strength shows no clear link with size.",
         "If strength and size were chosen independently",
@@ -167,6 +167,7 @@ class PairView:
     marker_x: float = 0.0
     axis_max: float = 0.0
     standout: Optional[tuple[str, str]] = None  # the cell furthest above expected
+    tests: int = 1  # pairs in the Holm family
     no_link: str = ""
     premise: str = ""
     ticks: list[tuple[float, str]] = field(default_factory=list)  # (percent, label)
@@ -265,7 +266,7 @@ def build_pairs(usuals: list[Usual]) -> list[PairView]:
     views = [(pair, _pair_view(pair, _kept(pair.pick(u.options) for u in usuals))) for pair in PAIRS]
     tested = [v for _, v in views if v.ready]
     for v, p in zip(tested, holm_adjust([v.test.p_permutation for v in tested])):
-        v.p_holm = p
+        v.p_holm, v.tests = p, len(tested)
     for pair, v in views:
         if v.ready and v.p_holm < 0.05:
             v.finding = pair.sentence(*v.standout)
