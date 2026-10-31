@@ -602,7 +602,9 @@ def stats_context(session: Session, viewer: User, who: str) -> dict:
     if own:
         chosen = own.options
     elif usuals:
-        chosen = next(u.options for u in usuals if u.line == board.top_line)
+        # Not board.top_line, which is None when no order is clearly ahead.
+        top = Counter(u.line for u in usuals).most_common(1)[0][0]
+        chosen = next(u.options for u in usuals if u.line == top)
     else:
         chosen = chosen_from_form({"base_id": DRINKS[0].id})
     return {
