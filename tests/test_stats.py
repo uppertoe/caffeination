@@ -415,8 +415,8 @@ def test_order_page_card_leads_with_the_most_common_drink():
         _onboard(me, "Me", base_id="latte", size="small", milk="full_cream")
         home = me.get("/").text
         stats = me.get("/stats").text
-    assert 'A <span class="teaser-figure">flat white</span> is the department’s most common order.' in home
-    assert '<span class="print-text">Flat white</span>' in home  # named in its segment
+    assert '<span class="teaser-title">Department statistics</span>' in home
+    assert "Flat white 67%" in home  # labelled under its segment
     # The card and the statistics page give the same figure.
     assert "chosen by 67% of colleagues" in stats and '<strong class="num">flat white</strong>' in stats
     # The card sits above the order.
