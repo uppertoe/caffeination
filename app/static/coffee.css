@@ -1237,3 +1237,40 @@ article form legend {
 .ba-limit { stroke: var(--ink-strong); stroke-width: 1.2; stroke-dasharray: 6 4; }
 .agree-table td { font-weight: 600; }
 .agree-diag { background: var(--row-tint) !important; box-shadow: inset 0 0 0 2px var(--accent); border-radius: 0.3rem; }
+
+/* Contents bar, sticky at the top of the page while reading. */
+.stats-nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.4rem calc(-1 * var(--pico-spacing)) 1rem;
+  padding: 0.55rem var(--pico-spacing);
+  background: color-mix(in srgb, var(--page-bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--soft-line);
+}
+.nav-group {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+.nav-group::-webkit-scrollbar { display: none; }
+.nav-part { font-size: 0.78rem; color: var(--ink-muted); margin-right: 0.15rem; flex: none; }
+.nav-chip {
+  flex: none;
+  padding: 0.18rem 0.65rem;
+  font-size: 0.8rem;
+  border-radius: 2rem;
+  border: 1px solid var(--soft-line);
+  color: var(--ink);
+  text-decoration: none;
+}
+.nav-chip:hover { border-color: var(--accent); color: var(--ink-strong); }
+.nav-chip.is-current { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.stats-body article { scroll-margin-top: 6rem; }
+@media (prefers-reduced-motion: no-preference) { html:has(.stats-nav) { scroll-behavior: smooth; } }

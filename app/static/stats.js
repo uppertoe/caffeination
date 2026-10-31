@@ -41,3 +41,44 @@
   window.addEventListener("scroll", hide, { passive: true });
   document.addEventListener("htmx:beforeSwap", hide);
 })();
+
+/* Contents bar: mark the section in view, and keep its chip scrolled into
+   sight in the bar. Re-armed after htmx swaps the body. */
+(() => {
+  let observer = null;
+  const arm = () => {
+    observer?.disconnect();
+    const links = new Map(
+      [...document.querySelectorAll(".stats-nav a")].map((a) => [a.hash.slice(1), a])
+    );
+    if (!links.size) return;
+    const visible = new Set();
+    observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) e.isIntersecting ? visible.add(e.target.id) : visible.delete(e.target.id);
+        const first = [...links.keys()].find((id) => visible.has(id));
+        for (const [id, a] of links) {
+          const on = id === first;
+          a.classList.toggle("is-current", on);
+          if (on) a.setAttribute("aria-current", "true");
+          else a.removeAttribute("aria-current");
+          if (on) {
+            // Scroll the bar sideways only, never the page.
+            const bar = a.parentElement;
+            const left = a.offsetLeft - bar.offsetLeft;
+            if (left < bar.scrollLeft || left + a.offsetWidth > bar.scrollLeft + bar.clientWidth) {
+              bar.scrollTo({ left: left - 24, behavior: "smooth" });
+            }
+          }
+        }
+      },
+      { rootMargin: "-30% 0px -60% 0px" }
+    );
+    for (const id of links.keys()) {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    }
+  };
+  arm();
+  document.addEventListener("htmx:afterSettle", arm);
+})();

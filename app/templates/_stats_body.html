@@ -1,5 +1,32 @@
 {% from "_stats_macros.html" import fact, plural, pct, pval, pair_test %}
 <div id="stats" class="stats-body">
+{# Contents: every section, grouped by part, sticky under the header. The
+   section in view is marked by stats.js. #}
+{% macro nav_link(id, label) %}<a href="#{{ id }}" class="nav-chip">{{ label }}</a>{% endmacro %}
+<nav class="stats-nav" aria-label="Sections">
+  {% if board.n %}
+  <div class="nav-group">
+    <span class="nav-part">The department now:</span>
+    {{ nav_link("drinks", "What the department drinks") }}
+    {{ nav_link("unusual", "How unusual a drink is") }}
+    {{ nav_link("caffeine", "Caffeine") }}
+    {% if agreement %}{{ nav_link("references", "Two caffeine references") }}{% endif %}
+    {{ nav_link("pairs", "Options that go together") }}
+    {% if randomisation %}{{ nav_link("randomisation", "Randomisation") }}{% endif %}
+    {{ nav_link("moved-on", "Colleagues who have moved on") }}
+  </div>
+  {% endif %}
+  <div class="nav-group">
+    <span class="nav-part">Rounds over time:</span>
+    {{ nav_link("rounds", "Rounds") }}
+    {{ nav_link("through-the-day", "Caffeine through the day") }}
+    {{ nav_link("next-coffee", "Time to the next coffee") }}
+    {{ nav_link("who-comes", "Who comes for coffee") }}
+    {{ nav_link("round-size", "Round size") }}
+    {{ nav_link("guests", "Guests") }}
+  </div>
+</nav>
+
 
 {% if board.n == 0 %}
   <article class="stats-empty">
@@ -14,7 +41,7 @@
 
   {# ---- What the department drinks: exact shares (a census, so no
      intervals). Leads because every reader found it the most useful. #}
-  <article class="palate" x-data="{ tab: 'base_id', numbers: false }">
+  <article id="drinks" class="palate" x-data="{ tab: 'base_id', numbers: false }">
     <header><h2>What the department drinks</h2></header>
     <div class="fact-grid">
       {{ fact("cup", "Usual drinks saved:", board.n) }}
@@ -63,7 +90,7 @@
   </article>
 
   {# ---- How unusual a drink is ------------------------------------------ #}
-  <article class="unusual">
+  <article id="unusual" class="unusual">
     <header><h2>How unusual a drink is</h2></header>
     <p class="panel-intro">
       {% if has_own %}The controls are set to your usual drink.{% else %}The controls are set to the department’s most common usual drink.{% endif %}
@@ -113,7 +140,7 @@
   </article>
 
   {# ---- Caffeine, in shots first ----------------------------------------- #}
-  <article class="caffeine">
+  <article id="caffeine" class="caffeine">
     <header><h2>Caffeine</h2></header>
     <p class="panel-lead">{{ caffeine.lead }}</p>
     <div class="fact-grid">
@@ -169,7 +196,7 @@
   {# ---- Two caffeine references: Bland–Altman and kappa ----------------- #}
   {% set ag = agreement %}
   {% if ag %}
-  <article class="agreement">
+  <article id="references" class="agreement">
     <header><h2>Two caffeine references</h2></header>
     <p class="panel-intro">The caffeine estimates on this page come from café espressos measured on the Gold Coast. Food Standards Australia New Zealand publishes its own figures in AUSNUT, and this section compares the two for each usual drink that both cover.</p>
     {% if not ag.ba %}
@@ -233,7 +260,7 @@
 
   {# ---- Options that go together: a χ² test with all of its working. ---- #}
   {% set tested = pairs | selectattr("ready") | list | length %}
-  <article class="pairs" x-data='{ pair: {{ pairs[0].key | tojson }} }'>
+  <article id="pairs" class="pairs" x-data='{ pair: {{ pairs[0].key | tojson }} }'>
     <header><h2>Options that go together</h2></header>
     <p class="panel-intro">Each tab tests whether two options are chosen independently of each other, using a χ² test on the department’s usual drinks.</p>
     <div class="tabs" role="tablist" aria-label="Pair of options">
@@ -252,7 +279,7 @@
 
   {# ---- Randomisation and the baseline table ---------------------------- #}
   {% if randomisation %}
-  <article class="randomise-panel">
+  <article id="randomisation" class="randomise-panel">
     <header><h2>Randomisation and the baseline table</h2></header>
     <p class="panel-intro">This section splits the department into two arms at random, as a trial would, and compares the arms on their usual drinks.</p>
     {% include "_stats_randomise.html" %}
@@ -260,7 +287,7 @@
   {% endif %}
 
   {# ---- Colleagues who have moved on: survivorship ----------------------- #}
-  <article class="moved-on">
+  <article id="moved-on" class="moved-on">
     <header><h2>Colleagues who have moved on</h2></header>
     <p class="panel-intro">Registrars and fellows drop into the inactive list after their rotation ends. Comparing their usual drinks with the department today shows whether the people still here differ from everyone who has passed through, which is survivorship bias on a small scale.</p>
     {% set m = moved_on %}
@@ -282,7 +309,7 @@
   </header>
 
   {# ---- Rounds ----------------------------------------------------------- #}
-  <article class="rounds">
+  <article id="rounds" class="rounds">
     <header><h2>Rounds</h2></header>
     <p class="panel-intro">A round is recorded when an order is cleared, or when it expires 12 hours after the first person is added.</p>
     {% if not rounds.ready %}

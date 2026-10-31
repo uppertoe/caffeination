@@ -8,7 +8,7 @@
 
 {# ---- Caffeine through the day ------------------------------------------ #}
 {% set a = rp.afternoon %}
-<article class="afternoon">
+<article id="through-the-day" class="afternoon">
   <header><h2>Caffeine through the day</h2></header>
   {% if not a.ready %}
     <p class="stats-wait">This comparison needs at least 20 drinks either side of midday, and the log has {{ a.before }} before and {{ a.after }} after. To detect a difference of half a shot a drink with 80% power, about {{ a.needed }} drinks either side would be needed if every drink were independent. Repeat drinks from the same colleagues raise that number.</p>
@@ -120,7 +120,7 @@
 
 {# ---- Time to the next coffee ------------------------------------------- #}
 {% set k = rp.next_coffee %}
-<article class="next-coffee">
+<article id="next-coffee" class="next-coffee">
   <header><h2>Time to the next coffee</h2></header>
   {% if not k.ready %}
     <p class="stats-wait">This curve needs at least 15 return visits, where a colleague appears in another round after their first, and the log has {{ k.gaps }}.</p>
@@ -156,7 +156,7 @@
 
 {# ---- Who comes for coffee ---------------------------------------------- #}
 {% set t = rp.attendance %}
-<article class="attendance">
+<article id="who-comes" class="attendance">
   <header><h2>Who comes for coffee</h2></header>
   {% if not t.ready %}
     <p class="stats-wait">This section needs at least 20 rounds, and {{ t.rounds }} {{ plural(t.rounds, "has", "have") }} been recorded.{% if t.mine %} You have been in {{ t.mine }} {{ plural(t.mine, "round", "rounds") }} so far.{% endif %}</p>
@@ -199,7 +199,7 @@
 
 {# ---- Round size --------------------------------------------------------- #}
 {% set z = rp.size %}
-<article class="round-size">
+<article id="round-size" class="round-size">
   <header><h2>Round size</h2></header>
   {% if not z.ready %}
     <p class="stats-wait">This section needs at least 20 rounds, and {{ z.rounds }} {{ plural(z.rounds, "has", "have") }} been recorded.</p>
@@ -267,7 +267,7 @@
 
 {# ---- Guests ------------------------------------------------------------- #}
 {% set g = rp.guests %}
-<article class="guests">
+<article id="guests" class="guests">
   <header><h2>Guests</h2></header>
   {% if not g.ready %}
     <p class="stats-wait">This comparison needs at least 5 drinks for one-off guests, and the log has {{ g.guests }}.</p>
