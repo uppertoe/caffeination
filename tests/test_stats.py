@@ -227,6 +227,17 @@ def test_someone_without_a_drink_starts_on_the_most_common_one():
     assert '<p class="unusual-line">cappuccino</p>' in r.text
 
 
+def test_someone_without_a_drink_sees_the_page_when_no_order_leads():
+    with _client() as me, _client() as a, _client() as b:
+        _onboard(a, "A", base_id="cappuccino", size="small", milk="full_cream")
+        _onboard(b, "B", base_id="latte", size="small", milk="oat")
+        _onboard(me, "Me")
+        r = me.get("/stats")
+    assert r.status_code == 200
+    assert "No single exact order leads yet" in r.text
+    assert "The controls are set to the department’s most common usual drink." in r.text
+
+
 def test_caffeine_wording_and_rows_agree_in_half_shots():
     from app.stats_view import CAFFEINE_ROWS, describe_mg, half_shots
 
