@@ -10,7 +10,7 @@
 
   {# ---- What the department drinks: exact shares (a census, so no
      intervals). Leads because every reader found it the most useful. #}
-  <article class="palate" x-data="{ tab: 'base_id' }">
+  <article class="palate" x-data="{ tab: 'base_id', numbers: false }">
     <header><h2>What the department drinks</h2></header>
     <div class="fact-grid">
       {{ fact("cup", "Usual drinks saved:", board.n) }}
@@ -42,7 +42,8 @@
         </li>
         {% endfor %}
       </ul>
-      <details class="table-view">
+      {# One open state for every tab, so the numbers stay open across tabs. #}
+      <details class="table-view" :open="numbers" @toggle="numbers = $el.open">
         <summary>Show the numbers</summary>
         <table>
           <thead><tr><th scope="col">{{ f.tab }}</th><th scope="col">Usual drinks</th><th scope="col">Share</th></tr></thead>
@@ -132,7 +133,7 @@
   {# ---- Rounds ----------------------------------------------------------- #}
   <article class="rounds">
     <header><h2>Rounds</h2></header>
-    <p class="panel-intro">A round is recorded, without names, when an order is cleared, or when it expires 12 hours after the first person is added.</p>
+    <p class="panel-intro">A round is recorded when an order is cleared, or when it expires 12 hours after the first person is added.</p>
     {% if not rounds.ready %}
       <p class="stats-wait">
         {% if rounds.n == 0 %}No rounds have been recorded yet.

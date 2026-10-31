@@ -176,7 +176,7 @@ def test_order_page_links_to_the_statistics():
     with _client() as me:
         _onboard(me, "Me", base_id="latte")
         r = me.get("/")
-    assert "recorded in the department statistics without names" in r.text
+    assert "counted in the department statistics, which never name anyone" in r.text
     assert 'href="/stats"' in r.text
 
 

@@ -501,7 +501,7 @@ def build_pairings(usuals: list[Usual]) -> list[Finding]:
 
 
 # ---------------------------------------------------------------------------
-# Rounds, from the anonymised log.
+# Rounds, from the round log.
 # ---------------------------------------------------------------------------
 
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")

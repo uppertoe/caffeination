@@ -525,7 +525,7 @@ def create_app() -> FastAPI:
         new_user = create_named_user(
             session, name, created_by=user.id, one_off=one_off
         )
-        upsert_saved_drink(session, new_user.id, normalized)
+        upsert_saved_drink(session, new_user.id, normalized, changed_by=user.id)
         add_to_order(session, user.id, new_user.id)
 
         slot_html = _render("_new_person_slot.html", _new_person_ctx(session))
@@ -584,7 +584,7 @@ def create_app() -> FastAPI:
                 {**_drink_form_ctx(saved), "person": target, "error": "Unknown drink."},
                 status_code=422,
             )
-        upsert_saved_drink(session, person_id, normalized)
+        upsert_saved_drink(session, person_id, normalized, changed_by=user.id)
         return templates.TemplateResponse(
             request, "_order_section.html", _order_section_ctx(session, user)
         )
