@@ -85,3 +85,86 @@ document.addEventListener("alpine:init", () => {
     });
   });
 });
+
+/* Optimistic order changes: a roster row turns selected (or back) and a row
+   in "Your order" fades out the moment its button is tapped, rather than
+   after the round trip, which is noticeable on a slow network. The server's
+   response then confirms the state as before; if the request fails, the row
+   is put back as it was. */
+(() => {
+  const rosterButton = (el) => el.closest?.(".roster-list li button[hx-post]");
+  const orderButton = (el) => el.closest?.('#order-list li button[hx-post^="/order/remove/"]');
+
+  document.addEventListener("htmx:beforeRequest", (e) => {
+    const roster = rosterButton(e.target);
+    if (roster) {
+      const li = roster.closest("li");
+      const adding = !li.classList.contains("is-selected");
+      li.classList.toggle("is-selected", adding);
+      roster.dataset.label = roster.textContent;
+      roster.textContent = adding ? "Remove" : "Add";
+      li.classList.add("is-pending");
+      return;
+    }
+    const order = orderButton(e.target);
+    if (order) order.closest("li").classList.add("is-leaving");
+  });
+
+  document.addEventListener("htmx:afterRequest", (e) => {
+    if (e.detail.successful) return;
+    const roster = rosterButton(e.target);
+    if (roster) {
+      const li = roster.closest("li");
+      li.classList.toggle("is-selected");
+      li.classList.remove("is-pending");
+      if (roster.dataset.label) roster.textContent = roster.dataset.label;
+      return;
+    }
+    const order = orderButton(e.target);
+    if (order) order.closest("li").classList.remove("is-leaving");
+  });
+})();
+
+/* A tap anywhere on a roster row works its Add or Remove button. */
+document.addEventListener("click", (e) => {
+  const li = e.target.closest?.(".roster-list li");
+  if (!li || li.classList.contains("roster-expand") || e.target.closest("button, a, input")) return;
+  li.querySelector("button[hx-post]")?.click();
+});
+
+/* Keep a tapped roster row exactly where it was on screen. On a phone the
+   order list above the roster grows or shrinks by a row with each add or
+   remove; Chrome's scroll anchoring absorbs that, but Safari has none, so
+   the roster would jump under the finger. After the swap, any movement of
+   the tapped row is scrolled back. */
+(() => {
+  let anchor = null;
+  document.addEventListener("htmx:beforeRequest", (e) => {
+    const li = e.target.closest?.(".roster-list li[id]");
+    anchor = li ? { id: li.id, top: li.getBoundingClientRect().top } : null;
+  });
+  document.addEventListener("htmx:afterSettle", () => {
+    if (!anchor) return;
+    const li = document.getElementById(anchor.id);
+    if (li) {
+      const shift = li.getBoundingClientRect().top - anchor.top;
+      if (Math.abs(shift) > 1) window.scrollBy({ top: shift, behavior: "instant" });
+    }
+    anchor = null;
+  });
+})();
+
+/* The site header's height, for the other sticky parts to sit beneath it.
+   Only while the header is sticky (a wide screen); 0 otherwise. */
+(() => {
+  const header = document.querySelector("header.brand");
+  if (!header) return;
+  const wide = window.matchMedia("(min-width: 1000px)");
+  const measure = () => {
+    const h = wide.matches ? header.getBoundingClientRect().height : 0;
+    document.documentElement.style.setProperty("--brand-h", `${Math.ceil(h)}px`);
+  };
+  measure();
+  wide.addEventListener("change", measure);
+  if ("ResizeObserver" in window) new ResizeObserver(measure).observe(header);
+})();

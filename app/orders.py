@@ -45,13 +45,14 @@ class RosterEntry(NamedTuple):
     id: str
     display_name: str
     line: str
+    in_order: bool = False  # already in the owner's order: shown selected
 
 
 @dataclass
 class OrderView:
     """Everything the order section renders, loaded in three statements:
     the order (items joined to people and drinks), the owner's own drink,
-    and the roster of everyone not yet in the order."""
+    and the roster, with anyone already in the order marked."""
 
     rows: list[OrderRow] = field(default_factory=list)
     self_excluded: bool = False
@@ -233,12 +234,13 @@ def load_order_view(session: Session, owner: User) -> OrderView:
             OrderRow(u, sd, _line_for(sd), False, can_edit_person(owner_id, u))
         )
 
-    # 3. The roster: roster users with a saved drink, minus the owner and
-    #    anyone already in the order. Filtered and ordered in SQL, and only
-    #    the columns the list renders are fetched. The active/inactive split
-    #    is a per-row date comparison done here so the naive-vs-aware
-    #    datetime handling stays in one place.
-    in_order = select(OrderItem.target_user_id).where(OrderItem.owner_id == owner_id)
+    # 3. The roster: roster users with a saved drink, minus the owner, with
+    #    anyone already in the order marked rather than left out, so adding
+    #    someone selects their row instead of removing it. Filtered and
+    #    ordered in SQL, and only the columns the list renders are fetched.
+    #    The active/inactive split is a per-row date comparison done here so
+    #    the naive-vs-aware datetime handling stays in one place.
+    in_order = {item.target_user_id for item, _, _ in joined}
     roster_q = (
         select(
             User.id,
@@ -248,14 +250,14 @@ def load_order_view(session: Session, owner: User) -> OrderView:
             *(getattr(SavedDrink, f) for f in LINE_FIELDS),
         )
         .join(SavedDrink, SavedDrink.user_id == User.id)
-        .where(*ROSTER_FILTER, User.id != owner_id, User.id.not_in(in_order))
+        .where(*ROSTER_FILTER, User.id != owner_id)
         .order_by(func.lower(User.display_name))
     )
     cutoff = _as_naive_utc(datetime.now(timezone.utc)) - ACTIVE_WINDOW
     for uid, name, last_active, created, *drink in session.exec(roster_q).all():
         active = _as_naive_utc(last_active or created) >= cutoff
         bucket = view.roster if active else view.roster_inactive
-        bucket.append(RosterEntry(uid, name, format_line(*drink)))
+        bucket.append(RosterEntry(uid, name, format_line(*drink), uid in in_order))
     return view
 
 

@@ -48,8 +48,9 @@
     <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}" />
     <link rel="manifest" href="/site.webmanifest" />
 
-    <!-- Display type (self-hosted; preload the latin faces so they're ready
-         at first paint and the wordmark/headings don't reflow). The URLs are
+    <!-- Display type (self-hosted; every latin face is preloaded so it is
+         ready at first paint: the faces use font-display: block, so the page
+         waits for them rather than falling back). The URLs are
          deliberately bare (no asset() ?v= token): a preload only primes the
          cache if it matches the request the browser later makes, and the actual
          load is coffee.css's @font-face src, which references these files bare.
@@ -58,6 +59,7 @@
     <link rel="preload" href="/static/vendor/shrikhand-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/static/vendor/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/static/vendor/fraunces-italic-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/static/vendor/baloo2-latin.woff2" as="font" type="font/woff2" crossorigin />
 
     <!-- htmx 2 refuses to swap 4xx responses by default, but our validation
          errors (409 name taken, 422 bad input, 404 stale claim) come back as
@@ -82,7 +84,7 @@
         <img class="brand-mark" src="{{ asset('brand-mark.svg') }}" alt="" aria-hidden="true" width="48" height="48" />
         <div>
           {% set _name = app_name.split('@') %}
-          <p class="brand-title">{{ _name[0] }}{% if _name|length > 1 %}<span class="brand-at">@</span><span class="brand-domain">{{ _name[1] }}</span>{% endif %}</p>
+          <p class="brand-title"><a href="/" class="brand-link">{{ _name[0] }}{% if _name|length > 1 %}<span class="brand-at">@</span><span class="brand-domain">{{ _name[1] }}</span>{% endif %}</a></p>
           <p class="brand-tagline">{{ tagline }}</p>
         </div>
         <button

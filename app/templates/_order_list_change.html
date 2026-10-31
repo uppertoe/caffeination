@@ -1,0 +1,11 @@
+{#
+  Response to Remove clicked in "Your order". Nothing swaps in place: the
+  order list, the till summary and, for a roster person, their roster row
+  (now deselected) all come back out of band, so the rest of the page keeps
+  its scroll position and the roster keeps its filter. Context: the order
+  section's context with oob=True, and entry/entry_inactive when the person
+  is on the roster.
+#}
+{% include "_order_list.html" %}
+{% include "_till_summary.html" %}
+{% if entry %}{% with p = entry, inactive = entry_inactive, row_oob = true %}{% include "_roster_row.html" %}{% endwith %}{% endif %}

@@ -31,6 +31,7 @@ from app.menu import (
 )
 from app.models import SavedDrink, User
 from app.orders import (
+    RosterEntry,
     add_to_order,
     clear_order,
     load_order_view,
@@ -119,7 +120,10 @@ def warm_up() -> None:
         _render("index.html", {**base, "user": visitor, **_onboard_ctx(session)})
         visitor.display_name = "warm-up"
         _render("index.html", {**base, "user": visitor, **_dashboard_ctx(session, visitor)})
-        _render("_order_oob.html", {**_order_section_ctx(session, visitor), "oob": True})
+        _render("_roster_toggle.html", {
+            **_order_section_ctx(session, visitor), "oob": True,
+            "entry": RosterEntry("warm-up", "warm-up", "latte"), "entry_inactive": False,
+        })
         _render("_drink_form.html", _drink_form_ctx(None))
 
 
@@ -204,7 +208,28 @@ def _order_section_ctx(session: Session, user: User) -> dict:
         "roster": view.roster,
         "roster_inactive": view.roster_inactive,
         "till_lines": till_summary(view.rows),
+        # For the order bar pinned to the foot of the screen on a phone.
+        "drink_count": sum(1 for row in view.rows if row.saved is not None),
     }
+
+
+def _order_change_response(request: Request, session: Session, user: User, target_id: str):
+    """After an add or remove: from a roster row, that row in its new state
+    plus the order list and till summary out of band; from "Your order"
+    (?from=list), the order list, till summary and the person's roster row,
+    all out of band; otherwise, the whole order section."""
+    ctx = _order_section_ctx(session, user)
+    entry, inactive = None, False
+    for entries, is_inactive in ((ctx["roster"], False), (ctx["roster_inactive"], True)):
+        found = next((p for p in entries if p.id == target_id), None)
+        if found is not None:
+            entry, inactive = found, is_inactive
+    oob = {**ctx, "oob": True, "entry": entry, "entry_inactive": inactive}
+    if request.query_params.get("from") == "list":
+        return templates.TemplateResponse(request, "_order_list_change.html", oob)
+    if entry is not None and request.headers.get("HX-Target", "") == f"roster-{target_id}":
+        return templates.TemplateResponse(request, "_roster_toggle.html", oob)
+    return templates.TemplateResponse(request, "_order_section.html", ctx)
 
 
 # Responses that change order data outside the order section carry this
@@ -602,17 +627,12 @@ def create_app() -> FastAPI:
         """Add a person to the order.
 
         From a roster row (htmx reports the row's id as HX-Target) the row
-        itself is the swap target and gets deleted, so only the two articles
-        that changed are returned, out of band. Every other caller — the
-        "Add me" opt-in, tests, curl — gets the whole section.
+        comes back selected, with the two articles that changed out of band.
+        Every other caller — the "Add me" opt-in, tests, curl — gets the
+        whole section.
         """
         add_to_order(session, user.id, target_id)
-        ctx = _order_section_ctx(session, user)
-        if request.headers.get("HX-Target", "").startswith("roster-"):
-            return templates.TemplateResponse(
-                request, "_order_oob.html", {**ctx, "oob": True}
-            )
-        return templates.TemplateResponse(request, "_order_section.html", ctx)
+        return _order_change_response(request, session, user, target_id)
 
     @app.post("/order/clear", response_class=HTMLResponse)
     def order_clear(
@@ -633,9 +653,7 @@ def create_app() -> FastAPI:
         session: Session = Depends(get_session),
     ):
         remove_from_order(session, user.id, target_id)
-        return templates.TemplateResponse(
-            request, "_order_section.html", _order_section_ctx(session, user)
-        )
+        return _order_change_response(request, session, user, target_id)
 
     @app.get("/stats", response_class=HTMLResponse)
     def stats_page(

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # Per-deployment branding. Override with the APP_NAME / TAGLINE env vars.
     # app_name renders as "name@domain" in the header (split on the first @).
     app_name: str = "caffeine@HQ"
-    tagline: str = "Enabling safe and smooth anaesthesia since 2026"
+    tagline: str = "Fuelling smooth anaesthesia since 2026"
     debug: bool = False
 
     # Where the SQLite file lives. Override with DATABASE_URL in prod.

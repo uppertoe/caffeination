@@ -1,27 +1,33 @@
-<article>
+{# On a wide screen: your card across the top, then your order and the till
+   summary on the left beside the roster on the right (see .dash-layout in
+   coffee.css). A phone keeps the single column. #}
+<div class="dash-layout">
+<article class="dash-top">
   {% include "_dash_header.html" %}
 
   {% include "_drink_card.html" %}
-</article>
 
-{# The way into the statistics page, near the top: one coloured figure and
-   a bar of the department's drinks, each segment named inside itself, or a
-   plain line until there are enough usual drinks to say anything. #}
-{% from "_stats_macros.html" import a_drink_parts %}
-<a class="stats-teaser" href="/stats">
-  {% if headline %}
-  <span class="teaser-text">{{ a_drink_parts(headline.label) }} <span class="teaser-figure">{{ headline.label | lower }}</span> is the department’s most common order.</span>
-  <span class="teaser-bar">
-    {% for seg in headline.segments %}<span class="print-seg c{{ seg.colour }}" style="left: {{ '%.2f' % seg.start }}%; width: {{ '%.2f' % (seg.share * 100) }}%" title="{{ seg.label }}: {{ (seg.share * 100) | round | int }}%">{% if seg.share >= 0.1 %}<span class="print-text">{{ seg.label }}</span>{% endif %}<span class="visually-hidden"> {{ (seg.share * 100) | round | int }}%</span></span>{% endfor %}
-  </span>
-  {% else %}
-  <span class="teaser-text">The statistics page shows what the department drinks, how unusual your usual drink is, and when the rounds happen.</span>
-  {% endif %}
-  <span class="teaser-go">See the statistics<svg class="teaser-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 5 7 7-7 7" /></svg></span>
-</a>
+  {# The way into the statistics page, kept quiet as the last row of this
+     card: a title, a thin bar of the department's drinks with small labels
+     under the wider segments, and a chevron. Until there are enough usual
+     drinks, the title alone. #}
+  <a class="stats-teaser" href="/stats">
+    <span class="teaser-title">Department statistics</span>
+    <svg class="teaser-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 5 7 7-7 7" /></svg>
+    {% if headline %}
+    <span class="teaser-bar" role="img" aria-label="The department’s usual drinks: {% for seg in headline.segments %}{{ seg.label }} {{ (seg.share * 100) | round | int }}%{{ ', ' if not loop.last }}{% endfor %}">
+      {% for seg in headline.segments %}<span class="print-seg c{{ seg.colour }}" style="left: {{ '%.2f' % seg.start }}%; width: {{ '%.2f' % (seg.share * 100) }}%" title="{{ seg.label }}: {{ (seg.share * 100) | round | int }}%"></span>{% endfor %}
+    </span>
+    <span class="teaser-labels" aria-hidden="true">
+      {% for seg in headline.segments if seg.share >= 0.12 %}<span style="left: {{ '%.2f' % seg.start }}%; max-width: {{ '%.2f' % (seg.share * 100) }}%">{{ seg.label }} {{ (seg.share * 100) | round | int }}%</span>{% endfor %}
+    </span>
+    {% endif %}
+  </a>
+</article>
 
 {% include "_order_section.html" %}
 
 <section id="new-person-slot">
   {% include "_new_person_slot.html" %}
 </section>
+</div>

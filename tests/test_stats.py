@@ -137,7 +137,7 @@ def test_scoring_a_drink_returns_just_the_result():
     assert r.status_code == 200
     assert 'id="unusual-result"' in r.text
     assert "large iced soy matcha latte" in r.text
-    assert "<td>Matcha latte</td>" in r.text and "<td>0 of 2 usual drinks</td>" in r.text
+    assert "</span>Matcha latte</th>" in r.text and "<td>0 of 2 usual drinks</td>" in r.text
 
 
 def test_colleagues_filter_returns_the_body_alone():
@@ -180,7 +180,7 @@ def test_order_page_links_to_the_statistics():
     with _client() as me:
         _onboard(me, "Me", base_id="latte")
         r = me.get("/")
-    assert "counted in the department statistics, which never name anyone" in r.text
+    assert "Anonymised data on coffee orders are available on the" in r.text
     assert 'href="/stats"' in r.text
 
 
@@ -220,7 +220,7 @@ def test_the_working_shows_what_each_option_adds_to_the_score():
         _onboard(b, "B", base_id="latte", size="small", milk="full_cream")
         _onboard(me, "Me", base_id="latte", size="small", milk="lactose_free")
         r = me.get("/stats")
-    rows = re.findall(r'<tr class="([^"]*)">\s*<th scope="row">(\w+)</th>(.*?)</tr>', r.text, re.S)
+    rows = re.findall(r'<tr class="([^"]*)">\s*<th scope="row"><span class="opt-label">(\w+)</span>(.*?)</tr>', r.text, re.S)
     by_label = {label: (cls, body) for cls, label, body in rows}
     cls, body = by_label["Milk"]
     assert cls == "is-rarest" and "Lactose-free" in body and "1 of 3 made with milk" in body
@@ -323,7 +323,7 @@ def test_method_panels_render_and_reallocate():
         again = me.get("/stats/randomise", params={"allocation": 2})
     assert "Options that go together" in page.text
     assert "χ² = " in page.text and "of the shuffled tables had a χ² at least as large" in page.text
-    assert "Table 1, allocation 1" in page.text and "of a thousand random splits of the department" in page.text
+    assert "Table 1, allocation 1" in page.text and "Demonstrating the limits of a p-value" in page.text
     assert "moved on" not in page.text
     assert again.status_code == 200 and "Table 1, allocation 2" in again.text
     assert "allocation=3" in again.text and "seen=2" in again.text
@@ -415,8 +415,8 @@ def test_order_page_card_leads_with_the_most_common_drink():
         _onboard(me, "Me", base_id="latte", size="small", milk="full_cream")
         home = me.get("/").text
         stats = me.get("/stats").text
-    assert 'A <span class="teaser-figure">flat white</span> is the department’s most common order.' in home
-    assert '<span class="print-text">Flat white</span>' in home  # named in its segment
+    assert '<span class="teaser-title">Department statistics</span>' in home
+    assert "Flat white 67%" in home  # labelled under its segment
     # The card and the statistics page give the same figure.
     assert "chosen by 67% of colleagues" in stats and '<strong class="num">flat white</strong>' in stats
     # The card sits above the order.

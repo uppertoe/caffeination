@@ -16,8 +16,8 @@
     <thead>
       <tr>
         <th scope="col">Usual drink</th>
-        <th scope="col">Arm A (n = {{ r.arm_sizes[0] }})</th>
-        <th scope="col">Arm B (n = {{ r.arm_sizes[1] }})</th>
+        <th scope="col">Group A (n = {{ r.arm_sizes[0] }})</th>
+        <th scope="col">Group B (n = {{ r.arm_sizes[1] }})</th>
         <th scope="col" class="num">p</th>
       </tr>
     </thead>
@@ -43,7 +43,7 @@
   </table>
   </div>
   <p class="tally{% if r.any_below %} is-hit{% endif %}">
-    {% if r.any_below %}This allocation has a baseline p-value below 0.05, although the arms differ only by chance.{% else %}No baseline p-value in this allocation is below 0.05.{% endif %}
+    {% if r.any_below %}This allocation has a baseline p-value below 0.05, although the groups differ only by chance.{% else %}No baseline p-value in this allocation is below 0.05.{% endif %}
     {% if seen > 1 %}Of the {{ seen }} allocations you have drawn, {{ hits + hit }} {{ "has" if hits + hit == 1 else "have" }} had one.{% endif %}
   </p>
 

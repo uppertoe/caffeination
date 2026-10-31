@@ -276,21 +276,32 @@ def test_add_from_roster_row_returns_only_changed_articles_oob():
 
         page = bob.get("/").text
         # The roster row carries the id htmx will report as HX-Target, and
-        # its Add button deletes just that row.
+        # its Add button swaps just that row.
         assert f'id="roster-{alice_id}"' in page
-        assert 'hx-target="closest li"' in page and 'hx-swap="delete"' in page
+        assert 'hx-target="closest li"' in page and 'hx-swap="outerHTML"' in page
 
         r = bob.post(f"/order/add/{alice_id}", headers={"HX-Target": f"roster-{alice_id}"})
         assert r.status_code == 200
-        # Both changed articles, flagged out-of-band; no roster, no section.
+        # The row comes back selected, in place, with a Remove button...
+        assert f'id="roster-{alice_id}"' in r.text and "is-selected" in r.text
+        assert f'hx-post="/order/remove/{alice_id}" hx-target="closest li"' in r.text
+        # ...with both changed articles out of band; no roster, no section.
         assert r.text.count('hx-swap-oob="true"') == 2
         assert 'id="order-list"' in r.text and 'id="till-summary"' in r.text
         assert 'id="order-section"' not in r.text
         assert "roster-list" not in r.text
-        # And they carry the new state.
-        assert "Alice" in r.text
-        assert f'hx-post="/order/remove/{alice_id}"' in r.text
         assert "1x large oat flat white" in r.text
+
+        # Removing from the row deselects it the same way.
+        r = bob.post(f"/order/remove/{alice_id}", headers={"HX-Target": f"roster-{alice_id}"})
+        assert f'id="roster-{alice_id}"' in r.text and "is-selected" not in r.text
+        assert f'hx-post="/order/add/{alice_id}"' in r.text
+        assert "large oat flat white" not in r.text.split('id="till-summary"')[1]
+
+        # The selected person stays on the roster rather than disappearing.
+        bob.post(f"/order/add/{alice_id}")
+        page = bob.get("/").text
+        assert f'id="roster-{alice_id}"' in page and "is-selected" in page
 
 
 def test_add_without_row_target_returns_full_section():
@@ -303,3 +314,23 @@ def test_add_without_row_target_returns_full_section():
         assert 'id="order-section"' in r.text
         assert 'id="roster-picker"' in r.text
         assert 'hx-swap-oob' not in r.text
+
+
+def test_remove_from_your_order_swaps_only_what_changed():
+    with _client() as alice, _client() as bob:
+        _onboard(alice, "Alice", base_id="flat_white", size="large", milk="oat")
+        _onboard(bob, "Bob", base_id="espresso")
+        alice_id = _user_id_by_name("Alice")
+        bob.post(f"/order/add/{alice_id}")
+        page = bob.get("/").text
+        assert f'hx-post="/order/remove/{alice_id}?from=list"' in page and 'hx-swap="none"' in page
+
+        r = bob.post(f"/order/remove/{alice_id}?from=list")
+        # The order list, the till summary and Alice's roster row, all out of
+        # band; never the section, so the roster and scroll stay put.
+        assert r.text.count('hx-swap-oob="true"') == 3
+        assert 'id="order-section"' not in r.text and "roster-list" not in r.text
+        assert f'id="roster-{alice_id}" hx-swap-oob="true"' in r.text
+        roster_row = r.text.split(f'id="roster-{alice_id}"')[1]
+        assert "is-selected" not in roster_row.split("</li>")[0]
+        assert "large oat flat white" not in r.text.split('id="till-summary"')[1].split("</article>")[0]

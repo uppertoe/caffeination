@@ -1,11 +1,19 @@
 {# Till-ready summary — the other article an Add re-renders out of band. #}
-<article id="till-summary"{% if oob %} hx-swap-oob="true"{% endif %} x-data="{ copied: false }">
+{# On a phone or tablet this article is a sheet that slides up from the
+   order bar at the foot of the screen (see .order-bar in coffee.css); on a
+   wide screen it sits in the page, pinned in view. #}
+<article id="till-summary"{% if oob %} hx-swap-oob="true"{% endif %}
+  x-data="{ copied: false, open: false }"
+  :class="{ 'is-open': open }"
+  @keydown.escape.window="open = false">
   <header><h2>This order:</h2></header>
   {% if till_lines %}
     <textarea
       readonly
       rows="{{ till_lines | length }}"
       x-ref="tillText"
+      x-init="$nextTick(() => { $el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 2 + 'px'; })"
+      @resize.window.debounce.100ms="$el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 2 + 'px'"
       style="font-family: ui-monospace, monospace;"
     >{{ till_lines | join('\n') }}</textarea>
     <button
@@ -15,8 +23,19 @@
       <span x-show="!copied">Copy this order</span>
       <span x-show="copied" x-cloak>Copied ✓</span>
     </button>
+    {# Phone sheet only: back to the list of people, to add or remove. #}
+    <a href="#order-list" class="sheet-change" @click="open = false">Change this order</a>
   {% else %}
     <p><em>Your order is empty.</em></p>
   {% endif %}
-  <p class="stats-note">Cleared and expired orders are counted in the department statistics, which never name anyone. <a href="/stats">Department statistics</a></p>
+  <p class="stats-note">Anonymised data on coffee orders are available on the <a href="/stats">statistics page</a>.</p>
+  {# The bar opens and closes the sheet. It lives in this article so its
+     count updates with every add or remove. #}
+  {% if drink_count %}
+  <div class="sheet-scrim" x-show="open" x-cloak @click="open = false"></div>
+  <button type="button" class="order-bar" @click="open = !open" :aria-expanded="open.toString()" aria-controls="till-summary">
+    <span>This order: <strong>{{ drink_count }} {{ "drink" if drink_count == 1 else "drinks" }}</strong></span>
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 15 6-6 6 6" /></svg>
+  </button>
+  {% endif %}
 </article>

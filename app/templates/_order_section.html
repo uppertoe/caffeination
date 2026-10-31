@@ -6,7 +6,7 @@
    Buttons in here replace the whole section by default, so hx-target/hx-swap
    are set once on the section and inherited. The one exception is the
    roster's Add button: it deletes just its own row and the server sends the
-   two changed articles back out of band (_order_oob.html), so the picker
+   two changed articles back out of band (_roster_toggle.html), so the picker
    keeps its scroll position, filter text and inactive toggle. Remove and
    Clear still re-render everything — the person has to reappear in the
    roster. #}
@@ -17,13 +17,17 @@
   hx-target="#order-section"
   hx-swap="outerHTML"
 >
-  {% include "_order_list.html" %}
+  {# Your order and the till summary, grouped so that on a wide screen they
+     stay in view beside the roster as the page scrolls. #}
+  <div class="order-main">
+    {% include "_order_list.html" %}
 
-  {% include "_till_summary.html" %}
+    {% include "_till_summary.html" %}
+  </div>
 
-  {# names/inactive mirror the rows so "No matches" and the inactive count
-     stay right after an Add removes a row without a re-render: the button's
-     @click trims the name it just added. #}
+  {# names/inactive mirror the rows, for "No matches" and the inactive
+     count. Adding someone selects their row rather than removing it, so the
+     lists never change between re-renders. #}
   <article id="roster-picker" x-data='{
     q: "",
     showInactive: false,
@@ -37,10 +41,10 @@
     get noMatches() {
       const needle = this.q.trim().toLowerCase();
       return needle && this.names.concat(this.inactive).every(n => !n.includes(needle));
-    },
-    drop(list, name) { this[list] = this[list].filter(n => n !== name); }
+    }
   }'>
     <header><h2>Add to your order</h2></header>
+    <button type="button" class="secondary outline add-new-btn" @click="$dispatch('open-new-person')">Add a person or a one-off order</button>
     {% if not roster and not roster_inactive %}
       <p><em>No one else has saved a drink yet.</em></p>
     {% else %}
@@ -74,21 +78,7 @@
         :class="{ 'fade-top': moreAbove, 'fade-bottom': moreBelow }"
       >
         <ul class="roster-list" x-ref="list" x-keyboard-fit @scroll="update()">
-          {% for p in roster %}
-          <li id="roster-{{ p.id }}" x-show='matches({{ p.display_name | tojson }})'>
-            <span class="who"><strong>{{ p.display_name }}</strong> — {{ p.line }}</span>
-            <span class="row-actions">
-              <button
-                type="button"
-                class="row-action"
-                hx-post="/order/add/{{ p.id }}"
-                hx-target="closest li"
-                hx-swap="delete"
-                @click='drop("names", {{ p.display_name | lower | tojson }})'
-              >Add</button>
-            </span>
-          </li>
-          {% endfor %}
+          {% for p in roster %}{% with inactive = false %}{% include "_roster_row.html" %}{% endwith %}{% endfor %}
           {% if roster_inactive %}
           {# Collapsed by default; typing in the filter searches them too. #}
           <li class="roster-expand" x-show="!showInactive && !searching && inactive.length">
@@ -100,21 +90,7 @@
               <span x-text="inactive.length === 1 ? 'person' : 'people'">
                 {{- 'person' if roster_inactive | length == 1 else 'people' }}</span></button>
           </li>
-          {% for p in roster_inactive %}
-          <li id="roster-{{ p.id }}" class="inactive-row" x-show='(showInactive || searching) && matches({{ p.display_name | tojson }})'>
-            <span class="who"><strong>{{ p.display_name }}</strong> — {{ p.line }} <small class="tag">inactive</small></span>
-            <span class="row-actions">
-              <button
-                type="button"
-                class="row-action"
-                hx-post="/order/add/{{ p.id }}"
-                hx-target="closest li"
-                hx-swap="delete"
-                @click='drop("inactive", {{ p.display_name | lower | tojson }})'
-              >Add</button>
-            </span>
-          </li>
-          {% endfor %}
+          {% for p in roster_inactive %}{% with inactive = true %}{% include "_roster_row.html" %}{% endwith %}{% endfor %}
           {% endif %}
         </ul>
         <button

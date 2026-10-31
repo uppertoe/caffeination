@@ -195,7 +195,7 @@ def test_initial_dashboard_offers_to_set_drink():
         _seed_named_user(client)
         r = client.get("/")
     assert "Set up your drink" in r.text
-    assert "Your usual" in r.text
+    assert "Your usual drink" in r.text
 
 
 def test_save_drink_then_card_shows_till_line():
