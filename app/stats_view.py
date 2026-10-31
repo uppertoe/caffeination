@@ -627,3 +627,48 @@ def build_rounds(session: Session) -> Rounds:
     mean, out.resultant, out.rayleigh_p = rayleigh(minutes)
     out.mean_time = _clock(mean)
     return out
+
+
+# ---------------------------------------------------------------------------
+# The statistics card on the order page: one figure and a slim bar of the
+# department's drinks, from a single grouped count.
+# ---------------------------------------------------------------------------
+
+MIN_FOR_HEADLINE = 3  # usual drinks before the card leads with a figure
+
+
+@dataclass
+class Headline:
+    label: str  # the most common usual drink
+    share: float
+    n: int
+    segments: list[Segment]
+
+
+def department_headline(session: Session) -> Optional[Headline]:
+    """Active colleagues only, to match the statistics page's default. The
+    activity test runs in Python, like the roster's, to keep naive and aware
+    datetimes in one place."""
+    rows = session.exec(
+        select(SavedDrink.base_id, User.last_active_at, User.created_at)
+        .join(User, User.id == SavedDrink.user_id)
+        .where(*ROSTER_FILTER)
+    ).all()
+    cutoff = _as_naive_utc(datetime.now(timezone.utc)) - ACTIVE_WINDOW
+    tally = Counter(
+        b for b, last, created in rows
+        if b in DRINK_LABELS and _as_naive_utc(last or created) >= cutoff
+    )
+    counts = sorted(((DRINK_LABELS[b], k) for b, k in tally.items()), key=lambda r: -r[1])
+    n = sum(k for _, k in counts)
+    if n < MIN_FOR_HEADLINE:
+        return None
+    named = counts if len(counts) <= MAX_SEGMENTS else counts[:MAX_SEGMENTS - 1]
+    segments, start = [], 0.0
+    for i, (label, k) in enumerate(named):
+        segments.append(Segment(label, k, k / n, start * 100, i + 1, False, f"{label}: {k} of {n} usual drinks"))
+        start += k / n
+    if len(named) < len(counts):
+        k = n - sum(c for _, c in named)
+        segments.append(Segment("Other", k, k / n, start * 100, 0, False, f"Other drinks: {k} of {n} usual drinks"))
+    return Headline(counts[0][0], counts[0][1] / n, n, segments)

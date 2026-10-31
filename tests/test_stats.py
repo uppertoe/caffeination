@@ -397,3 +397,18 @@ def test_round_panels_wait_then_appear():
         assert f">{name}<" not in ready and f" {name} " not in ready
 
 
+
+
+def test_order_page_card_leads_with_the_most_common_drink():
+    with _client() as me, _client() as a, _client() as b:
+        _onboard(a, "A", base_id="flat_white", size="small", milk="oat")
+        _onboard(b, "B", base_id="flat_white", size="small", milk="full_cream")
+        _onboard(me, "Me", base_id="latte", size="small", milk="full_cream")
+        home = me.get("/").text
+        stats = me.get("/stats").text
+    assert '<span class="teaser-figure">Flat white</span>' in home
+    assert "chosen by 67% of colleagues" in home
+    # The card and the statistics page give the same figure.
+    assert "chosen by 67% of colleagues" in stats
+    # The card sits above the order.
+    assert home.index('class="stats-teaser"') < home.index('id="order-section"')

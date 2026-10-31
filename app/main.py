@@ -39,7 +39,7 @@ from app.orders import (
 )
 from app.stats_page import stats_context, usuals_for
 from app.stats_panels import build_randomisation
-from app.stats_view import build_unusual, chosen_from_form, load_usuals
+from app.stats_view import build_unusual, chosen_from_form, department_headline, load_usuals
 from app.timing import ServerTimingMiddleware
 from app.users import (
     can_edit_person,
@@ -231,6 +231,7 @@ def _dashboard_ctx(session: Session, user: User) -> dict:
         **_drink_card_ctx(session, user),
         **_order_section_ctx(session, user),
         **_new_person_ctx(session),
+        "headline": department_headline(session),
     }
 
 

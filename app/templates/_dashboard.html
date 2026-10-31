@@ -4,13 +4,26 @@
   {% include "_drink_card.html" %}
 </article>
 
+{# The way into the statistics page, near the top: one coloured figure and
+   a slim bar of the department's drinks, or a plain line until there are
+   enough usual drinks to say anything. #}
+<a class="stats-teaser" href="/stats">
+  {% if headline %}
+  <span class="teaser-text">
+    <span class="teaser-figure">{{ headline.label }}</span>
+    is the department’s most common usual drink, chosen by {{ (headline.share * 100) | round | int }}% of colleagues.
+  </span>
+  <span class="teaser-bar" aria-hidden="true">
+    {% for seg in headline.segments %}<span class="print-seg c{{ seg.colour }}" style="left: {{ '%.2f' % seg.start }}%; width: {{ '%.2f' % (seg.share * 100) }}%" title="{{ seg.tip }}"></span>{% endfor %}
+  </span>
+  {% else %}
+  <span class="teaser-text">The statistics page shows what the department drinks, how unusual your usual drink is, and when the rounds happen.</span>
+  {% endif %}
+  <span class="teaser-link">Department statistics</span>
+</a>
+
 {% include "_order_section.html" %}
 
 <section id="new-person-slot">
   {% include "_new_person_slot.html" %}
 </section>
-
-<article class="stats-teaser">
-  <p>The statistics page shows what the department drinks, how unusual your usual drink is, and when the rounds happen.</p>
-  <a href="/stats" role="button" class="secondary">Department statistics</a>
-</article>
