@@ -1,0 +1,11 @@
+{#
+  Response to Add or Remove clicked in a roster row. The row is the
+  hx-target and comes back in its new state, so nothing else in the roster
+  re-renders and its scroll position, filter and Alpine state survive; the
+  two articles that changed come back marked hx-swap-oob, and htmx drops
+  them in by id. Context: entry, entry_inactive, and the order section's
+  context with oob=True.
+#}
+{% with p = entry, inactive = entry_inactive %}{% include "_roster_row.html" %}{% endwith %}
+{% include "_order_list.html" %}
+{% include "_till_summary.html" %}

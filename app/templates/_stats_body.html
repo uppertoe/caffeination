@@ -9,6 +9,7 @@
 {# Contents: every section, grouped by part, sticky under the header. #}
 {% macro nav_link(id, label) %}<a href="#{{ id }}" class="nav-chip">{{ label }}</a>{% endmacro %}
 <nav class="stats-nav" aria-label="Sections">
+  <a href="/" class="nav-back" aria-label="Back to your order" title="Back to your order"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m15 5-7 7 7 7" /></svg></a>
   {% if board.n %}
   <div class="nav-group">
     <span class="nav-part">The department now:</span>

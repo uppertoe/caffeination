@@ -1,12 +1,14 @@
 {#
-  Inner content of <section id="new-person-slot">. Toggles between a collapsed
-  button and the "create a person + their drink" form. Posts to /people, which
+  Inner content of <section id="new-person-slot">: the "create a person +
+  their drink" form in a dialog, opened by the button in the roster card. Posts to /people, which
   re-renders this slot (in-band) plus the order section (OOB). Context:
   rules, initial, drinks, *_options (from the drink-form ctx), existing_names,
   and on error: error, open, submitted_name.
 #}
-<article
+<div
   class="new-person"
+  @open-new-person.window="open = true"
+  @keydown.escape.window="open = false"
   x-data='{
     open: {{ (open or false) | tojson }},
     name: {{ (submitted_name or "") | tojson }},
@@ -39,26 +41,20 @@
   }'
   x-init='$watch("baseId", () => onBaseChange())'
 >
-  <header><h2>Someone new? Something different?</h2></header>
+  {# The form opens over the page, from the button in the roster card (which
+     dispatches open-new-person), so opening it never moves the layout and
+     its buttons stay pinned in view at the foot of the dialog. #}
+  <dialog :open="open" class="new-person-dialog" @click.self="open = false">
+  <article>
+  <header><h2>Add someone to the order</h2></header>
 
-  <p x-show="!open" class="muted">
-    <small>Add a colleague and their usual to the roster &mdash; or make a
-    one-off order for a guest, or for anyone who wants something different
-    today.</small>
+  <p class="muted">
+    <small>Add a new colleague and their usual drink to the roster, or make
+    a one-off order for a guest or for a colleague who wants something
+    different today.</small>
   </p>
 
-  <button
-    type="button"
-    class="secondary"
-    x-show="!open"
-    @click="open = true"
-  >
-    + Add a person or one-off
-  </button>
-
   <form
-    x-show="open"
-    x-cloak
     hx-post="/people"
     hx-target="#new-person-slot"
     hx-swap="innerHTML"
@@ -84,7 +80,7 @@
 
     <label class="oneoff-toggle">
       <input type="checkbox" name="one_off" value="1" x-model="oneOff" />
-      One-off &mdash; this round only
+      One-off order, for this round only
     </label>
     <p class="muted" x-show="oneOff" x-cloak>
       <small>A one-round order that isn&rsquo;t saved to the roster.
@@ -97,13 +93,13 @@
     {# One-offs never join the shared roster, so the consent note only
        applies when we're saving a persistent person. #}
     <p class="muted consent-note" x-show="!oneOff">
-      <small>Please make sure this person is happy to have their name and
-      order saved to the shared list.</small>
+      <small>Please make sure this colleague is happy for their name and
+      usual drink to be saved to the roster.</small>
     </p>
 
-    <div class="grid">
+    <div class="grid dialog-actions">
       <button type="submit" :disabled="!cleanName || nameTaken">
-        Save &amp; add to order
+        Save and add to the order
       </button>
       <button
         type="button"
@@ -114,4 +110,6 @@
       </button>
     </div>
   </form>
-</article>
+  </article>
+  </dialog>
+</div>

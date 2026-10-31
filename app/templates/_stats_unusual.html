@@ -24,17 +24,16 @@
 
   <table class="working-table">
     <caption>This drink scores {{ '%.1f' % unusual.bits }} bits, which is as surprising as a 1-in-{{ unusual.one_in }} chance. The table shows what each option adds:</caption>
-    <thead><tr><th scope="col">Option</th><th scope="col">This drink</th><th scope="col">Usual drinks with it</th><th scope="col" class="num">Bits</th></tr></thead>
+    <thead><tr><th scope="col">This drink</th><th scope="col">Usual drinks with it</th><th scope="col" class="num">Bits</th></tr></thead>
     <tbody>
       {% for o in unusual.working if o.value is not none %}
       <tr class="{% if o.rarest %}is-rarest{% endif %}">
-        <th scope="row">{{ o.label }}</th>
-        <td>{{ o.value }}</td>
+        <th scope="row"><span class="opt-label">{{ o.label }}</span>{{ o.value }}</th>
         <td>{{ o.count }} of {{ o.total }} {{ o.basis }}</td>
         <td class="num"><span class="bits-bar" style="--w: {{ '%.1f' % ([o.bits / [unusual.bits, 0.01] | max, 1] | min * 100) }}%"></span>{{ '%.1f' % o.bits }}</td>
       </tr>
       {% endfor %}
     </tbody>
-    <tfoot><tr><th scope="row" colspan="3">Total</th><td class="num">{{ '%.1f' % unusual.bits }}</td></tr></tfoot>
+    <tfoot><tr><th scope="row" colspan="2">Total</th><td class="num">{{ '%.1f' % unusual.bits }}</td></tr></tfoot>
   </table>
 </div>

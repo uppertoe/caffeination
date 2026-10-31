@@ -1,0 +1,21 @@
+{# One roster row: p is an app.orders.RosterEntry, inactive marks the
+   collapsed inactive group. Someone already in the order stays in place,
+   shown selected with a Remove button, so the list never changes height as
+   people are added. The button swaps just this row (htmx reports its id as
+   HX-Target); the order list and till summary come back out of band. #}
+<li id="roster-{{ p.id }}"{% if row_oob %} hx-swap-oob="true"{% endif %}
+    class="{% if inactive %}inactive-row{% endif %}{% if p.in_order %} is-selected{% endif %}"
+    x-show='{% if inactive %}(showInactive || searching) && {% endif %}matches({{ p.display_name | tojson }})'>
+  <span class="who"><svg class="tick" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg><span class="who-text"><strong>{{ p.display_name }}</strong> — {{ p.line }}{% if inactive %} <small class="tag">inactive</small>{% endif %}</span></span>
+  <span class="row-actions">
+    {% if p.in_order %}
+    <button type="button" class="secondary outline row-action"
+      hx-post="/order/remove/{{ p.id }}" hx-target="closest li" hx-swap="outerHTML"
+      aria-label="Remove {{ p.display_name }} from the order">Remove</button>
+    {% else %}
+    <button type="button" class="row-action"
+      hx-post="/order/add/{{ p.id }}" hx-target="closest li" hx-swap="outerHTML"
+      aria-label="Add {{ p.display_name }} to the order">Add</button>
+    {% endif %}
+  </span>
+</li>

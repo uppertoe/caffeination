@@ -137,7 +137,7 @@ def test_scoring_a_drink_returns_just_the_result():
     assert r.status_code == 200
     assert 'id="unusual-result"' in r.text
     assert "large iced soy matcha latte" in r.text
-    assert "<td>Matcha latte</td>" in r.text and "<td>0 of 2 usual drinks</td>" in r.text
+    assert "</span>Matcha latte</th>" in r.text and "<td>0 of 2 usual drinks</td>" in r.text
 
 
 def test_colleagues_filter_returns_the_body_alone():
@@ -220,7 +220,7 @@ def test_the_working_shows_what_each_option_adds_to_the_score():
         _onboard(b, "B", base_id="latte", size="small", milk="full_cream")
         _onboard(me, "Me", base_id="latte", size="small", milk="lactose_free")
         r = me.get("/stats")
-    rows = re.findall(r'<tr class="([^"]*)">\s*<th scope="row">(\w+)</th>(.*?)</tr>', r.text, re.S)
+    rows = re.findall(r'<tr class="([^"]*)">\s*<th scope="row"><span class="opt-label">(\w+)</span>(.*?)</tr>', r.text, re.S)
     by_label = {label: (cls, body) for cls, label, body in rows}
     cls, body = by_label["Milk"]
     assert cls == "is-rarest" and "Lactose-free" in body and "1 of 3 made with milk" in body
