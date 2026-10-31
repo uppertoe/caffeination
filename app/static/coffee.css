@@ -1165,15 +1165,6 @@ article form legend {
 .p-low { font-weight: 700; color: var(--danger); }
 
 /* The way in from the order page. */
-.stats-teaser {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem 1.2rem;
-}
-.stats-teaser p { margin: 0; flex: 1 1 18rem; }
-.stats-teaser a[role="button"] { margin: 0; white-space: nowrap; }
 
 /* ---- Statistics: the round panels ---------------------------------------- */
 .midday { stroke: var(--soft-line); stroke-width: 1; stroke-dasharray: 2 4; }
@@ -1460,35 +1451,37 @@ main.container:has(.stats-page) { max-width: min(56rem, calc(100% - 2.5rem)); }
   .meter-fill { transition: width 1s ease 0.2s; }
 }
 
-/* The statistics card on the order page: kept quiet on purpose. A title
-   and chevron, a thin bar of the department's drinks, and small labels
-   under the wider segments. */
+/* The way into the statistics page: the last row of the order page's top
+   card, kept quiet on purpose. A title, a thin bar of the department's
+   drinks with small labels under the wider segments, and a chevron centred
+   on the row. It runs to the card's edges, below a hairline. */
 .stats-teaser {
   display: grid;
   grid-template-columns: 1fr auto;
-  grid-template-areas: "title chev" "bar bar" "labels labels";
+  grid-template-areas: "title chev" "bar chev" "labels chev";
   align-items: center;
-  gap: 0.35rem 0.6rem;
-  margin: 0 0 var(--pico-block-spacing-vertical);
-  padding: 0.6rem 0.9rem 0.55rem;
-  border-radius: calc(var(--pico-border-radius) * 3);
-  background: var(--card-bg);
-  border: 1px solid var(--card-line);
+  gap: 0.35rem 0.8rem;
+  margin: 1rem calc(-1 * var(--pico-block-spacing-horizontal)) calc(-1 * var(--pico-block-spacing-vertical));
+  padding: 0.7rem var(--pico-block-spacing-horizontal) 0.8rem;
+  border-top: 1px solid var(--soft-line);
+  border-radius: 0 0 var(--pico-border-radius) var(--pico-border-radius);
   color: var(--ink);
   text-decoration: none;
-  transition: border-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
-.stats-teaser:hover { border-color: var(--accent); color: var(--ink); }
+.stats-teaser:hover { background: var(--row-tint); color: var(--ink); }
 .teaser-title { grid-area: title; font-size: 0.9rem; font-weight: 600; color: var(--ink-strong); }
 .teaser-bar { grid-area: bar; position: relative; display: block; height: 4px; border-radius: 2px; overflow: hidden; background: var(--row-tint); }
 .teaser-bar .print-seg { padding: 0; border-right: 1.5px solid var(--card-bg); }
-.teaser-labels { grid-area: labels; position: relative; display: block; height: 0.95rem; }
+.teaser-labels { grid-area: labels; position: relative; display: block; height: 1.15rem; }
 .teaser-labels span {
   position: absolute;
   top: 0;
   font-size: 0.68rem;
-  line-height: 1;
+  line-height: 1.5;
   color: var(--ink-muted);
+  padding-right: 0.45rem;
+  box-sizing: border-box;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

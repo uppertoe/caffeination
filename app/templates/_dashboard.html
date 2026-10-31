@@ -2,23 +2,24 @@
   {% include "_dash_header.html" %}
 
   {% include "_drink_card.html" %}
-</article>
 
-{# The way into the statistics page, near the top and kept quiet: a title,
-   a thin bar of the department's drinks, and small labels under the wider
-   segments. Until there are enough usual drinks, the title alone. #}
-<a class="stats-teaser" href="/stats">
-  <span class="teaser-title">Department statistics</span>
-  <svg class="teaser-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 5 7 7-7 7" /></svg>
-  {% if headline %}
-  <span class="teaser-bar" role="img" aria-label="The department’s usual drinks: {% for seg in headline.segments %}{{ seg.label }} {{ (seg.share * 100) | round | int }}%{{ ', ' if not loop.last }}{% endfor %}">
-    {% for seg in headline.segments %}<span class="print-seg c{{ seg.colour }}" style="left: {{ '%.2f' % seg.start }}%; width: {{ '%.2f' % (seg.share * 100) }}%" title="{{ seg.label }}: {{ (seg.share * 100) | round | int }}%"></span>{% endfor %}
-  </span>
-  <span class="teaser-labels" aria-hidden="true">
-    {% for seg in headline.segments if seg.share >= 0.12 %}<span style="left: {{ '%.2f' % seg.start }}%; max-width: {{ '%.2f' % (seg.share * 100) }}%">{{ seg.label }} {{ (seg.share * 100) | round | int }}%</span>{% endfor %}
-  </span>
-  {% endif %}
-</a>
+  {# The way into the statistics page, kept quiet as the last row of this
+     card: a title, a thin bar of the department's drinks with small labels
+     under the wider segments, and a chevron. Until there are enough usual
+     drinks, the title alone. #}
+  <a class="stats-teaser" href="/stats">
+    <span class="teaser-title">Department statistics</span>
+    <svg class="teaser-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 5 7 7-7 7" /></svg>
+    {% if headline %}
+    <span class="teaser-bar" role="img" aria-label="The department’s usual drinks: {% for seg in headline.segments %}{{ seg.label }} {{ (seg.share * 100) | round | int }}%{{ ', ' if not loop.last }}{% endfor %}">
+      {% for seg in headline.segments %}<span class="print-seg c{{ seg.colour }}" style="left: {{ '%.2f' % seg.start }}%; width: {{ '%.2f' % (seg.share * 100) }}%" title="{{ seg.label }}: {{ (seg.share * 100) | round | int }}%"></span>{% endfor %}
+    </span>
+    <span class="teaser-labels" aria-hidden="true">
+      {% for seg in headline.segments if seg.share >= 0.12 %}<span style="left: {{ '%.2f' % seg.start }}%; max-width: {{ '%.2f' % (seg.share * 100) }}%">{{ seg.label }} {{ (seg.share * 100) | round | int }}%</span>{% endfor %}
+    </span>
+    {% endif %}
+  </a>
+</article>
 
 {% include "_order_section.html" %}
 
