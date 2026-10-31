@@ -113,3 +113,25 @@ def test_roster_line_uses_memoised_formatter_consistently():
         me.post(f"/order/add/{_user_id_by_name('Ann')}")
         r = me.post(f"/order/add/{_user_id_by_name('Ben')}")
     assert "2x large oat latte" in r.text
+
+
+def test_stylesheet_fonts_and_images_are_fingerprinted_for_caching():
+    """Every font and background image the stylesheet uses carries a ?v=
+    fingerprint, so the scaffold's year-long cache rule applies, and the
+    font preloads use exactly the URLs the stylesheet asks for."""
+    import re
+
+    with _client() as c:
+        page = c.get("/").text
+        css_href = re.search(r'<link rel="stylesheet" href="(/assets/coffee\.css\?v=[0-9a-f]{8})"', page).group(1)
+        css = c.get(css_href)
+        stale = c.get("/assets/coffee.css?v=00000000")
+
+    assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
+    assert "immutable" in css.headers["cache-control"]
+    assert "cache-control" not in stale.headers  # an old fingerprint is never frozen
+    urls = re.findall(r'url\("?(/static/[^")]+)"?\)', css.text)
+    assert urls and all(re.search(r"\?v=[0-9a-f]{8}$", u) for u in urls), urls
+    assert any("coffee-pattern.svg?v=" in u for u in urls)
+    preloads = re.findall(r'<link rel="preload" href="([^"]+)" as="font"', page)
+    assert len(preloads) == 4 and set(preloads) <= set(urls)
