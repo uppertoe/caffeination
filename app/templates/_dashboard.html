@@ -15,7 +15,10 @@
       {% for seg in headline.segments %}<span class="print-seg c{{ seg.colour }}" style="left: {{ '%.2f' % seg.start }}%; width: {{ '%.2f' % (seg.share * 100) }}%" title="{{ seg.label }}: {{ (seg.share * 100) | round | int }}%"></span>{% endfor %}
     </span>
     <span class="teaser-labels" aria-hidden="true">
-      {% for seg in headline.segments if seg.share >= 0.12 %}<span style="left: {{ '%.2f' % seg.start }}%; max-width: {{ '%.2f' % (seg.share * 100) }}%">{{ seg.label }} {{ (seg.share * 100) | round | int }}%</span>{% endfor %}
+      {# A label shows only where it fits under its segment in full on a
+         phone-width card (about 400px, 6px a character), so no label is
+         ever cut short or runs into the next. #}
+      {% for seg in headline.segments %}{% set text = seg.label ~ " " ~ ((seg.share * 100) | round | int) ~ "%" %}{% if seg.share * 400 >= text | length * 6 + 8 %}<span style="left: {{ '%.2f' % seg.start }}%">{{ text }}</span>{% endif %}{% endfor %}
     </span>
     {% endif %}
   </a>

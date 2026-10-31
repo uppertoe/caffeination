@@ -1473,18 +1473,14 @@ main.container:has(.stats-page) { max-width: min(56rem, calc(100% - 2.5rem)); }
 .teaser-title { grid-area: title; font-size: 0.9rem; font-weight: 600; color: var(--ink-strong); }
 .teaser-bar { grid-area: bar; position: relative; display: block; height: 4px; border-radius: 2px; overflow: hidden; background: var(--row-tint); }
 .teaser-bar .print-seg { padding: 0; border-right: 1.5px solid var(--card-bg); }
-.teaser-labels { grid-area: labels; position: relative; display: block; height: 1.15rem; }
+.teaser-labels { grid-area: labels; position: relative; display: block; height: 1.1rem; }
 .teaser-labels span {
   position: absolute;
   top: 0;
   font-size: 0.68rem;
   line-height: 1.5;
   color: var(--ink-muted);
-  padding-right: 0.45rem;
-  box-sizing: border-box;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .teaser-chevron {
   grid-area: chev;
