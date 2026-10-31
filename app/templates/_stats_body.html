@@ -166,6 +166,71 @@
     {% endif %}
   </article>
 
+  {# ---- Two caffeine references: Bland–Altman and kappa ----------------- #}
+  {% set ag = agreement %}
+  {% if ag %}
+  <article class="agreement">
+    <header><h2>Two caffeine references</h2></header>
+    <p class="panel-intro">The caffeine estimates on this page come from café espressos measured on the Gold Coast. Food Standards Australia New Zealand publishes its own figures in AUSNUT, and this section compares the two for each usual drink that both cover.</p>
+    {% if not ag.ba %}
+      <p class="stats-wait">This comparison needs at least 12 usual drinks that both references cover, and the department has {{ ag.n }}.</p>
+    {% else %}
+    {% set ba = ag.ba %}
+    <p class="panel-lead">The two references rank drinks {{ "almost identically" if ba.r >= 0.9 else "similarly" }}, but AUSNUT’s figures run {{ ((ag.ratio - 1) | abs * 100) | round | int }}% {{ "higher" if ag.ratio >= 1 else "lower" }}{% if ba.slope_p < 0.05 %}, and the gap grows with the size of the drink{% endif %}.</p>
+    <div class="fact-grid">
+      {{ fact("shuffle", "Correlation between the references:", "r = " ~ '%.2f' % ba.r) }}
+      {{ fact("scale", "Average difference, AUSNUT minus Desbrow:", '%+.0f' % ba.bias ~ " mg") }}
+      {{ fact("layers", "95% limits of agreement:", '%+.0f' % ba.lower ~ " to " ~ '%+.0f' % ba.upper ~ " mg") }}
+      {{ fact("gauge", "Weighted kappa for the shot bands:", '%.2f' % ag.wkappa ~ " (95% interval " ~ '%.2f' % ag.wkappa_ci[0] ~ " to " ~ '%.2f' % ag.wkappa_ci[1] ~ ")") }}
+    </div>
+
+    <div class="square-chart">
+      <svg viewBox="-2 -2 204 204" role="img" aria-label="AUSNUT’s caffeine figure against the Desbrow-based estimate for each usual drink.">
+        <rect class="square-frame" x="0" y="0" width="200" height="200" />
+        <line class="diagonal" x1="0" y1="200" x2="200" y2="0" />
+        {% for x, y, r in ag.scatter %}<circle class="round-dot" cx="{{ '%.1f' % x }}" cy="{{ '%.1f' % y }}" r="{{ '%.1f' % r }}" />{% endfor %}
+      </svg>
+      <p>Plotted against each other, the two references fall close to a straight line, with r = {{ '%.2f' % ba.r }}. Yet almost every dot sits above the diagonal, where the references would agree. A high correlation shows only that the two methods move together, not that either could replace the other.</p>
+    </div>
+
+    <h3>The Bland–Altman plot</h3>
+    <div class="chart ba-chart">
+      <svg class="bar-chart" viewBox="0 0 600 200" role="img" aria-label="Difference between the references against their average, with the bias and the 95% limits of agreement.">
+        <line class="midday" x1="0" x2="600" y1="{{ '%.1f' % ag.zero_y }}" y2="{{ '%.1f' % ag.zero_y }}" />
+        <line class="ba-limit" x1="0" x2="600" y1="{{ '%.1f' % ag.upper_y }}" y2="{{ '%.1f' % ag.upper_y }}" />
+        <line class="ba-limit" x1="0" x2="600" y1="{{ '%.1f' % ag.lower_y }}" y2="{{ '%.1f' % ag.lower_y }}" />
+        <line class="ba-bias" x1="0" x2="600" y1="{{ '%.1f' % ag.bias_y }}" y2="{{ '%.1f' % ag.bias_y }}" />
+        {% if ag.trend %}<line class="fit-line" x1="{{ '%.1f' % ag.trend[0] }}" y1="{{ '%.1f' % ag.trend[1] }}" x2="{{ '%.1f' % ag.trend[2] }}" y2="{{ '%.1f' % ag.trend[3] }}" />{% endif %}
+        {% for x, y, r, tip in ag.points %}<circle class="round-dot" cx="{{ '%.1f' % x }}" cy="{{ '%.1f' % y }}" r="{{ '%.1f' % r }}" data-tip="{{ tip }}" />{% endfor %}
+      </svg>
+      <div class="chart-ticks" aria-hidden="true">{% for x, t in ag.x_ticks %}<span style="left: {{ '%.2f' % x }}%">{{ t }} mg</span>{% endfor %}</div>
+    </div>
+    <p class="chart-note">Each dot is a kind of usual drink, larger where several colleagues share it, placed by the average of the two references across and their difference up. The middle line is the average difference of {{ '%+.0f' % ba.bias }} mg, and the outer lines are the 95% limits of agreement. The sloping line shows the difference growing with the size of the drink{% if ba.slope_p < 0.05 %}, a proportional bias that the data support (p = {{ pval(ba.slope_p) }}){% else %}, although the data do not yet show that slope beyond chance (p = {{ pval(ba.slope_p) }}){% endif %}.</p>
+
+    <h3>Agreement on the shot bands</h3>
+    {% set used = [] %}{% for i in range(ag.bands | length) %}{% if ag.table[i] | sum or ag.table | map(attribute=i) | sum %}{% set _ = used.append(i) %}{% endif %}{% endfor %}
+    <div class="xtab-wrap">
+    <table class="xtab agree-table">
+      <thead><tr><th scope="col" class="xtab-corner">Desbrow by AUSNUT</th>{% for j in used %}<th scope="col">{{ ag.bands[j] }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for i in used %}
+        <tr><th scope="row">{{ ag.bands[i] }}</th>{% for j in used %}<td class="{% if i == j %}agree-diag{% endif %}">{{ ag.table[i][j] or "" }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="chart-note">Each usual drink is placed in a shot band by both references. Drinks on the shaded diagonal land in the same band. Cohen’s kappa is {{ '%.2f' % ag.kappa }} (95% interval {{ '%.2f' % ag.kappa_ci[0] }} to {{ '%.2f' % ag.kappa_ci[1] }}), where 0 is the agreement chance alone would produce and 1 is perfect. Weighted kappa, {{ '%.2f' % ag.wkappa }}, gives partial credit to a drink placed one band out.</p>
+
+    <details class="table-view working">
+      <summary>Why the references disagree</summary>
+      <p>AUSNUT builds every espresso drink from a single laboratory-analysed espresso of 290 mg per 100 g, at 50 g a shot, which gives 145 mg a shot. Desbrow and colleagues measured 97 café espressos at an average of 106 mg. The concentrations are close, and the difference lies almost entirely in the assumed size of a shot.</p>
+      <p>Bland and Altman introduced this plot in The Lancet in 1986 to compare clinical measurement methods, such as two monitors of the same physiological variable. The limits of agreement show how far apart the methods might be for any one measurement, which is what matters when deciding whether one could replace the other.</p>
+      <p>{{ ag.left_out }} {{ plural(ag.left_out, "usual drink is", "usual drinks are") }} left out because AUSNUT has no entry for weak, decaf, filter, cold brew or matcha drinks.</p>
+    </details>
+    {% endif %}
+  </article>
+  {% endif %}
+
   {# ---- Options that go together: a χ² test with all of its working. ---- #}
   {% set tested = pairs | selectattr("ready") | list | length %}
   <article class="pairs" x-data='{ pair: {{ pairs[0].key | tojson }} }'>

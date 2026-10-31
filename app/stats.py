@@ -937,3 +937,71 @@ def normal_posterior(estimate: float, se: float, prior_sd: float) -> tuple[float
     w_prior, w_data = 1 / prior_sd ** 2, 1 / se ** 2
     sd = math.sqrt(1 / (w_prior + w_data))
     return estimate * w_data * sd * sd, sd
+
+
+# ---------------------------------------------------------------------------
+# Agreement between two methods of measuring the same thing.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class BlandAltman:
+    n: int
+    bias: float  # mean of (b − a)
+    sd: float
+    lower: float  # bias − 1.96 SD: the 95% limits of agreement
+    upper: float
+    slope: float  # of the difference on the mean: proportional bias
+    slope_p: float
+    r: float  # Pearson correlation of a and b, for contrast
+
+
+def bland_altman(a: Sequence[float], b: Sequence[float]) -> Optional[BlandAltman]:
+    """Bland and Altman's analysis of b against a: the mean difference, the
+    limits within which 95% of differences fall, and whether the difference
+    grows with the size of the measurement."""
+    n = len(a)
+    if n < 3:
+        return None
+    diffs = [y - x for x, y in zip(a, b)]
+    means = [(x + y) / 2 for x, y in zip(a, b)]
+    bias, sd = statistics.fmean(diffs), statistics.stdev(diffs)
+    mx = statistics.fmean(means)
+    sxx = sum((m - mx) ** 2 for m in means)
+    slope = sum((m - mx) * (d - bias) for m, d in zip(means, diffs)) / sxx if sxx else 0.0
+    resid = [d - bias - slope * (m - mx) for m, d in zip(means, diffs)]
+    s2 = sum(e * e for e in resid) / (n - 2) if n > 2 else 0.0
+    se = math.sqrt(s2 / sxx) if sxx and s2 else 0.0
+    slope_p = 2 * t_sf(abs(slope) / se, n - 2) if se else (0.0 if slope else 1.0)
+    return BlandAltman(n, bias, sd, bias - Z_975 * sd, bias + Z_975 * sd, slope, min(1.0, slope_p), _pearson(a, b))
+
+
+def cohen_kappa(a: Sequence[int], b: Sequence[int], categories: int, weighted: bool = False) -> float:
+    """Cohen's kappa for two ratings of the same items on categories 0..k−1:
+    agreement beyond what chance would produce, from 0 (chance) to 1
+    (perfect). Weighted, a near miss counts as partial agreement, in
+    proportion to how near (linear weights)."""
+    n = len(a)
+    if n == 0:
+        return math.nan
+    w = lambda i, j: 1 - abs(i - j) / (categories - 1) if weighted else float(i == j)
+    pa = Counter(a)
+    pb = Counter(b)
+    observed = sum(w(i, j) for i, j in zip(a, b)) / n
+    expected = sum(w(i, j) * pa[i] * pb[j] for i in range(categories) for j in range(categories)) / (n * n)
+    return (observed - expected) / (1 - expected) if expected < 1 else 1.0
+
+
+def kappa_interval(a: Sequence[int], b: Sequence[int], categories: int, weighted: bool,
+                   resamples: int = 1000, seed: int = 0) -> tuple[float, float]:
+    """95% bootstrap interval for kappa, resampling the rated items."""
+    rng = random.Random(seed)
+    n = len(a)
+    out = []
+    for _ in range(resamples):
+        idx = [rng.randrange(n) for _ in range(n)]
+        k = cohen_kappa([a[i] for i in idx], [b[i] for i in idx], categories, weighted)
+        if not math.isnan(k):
+            out.append(k)
+    out.sort()
+    return _percentile(out, 0.025), _percentile(out, 0.975)

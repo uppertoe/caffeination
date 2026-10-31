@@ -425,3 +425,20 @@ def test_round_panels_wait_then_appear():
     # Nothing on the page names a colleague.
     for name in ("P0", "P1", "P2", "P3", "P4", "P5"):
         assert f">{name}<" not in ready and f" {name} " not in ready
+
+
+def test_ausnut_reference_and_agreement():
+    from app.menu import ausnut_caffeine_mg
+    from app.stats import bland_altman, cohen_kappa
+
+    assert ausnut_caffeine_mg("latte", "small", "regular") == 143
+    assert ausnut_caffeine_mg("latte", "large", "regular") == 291
+    assert ausnut_caffeine_mg("espresso", None, "regular", 2) == 232
+    assert ausnut_caffeine_mg("filter", "small", "regular") is None
+    assert ausnut_caffeine_mg("latte", "small", "decaf") is None
+    # A method that reads 30% high correlates perfectly but does not agree.
+    ba = bland_altman([1, 2, 3, 4, 5, 6], [1.3, 2.6, 3.9, 5.2, 6.5, 7.8])
+    assert ba.r == pytest.approx(1.0) and ba.bias == pytest.approx(1.05) and ba.slope == pytest.approx(0.2609, abs=1e-4)
+    # Worked by hand: observed 6/8, chance 23/64.
+    assert cohen_kappa([0, 0, 1, 1, 2, 2, 0, 1], [0, 1, 1, 1, 2, 0, 0, 1], 3) == pytest.approx(0.6098, abs=1e-4)
+    assert cohen_kappa([0, 0, 1, 1, 2, 2, 0, 1], [0, 1, 1, 1, 2, 0, 0, 1], 3, weighted=True) == pytest.approx(0.52)

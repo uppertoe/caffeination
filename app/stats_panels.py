@@ -13,14 +13,27 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Callable, Optional
 
-from app.menu import MG_PER_SHOT, MG_PER_SHOT_SD, SIZE_LABELS, Strength, Sweetener, caffeine_parts
+from app.menu import (
+    MG_PER_SHOT,
+    MG_PER_SHOT_SD,
+    SIZE_LABELS,
+    Strength,
+    Sweetener,
+    ausnut_caffeine_mg,
+    caffeine_parts,
+    estimated_caffeine_mg,
+)
 from app.stats import (
+    BlandAltman,
     ChiSquare,
     Interval,
     allocate,
     baseline_p,
+    bland_altman,
     chi_square,
+    cohen_kappa,
     holm_adjust,
+    kappa_interval,
     n2_for_power,
     randomised_baseline_ps,
     simulate_caffeine,
@@ -480,4 +493,95 @@ def build_moved_on(everyone: list[Usual]) -> MovedOn:
             out.pair.p_holm = out.pair.test.p_permutation  # a single test
             if out.pair.p_holm < 0.05:
                 out.pair.finding = MOVED_ON.sentence(*out.pair.standout)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Two caffeine references: Bland–Altman agreement and kappa.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Agreement:
+    n: int  # usual drinks with an entry in both references
+    left_out: int
+    ba: Optional[BlandAltman] = None
+    ratio: Optional[float] = None  # AUSNUT's total over ours
+    kappa: Optional[float] = None
+    kappa_ci: Optional[tuple[float, float]] = None
+    wkappa: Optional[float] = None
+    wkappa_ci: Optional[tuple[float, float]] = None
+    # Bland–Altman plot: (x, y, radius, tip) in a 600 × 200 frame, and the
+    # y of the bias and limit lines, and the proportional-bias line.
+    points: list[tuple[float, float, float, str]] = field(default_factory=list)
+    bias_y: float = 0.0
+    lower_y: float = 0.0
+    upper_y: float = 0.0
+    zero_y: float = 0.0
+    trend: Optional[tuple[float, float, float, float]] = None
+    x_ticks: list[tuple[float, str]] = field(default_factory=list)
+    y_ticks: list[tuple[float, str]] = field(default_factory=list)
+    scatter: list[tuple[float, float, float]] = field(default_factory=list)  # 200 × 200
+    bands: list[str] = field(default_factory=list)
+    table: list[list[int]] = field(default_factory=list)  # ours (rows) by AUSNUT (cols)
+
+
+BA_W, BA_H = 600, 200
+
+
+def build_agreement(usuals: list[Usual]) -> Optional[Agreement]:
+    if not usuals:
+        return None
+    pairs = []
+    for u in usuals:
+        o = u.options
+        args = (o["base_id"], o["size"], o["strength"] or Strength.REGULAR.value, o["shots"])
+        theirs = ausnut_caffeine_mg(*args)
+        if theirs is not None:
+            pairs.append((estimated_caffeine_mg(*args), theirs))
+    out = Agreement(len(pairs), len(usuals) - len(pairs))
+    if len(pairs) < MIN_FOR_PAIRING:
+        return out
+    ours = [a for a, _ in pairs]
+    theirs = [b for _, b in pairs]
+    out.ba = ba = bland_altman(ours, theirs)
+    out.ratio = sum(theirs) / sum(ours) if sum(ours) else None
+
+    # Bland–Altman plot, identical points drawn as one larger dot.
+    counts = Counter(pairs)
+    x_max = max((a + b) / 2 for a, b in pairs) * 1.1
+    y_lo = min(0.0, ba.lower, min(b - a for a, b in pairs)) - 20
+    y_hi = max(ba.upper, max(b - a for a, b in pairs)) + 20
+    px = lambda m: m / x_max * BA_W
+    py = lambda d: BA_H - (d - y_lo) / (y_hi - y_lo) * BA_H
+    out.points = [
+        (px((a + b) / 2), py(b - a), 3 + 2.2 * math.sqrt(k),
+         f"{k} usual {'drink' if k == 1 else 'drinks'}: {a:.0f} mg against {b:.0f} mg")
+        for (a, b), k in sorted(counts.items())
+    ]
+    out.bias_y, out.lower_y, out.upper_y, out.zero_y = py(ba.bias), py(ba.lower), py(ba.upper), py(0)
+    mean_of_means = statistics.fmean((a + b) / 2 for a, b in pairs)
+    line = lambda m: ba.bias + ba.slope * (m - mean_of_means)
+    out.trend = (0, py(line(0)), BA_W, py(line(x_max)))
+    step = 100 if x_max > 300 else 50
+    out.x_ticks = [(m / x_max * 100, f"{m}") for m in range(0, int(x_max) + 1, step)]
+    y_step = 50 if y_hi - y_lo > 150 else 25
+    first = math.ceil(y_lo / y_step) * y_step
+    out.y_ticks = [((py(v)) / BA_H * 100, f"{v:+d}" if v else "0") for v in range(int(first), int(y_hi) + 1, y_step)]
+
+    top = max(max(ours), max(theirs)) * 1.05
+    out.scatter = [(a / top * 200, 200 - b / top * 200, 2.5 + 1.8 * math.sqrt(k)) for (a, b), k in counts.items()]
+
+    # Both references placed in the same half-shot bands.
+    from app.stats_view import CAFFEINE_ROWS, half_shots
+
+    ra = [half_shots(a) for a in ours]
+    rb = [half_shots(b) for b in theirs]
+    k = len(CAFFEINE_ROWS)
+    out.bands = list(CAFFEINE_ROWS)
+    out.table = [[sum(1 for x, y in zip(ra, rb) if x == i and y == j) for j in range(k)] for i in range(k)]
+    out.kappa = cohen_kappa(ra, rb, k)
+    out.kappa_ci = kappa_interval(ra, rb, k, False)
+    out.wkappa = cohen_kappa(ra, rb, k, weighted=True)
+    out.wkappa_ci = kappa_interval(ra, rb, k, True)
     return out

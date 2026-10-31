@@ -12,6 +12,7 @@ from app.models import User
 from app.stats_rounds import build_round_panels
 from app.stats_panels import (
     MIN_MOVED_ON,
+    build_agreement,
     build_caffeine_sim,
     build_moved_on,
     build_pairs,
@@ -62,6 +63,7 @@ def stats_context(session: Session, viewer: User, who: str, allocation: int = 1)
         "chosen": chosen,
         "caffeine": build_caffeine(usuals, viewer.id) if usuals else None,
         "caffeine_sim": build_caffeine_sim(usuals),
+        "agreement": build_agreement(usuals),
         "pairs": build_pairs(usuals),
         "randomisation": build_randomisation(usuals, allocation),
         "moved_on": build_moved_on(everyone),
