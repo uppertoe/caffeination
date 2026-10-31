@@ -58,6 +58,7 @@ def init_db() -> None:
     _ensure_columns()
     _ensure_indexes()
     _purge_unnamed_users()
+    _seed_drink_history()
 
 
 # One-off in-place migrations: create_all never alters existing tables, so
@@ -69,6 +70,10 @@ _COLUMNS = (
     ('"user"', "last_active_at", "TIMESTAMP", 'UPDATE "user" SET last_active_at = created_at'),
     ("saveddrink", "shots", "INTEGER", None),
     ("saveddrink", "own_cup", "BOOLEAN NOT NULL DEFAULT 0", None),
+    # The round log first shipped without links to people (#21).
+    ("round", "owner_id", "VARCHAR", None),
+    ("rounddrink", "user_id", "VARCHAR", None),
+    ("rounddrink", "own_cup", "BOOLEAN NOT NULL DEFAULT 0", None),
 )
 
 
@@ -94,6 +99,7 @@ _INDEXES = (
     ('ix_user_roster', '"user"', "(one_off, display_name)"),
     ('ix_user_created_by', '"user"', "(created_by)"),
     ('ix_orderitem_target', 'orderitem', "(target_user_id)"),
+    ('ix_rounddrink_user', 'rounddrink', "(user_id)"),
 )
 
 
@@ -124,6 +130,24 @@ def _purge_unnamed_users() -> None:
             '(SELECT id FROM "user" WHERE display_name IS NULL)'
         )
         conn.exec_driver_sql('DELETE FROM "user" WHERE display_name IS NULL')
+        conn.commit()
+
+
+def _seed_drink_history() -> None:
+    """Give every roster drink saved before the history existed a first
+    DrinkChange, stamped with when it was last saved, so the history starts
+    from the drinks as they stood. Runs once: only while the table is empty."""
+    engine = get_engine()
+    with engine.connect() as conn:
+        if conn.exec_driver_sql("SELECT 1 FROM drinkchange LIMIT 1").first():
+            return
+        conn.exec_driver_sql(
+            "INSERT INTO drinkchange (user_id, changed_at, base_id, temp, size, milk,"
+            " strength, sweetener, length, shots, own_cup)"
+            " SELECT s.user_id, s.updated_at, s.base_id, s.temp, s.size, s.milk,"
+            " s.strength, s.sweetener, s.length, s.shots, s.own_cup"
+            ' FROM saveddrink s JOIN "user" u ON u.id = s.user_id WHERE u.one_off = 0'
+        )
         conn.commit()
 
 

@@ -21,7 +21,7 @@ from app.menu import (
     Temp,
     get_drink,
 )
-from app.models import SavedDrink, utcnow
+from app.models import DrinkChange, SavedDrink, User, utcnow
 
 
 def _enum_values(enum_cls) -> set[str]:
@@ -94,8 +94,20 @@ def normalize(base_id: str, form: dict) -> Optional[dict]:
     return out
 
 
-def upsert_saved_drink(session: Session, user_id: str, fields: dict) -> SavedDrink:
+# The options a DrinkChange records: everything ordered, minus the notes.
+HISTORY_FIELDS = (
+    "base_id", "temp", "size", "milk", "strength", "sweetener", "length", "shots", "own_cup",
+)
+
+
+def upsert_saved_drink(
+    session: Session, user_id: str, fields: dict, *, changed_by: Optional[str] = None
+) -> SavedDrink:
+    """Save a person's usual drink, adding a DrinkChange when the options
+    changed. One-off guests keep no history: they are deleted with the order.
+    changed_by is whoever saved it on the person's behalf, if not them."""
     existing = session.get(SavedDrink, user_id)
+    before = None if existing is None else tuple(getattr(existing, f) for f in HISTORY_FIELDS)
     if existing is None:
         sd = SavedDrink(user_id=user_id, **fields)
         session.add(sd)
@@ -104,6 +116,15 @@ def upsert_saved_drink(session: Session, user_id: str, fields: dict) -> SavedDri
             setattr(existing, k, v)
         existing.updated_at = utcnow()
         sd = existing
+    after = tuple(getattr(sd, f) for f in HISTORY_FIELDS)
+    user = session.get(User, user_id)
+    if after != before and user is not None and not user.one_off:
+        session.add(DrinkChange(
+            user_id=user_id,
+            changed_at=utcnow(),
+            changed_by=changed_by if changed_by != user_id else None,
+            **dict(zip(HISTORY_FIELDS, after)),
+        ))
     session.commit()
     session.refresh(sd)
     return sd

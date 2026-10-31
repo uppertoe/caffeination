@@ -56,19 +56,20 @@ class OrderItem(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# The anonymised round log behind the statistics page. A round is recorded
-# when an order closes (cleared, or expired after ORDER_TTL), stamped with the
-# time its last person was added. Nothing in Round or RoundDrink refers to a
-# person: no user ids, no names, no note text, drinks stored in a fixed sort
-# order rather than the order people were added, and the time rounded so a
-# round can't be lined up against the access logs.
+# The round log and drink history behind the statistics page. A round is
+# recorded when an order closes (cleared, or expired after ORDER_TTL), stamped
+# with the time its last person was added. Rows link to people so that
+# repeat drinks can be treated as one person's, but the statistics page only
+# ever shows aggregates and the viewer's own figures: it never names anyone.
+# Deleting yourself detaches your rounds and deletes your drink history.
 # ---------------------------------------------------------------------------
 
 
 class Round(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    placed_at: datetime  # UTC, floored to app.rounds.PLACED_AT_RESOLUTION
+    placed_at: datetime  # UTC
     drink_count: int
+    owner_id: Optional[str] = None  # who placed the order
 
 
 class RoundDrink(SQLModel, table=True):
@@ -77,6 +78,7 @@ class RoundDrink(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     round_id: int = Field(foreign_key="round.id", index=True)
+    user_id: Optional[str] = None  # None for guests and detached rows
     base_id: str
     temp: str
     size: Optional[str] = None
@@ -85,6 +87,26 @@ class RoundDrink(SQLModel, table=True):
     sweetener: str
     length: Optional[str] = None
     shots: Optional[int] = None
+    own_cup: bool = False
     has_notes: bool = False
     guest: bool = False
 
+
+class DrinkChange(SQLModel, table=True):
+    """A usual drink as it stood after each save that changed it, for one
+    roster person. The first row per person is their first saved drink (or,
+    for drinks saved before the history existed, the drink as it stood then)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: str = Field(index=True)
+    changed_at: datetime  # UTC
+    changed_by: Optional[str] = None  # None when the person saved it themselves
+    base_id: str
+    temp: str
+    size: Optional[str] = None
+    milk: Optional[str] = None
+    strength: str
+    sweetener: str
+    length: Optional[str] = None
+    shots: Optional[int] = None
+    own_cup: bool = False

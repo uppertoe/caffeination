@@ -4,12 +4,11 @@
 <div id="unusual-result" class="unusual-result">
   <p class="unusual-line">{{ unusual.line }}</p>
   {% set pool = "of the other " ~ unusual.n ~ " usual drinks in the department" if unusual.excludes_viewer else "of the department’s " ~ unusual.n ~ " usual drinks" %}
-  <p class="unusual-verdict">
-    {% if unusual.more_ordinary == unusual.n %}This drink is more unusual than every one {{ pool }}.
-    {% elif unusual.more_ordinary == 0 %}None {{ pool }} is more ordinary than this one.
-    {% else %}This drink is more unusual than <strong>{{ unusual.more_ordinary }}</strong> {{ pool }}.{% endif %}
+  <p class="headline unusual-verdict">
+    {% if unusual.more_ordinary == unusual.n %}This drink is more unusual than <strong class="num">every one</strong> {{ pool }}.
+    {% elif unusual.more_ordinary == 0 %}<strong class="num">None</strong> {{ pool }} is more ordinary than this one.
+    {% else %}This drink is more unusual than <strong class="num">{{ unusual.more_ordinary }}</strong> {{ pool }}.{% endif %}
   </p>
-  <p class="unusual-reason">{{ unusual.reason }}</p>
 
   {% call(part) bean_chart(unusual.chart, 600, 18, 12, "Each colleague’s usual drink placed from more ordinary to more unusual, with this drink marked.", top=10) %}
     {% if part == "above" %}
@@ -23,4 +22,19 @@
     {% endif %}
   {% endcall %}
 
+  <table class="working-table">
+    <caption>This drink scores {{ '%.1f' % unusual.bits }} bits, which is as surprising as a 1-in-{{ unusual.one_in }} chance. The table shows what each option adds:</caption>
+    <thead><tr><th scope="col">Option</th><th scope="col">This drink</th><th scope="col">Usual drinks with it</th><th scope="col" class="num">Bits</th></tr></thead>
+    <tbody>
+      {% for o in unusual.working if o.value is not none %}
+      <tr class="{% if o.rarest %}is-rarest{% endif %}">
+        <th scope="row">{{ o.label }}</th>
+        <td>{{ o.value }}</td>
+        <td>{{ o.count }} of {{ o.total }} {{ o.basis }}</td>
+        <td class="num"><span class="bits-bar" style="--w: {{ '%.1f' % ([o.bits / [unusual.bits, 0.01] | max, 1] | min * 100) }}%"></span>{{ '%.1f' % o.bits }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot><tr><th scope="row" colspan="3">Total</th><td class="num">{{ '%.1f' % unusual.bits }}</td></tr></tfoot>
+  </table>
 </div>

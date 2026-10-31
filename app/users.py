@@ -9,7 +9,7 @@ from sqlmodel import Session, delete, select, update
 from app.db import get_session
 from app.drinks import LINE_FIELDS, format_line
 from app.identity import mint_identity, read_identity, set_identity
-from app.models import OrderItem, SavedDrink, User
+from app.models import DrinkChange, OrderItem, Round, RoundDrink, SavedDrink, User
 
 # How long after creating a roster person you may still edit their usual.
 EDIT_WINDOW = timedelta(hours=2)
@@ -161,8 +161,9 @@ def delete_user(session: Session, user_id: str) -> None:
     """Remove a user and everything hanging off them.
 
     Their own open order (including any one-off guests it spawned), their
-    presence in other people's orders, and their saved drink all go; people
-    they created stay on the roster with `created_by` detached. Set-based
+    presence in other people's orders, their saved drink and its history all
+    go; people they created stay on the roster with `created_by` detached,
+    and their rounds stay in the statistics with the link to them removed. Set-based
     statements, one commit.
     """
     from app.orders import clear_order  # function-local: orders imports us
@@ -176,6 +177,10 @@ def delete_user(session: Session, user_id: str) -> None:
         update(User).where(User.created_by == user_id).values(created_by=None)
     )
     session.exec(delete(SavedDrink).where(SavedDrink.user_id == user_id))
+    # Their rounds stay in the statistics, detached from them.
+    session.exec(delete(DrinkChange).where(DrinkChange.user_id == user_id))
+    session.exec(update(RoundDrink).where(RoundDrink.user_id == user_id).values(user_id=None))
+    session.exec(update(Round).where(Round.owner_id == user_id).values(owner_id=None))
     session.delete(user)
     session.commit()
 

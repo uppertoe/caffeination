@@ -1,0 +1,275 @@
+{% from "_stats_macros.html" import fact, plural, pct, pval, p_eq, signed, waiting %}
+{# The rounds part: app.stats_view.Rounds and app.stats_rounds.RoundPanels.
+   Sections with enough rounds render as stories; the rest wait together in
+   one card, each with a meter of how far the log has come. #}
+{% set rp = round_panels %}
+{% set a, k, t, z = rp.afternoon, rp.next_coffee, rp.attendance, rp.size %}
+{% macro shots(x) %}{{ '%.1f' % x }} {{ "shot" if '%.1f' % x == "1.0" else "shots" }}{% endmacro %}
+{% macro ci(lo, hi, places=2) %}95% interval {{ ('%.' ~ places ~ 'f') % lo }} to {{ ('%.' ~ places ~ 'f') % hi }}{% endmacro %}
+
+{# ---- When rounds happen ------------------------------------------------- #}
+{% if rounds.ready %}
+<section id="rounds" class="story" style="--sc: var(--c2)">
+  <div class="story-text">
+    <h2 class="story-title">When rounds happen</h2>
+    <p class="headline">Half of all rounds fall between <strong class="num">{{ rounds.half_window[0] }}</strong> and <strong class="num">{{ rounds.half_window[1] }}</strong>.</p>
+    <div class="fact-row">
+      {{ fact("layers", "Rounds recorded:", rounds.n) }}
+      {{ fact("calendar", "Busiest day:", rounds.busiest_day or "No day stands out yet") }}
+    </div>
+    <p>A round is recorded when an order is cleared, or when it expires 12 hours after the first person is added.</p>
+    <details class="table-view working">
+      <summary>How the time of day is summarised</summary>
+      <p>Times of day wrap around midnight, so the shaded arc is the shortest stretch of the clock holding half of all rounds. Unlike a mean and standard deviation, it stays accurate when rounds bunch in two places, such as mid-morning and mid-afternoon.</p>
+      <p>Each weekday’s bar carries a 95% Wilson interval, and a χ² goodness-of-fit test against an even spread across the days gives {{ p_eq(rounds.even_spread_p) }}.</p>
+    </details>
+  </div>
+  <div class="story-figure">
+    <div class="dial-wrap">
+      <svg class="dial" viewBox="0 0 240 240" role="img" aria-label="Rounds in each quarter hour on a 24-hour clock, with the stretch holding half of all rounds marked.">
+        <circle class="dial-face" cx="120" cy="120" r="112" />
+        <circle class="dial-ring" cx="120" cy="120" r="46" />
+        {% if rounds.dial_arc %}<path class="dial-arc draw" pathLength="1" d="{{ rounds.dial_arc }}" />{% endif %}
+        {% for path, tip in rounds.dial %}<path class="dial-wedge pop" style="--i: {{ loop.index0 }}" d="{{ path }}" data-tip="{{ tip }}" />{% endfor %}
+      </svg>
+      {% for x, y, label in rounds.dial_labels %}<span class="dial-label" style="left: {{ '%.1f' % x }}%; top: {{ '%.1f' % y }}%">{{ label }}</span>{% endfor %}
+      <span class="dial-centre">{{ rounds.n }}<small>rounds</small></span>
+    </div>
+    <div class="chart">
+      <svg class="bar-chart" viewBox="0 0 {{ chart_w }} 130" role="img" aria-label="Each weekday’s share of rounds with its 95% interval, against an even spread.">
+        {% set w = chart_w / rounds.day_shares | length %}
+        {% for day, count, share, lo, hi in rounds.day_shares %}
+        {% set x = loop.index0 * w %}
+        <rect class="bar grow" style="--i: {{ loop.index0 }}" x="{{ '%.1f' % (x + w * 0.22) }}" y="{{ '%.1f' % (130 - share / rounds.day_scale * 118) }}" width="{{ '%.1f' % (w * 0.56) }}" height="{{ '%.1f' % (share / rounds.day_scale * 118) }}" rx="4" data-tip="{{ day }}: {{ count }} {{ plural(count, 'round', 'rounds') }}, {{ pct(share) }} (95% interval {{ pct(lo) }} to {{ pct(hi) }})" />
+        <line class="error-bar" x1="{{ '%.1f' % (x + w / 2) }}" x2="{{ '%.1f' % (x + w / 2) }}" y1="{{ '%.1f' % (130 - lo / rounds.day_scale * 118) }}" y2="{{ '%.1f' % (130 - hi / rounds.day_scale * 118) }}" />
+        {% endfor %}
+        <line class="expected" x1="0" x2="{{ chart_w }}" y1="{{ '%.1f' % (130 - rounds.even_share / rounds.day_scale * 118) }}" y2="{{ '%.1f' % (130 - rounds.even_share / rounds.day_scale * 118) }}" />
+        <line class="baseline" x1="0" x2="{{ chart_w }}" y1="129.5" y2="129.5" />
+      </svg>
+      <div class="chart-ticks centred" aria-hidden="true">
+        {% for day, count, share, lo, hi in rounds.day_shares %}<span style="left: {{ '%.2f' % ((loop.index0 + 0.5) / rounds.day_shares | length * 100) }}%">{{ day[:3] }}</span>{% endfor %}
+      </div>
+    </div>
+    <p class="chart-note">The clock shows rounds in each quarter hour, with midnight at the top and the arc marking the stretch that holds half of them. The bars show each weekday’s share of rounds with its 95% interval, against the dashed line of an even spread.</p>
+  </div>
+</section>
+{% endif %}
+
+{# ---- Caffeine through the day ------------------------------------------ #}
+{% if a.ready %}
+{% set d, lo, hi = a.clustered if a.clustered else (a.naive.difference, a.naive.low, a.naive.high) %}
+<section id="through-the-day" class="story" style="--sc: var(--c4)">
+  <div class="story-text">
+    <h2 class="story-title">Caffeine through the day</h2>
+    <p class="headline">
+      {% if lo > 0 %}Drinks ordered after midday hold <strong class="num">{{ shots(d) }}</strong> more caffeine than those ordered before.
+      {% elif hi < 0 %}Drinks ordered after midday hold <strong class="num">{{ shots(-d) }}</strong> less caffeine than those ordered before.
+      {% else %}Drinks ordered after midday hold <strong class="num">about the same</strong> caffeine as those ordered before.{% endif %}
+    </p>
+    <div class="fact-row">
+      {{ fact("clock", "Before midday, on average:", shots(a.mean_before) ~ " a drink, from " ~ a.before ~ " drinks") }}
+      {{ fact("moon", "After midday, on average:", shots(a.mean_after) ~ " a drink, from " ~ a.after ~ " drinks") }}
+    </div>
+    <p>The {{ a.before + a.after }} drinks come from only {{ a.people }} colleagues, so they are not {{ a.before + a.after }} independent pieces of evidence. The figure shows two 95% intervals for the difference: one treats every drink as independent, and the other resamples colleagues together with all of their drinks.
+      {% if a.clustered_width and a.clustered_width > a.naive_width %}The second is wider, because it counts each colleague’s repeat drinks as one person’s evidence.
+      {% elif a.clustered_width %}Here the second is narrower, because most colleagues order both before and after midday and so act as their own comparison.{% endif %}</p>
+    {% if a.posterior_input %}
+    {% set est, se = a.posterior_input %}
+    <div class="bayes" x-data='{
+      prior: 0.5, est: {{ est | tojson }}, se: {{ se | tojson }},
+      get post() { const wp = 1 / (this.prior * this.prior), wd = 1 / (this.se * this.se); const sd = Math.sqrt(1 / (wp + wd)); return { mean: this.est * wd * sd * sd, sd: sd }; },
+      phi(z) { const t = 1 / (1 + 0.2316419 * Math.abs(z)); const d = 0.3989423 * Math.exp(-z * z / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; },
+      fmt(x) { return (x < 0 ? "−" : "+") + Math.abs(x).toFixed(2); },
+      curve(m, s) { const pts = []; const peak = 1 / (Math.min(this.post.sd, this.prior) * 2.5066); for (let i = 0; i <= 80; i++) { const x = -1.5 + 3 * i / 80; const y = Math.exp(-0.5 * ((x - m) / s) ** 2) / (s * 2.5066); pts.push((i / 80 * 600).toFixed(1) + "," + (98 - Math.min(1, y / peak) * 92).toFixed(1)); } return "M" + pts.join(" L"); }
+    }'>
+      <h3>A Bayesian reading</h3>
+      <label class="bayes-control">
+        <span x-text='"How sceptical the prior is: a standard deviation of " + prior.toFixed(2) + " shots"'>How sceptical the prior is: a standard deviation of 0.50 shots</span>
+        <input type="range" min="0.05" max="1.5" step="0.05" x-model.number="prior" aria-label="Prior standard deviation, in shots" />
+      </label>
+      <svg class="bar-chart bayes-chart" viewBox="0 0 600 100" role="img" aria-label="The sceptical prior and the posterior for the difference in shots a drink.">
+        <line class="midday" x1="300" x2="300" y1="0" y2="100" />
+        <path class="prior-curve" :d="curve(0, prior)" />
+        <path class="post-curve" :d="curve(post.mean, post.sd)" />
+        <line class="baseline" x1="0" x2="600" y1="98.5" y2="98.5" />
+      </svg>
+      <div class="chart-ticks" aria-hidden="true">{% for x, tk in ((0, "−1.5"), (50, "0"), (100, "+1.5")) %}<span style="left: {{ x }}%">{{ tk }}</span>{% endfor %}</div>
+      <p class="chart-legend"><span class="key key-prior"></span>Sceptical prior <span class="key key-post"></span>Posterior</p>
+      {% set wd = 1 / (se * se) %}{% set psd = (1 / (4 + wd)) ** 0.5 %}{% set pmean = est * wd * psd * psd %}
+      <p class="bayes-result" x-text='"The posterior puts the difference at " + fmt(post.mean) + " shots, with a 95% credible interval of " + fmt(post.mean - 1.96 * post.sd) + " to " + fmt(post.mean + 1.96 * post.sd) + ", and gives a " + Math.round(phi(-post.mean / post.sd) * 100) + "% probability that afternoon drinks are weaker."'>The posterior puts the difference at {{ signed(pmean) }} shots, with a 95% credible interval of {{ signed(pmean - 1.96 * psd) }} to {{ signed(pmean + 1.96 * psd) }}.</p>
+      <p class="chart-note">The rounds alone put the difference at {{ signed(est) }} shots, with a standard error of {{ '%.2f' % se }}, and the posterior combines that with the prior.</p>
+    </div>
+    {% endif %}
+    <details class="table-view working">
+      <summary>How this was calculated</summary>
+      <p>Each drink’s caffeine is its estimate in espresso shots, and guests’ drinks are left out. The first interval is Welch’s t interval, which treats every drink as independent. The second resamples colleagues 2,000 times, carrying all of each colleague’s drinks together, and takes the middle 95% of the resampled differences.</p>
+      <p>The Bayesian reading combines a normal prior centred on no difference with a normal likelihood built from the resampled interval. Narrowing the prior expresses more scepticism, so the posterior needs more data to move away from zero.</p>
+    </details>
+  </div>
+  <div class="story-figure">
+    <div class="chart">
+      <svg class="bar-chart" viewBox="0 0 {{ chart_w }} 160" role="img" aria-label="Each round’s average caffeine a drink against its time of day.">
+        <line class="midday" x1="{{ '%.1f' % a.midday_x }}" x2="{{ '%.1f' % a.midday_x }}" y1="0" y2="160" />
+        {% for dot in a.dots %}<circle class="round-dot pop" style="--i: {{ loop.index0 % 40 }}" cx="{{ '%.1f' % dot.x }}" cy="{{ '%.1f' % dot.y }}" r="{{ '%.1f' % dot.r }}" data-tip="{{ dot.tip }}" />{% endfor %}
+        <line class="baseline" x1="0" x2="{{ chart_w }}" y1="159.5" y2="159.5" />
+      </svg>
+      <div class="chart-ticks" aria-hidden="true">{% for x, tk in a.dot_ticks %}<span style="left: {{ '%.2f' % x }}%">{{ tk }}</span>{% endfor %}</div>
+    </div>
+    <p class="chart-note">Each dot is a round, placed by its time of day and the average caffeine of its drinks, in espresso shots, and drawn larger where several rounds fall together. The dashed line marks midday.</p>
+    <div class="ci-chart">
+      {% set rows = [("Every drink treated as independent", a.bar_naive, (a.naive.low, a.naive.high))] %}
+      {% if a.clustered %}{% set rows = rows + [("Colleagues resampled, each with all of their drinks", a.bar_clustered, (a.clustered[1], a.clustered[2]))] %}{% endif %}
+      {% for label, bar, lim in rows %}
+      <div class="ci-row">
+        <span class="ci-label">{{ label }}<br><small>{{ signed(lim[0]) }} to {{ signed(lim[1]) }} shots</small></span>
+        <span class="ci-track">
+          <span class="ci-zero" style="left: 50%"></span>
+          <span class="sim-whisker grow-x" style="left: {{ '%.2f' % bar[1] }}%; width: {{ '%.2f' % (bar[2] - bar[1]) }}%"></span>
+          <span class="sim-dot" style="left: {{ '%.2f' % bar[0] }}%"></span>
+        </span>
+      </div>
+      {% endfor %}
+      <div class="chart-ticks sim-ticks" aria-hidden="true">{% for x, tk in a.axis %}<span style="left: {{ '%.2f' % x }}%">{{ tk }}</span>{% endfor %}</div>
+    </div>
+    <p class="chart-note">Both lines are 95% intervals for the difference in shots a drink, after midday minus before.</p>
+  </div>
+</section>
+{% endif %}
+
+{# ---- Time to the next coffee ------------------------------------------- #}
+{% if k.ready %}
+<section id="next-coffee" class="story" style="--sc: var(--c3)">
+  <div class="story-text">
+    <h2 class="story-title">Time to the next coffee</h2>
+    <p class="headline">
+      {% if k.median %}Half of the gaps between a colleague’s rounds are shorter than <strong class="num">{{ '%.1f' % k.median }} days</strong>{% if k.median_low and k.median_high %} (95% interval {{ '%.1f' % k.median_low }} to {{ '%.1f' % k.median_high }} days){% endif %}.
+      {% else %}Fewer than half of the gaps between a colleague’s rounds have closed, so the <strong class="num">median gap</strong> is still unknown.{% endif %}
+    </p>
+    <div class="fact-row">
+      {{ fact("people", "Colleagues in the rounds:", k.people) }}
+      {{ fact("layers", "Return visits:", k.gaps) }}
+      {{ fact("clock", "Gaps not yet closed, so censored:", k.censored) }}
+    </div>
+    <details class="table-view working">
+      <summary>How this was calculated</summary>
+      <p>Every gap between one colleague’s round and their next is a completed time. The gap since each colleague’s latest round is censored: their next coffee has not happened yet, so the log shows only that the gap is at least that long. Dropping those gaps, or treating them as finished, would bias the curve towards shorter gaps.</p>
+      <p>The Kaplan–Meier estimate keeps each censored gap in the count at risk until it is censored. The band uses Greenwood’s variance on the log(−log) scale. Each colleague contributes several gaps, so the band is somewhat narrower than it should be.</p>
+    </details>
+  </div>
+  <div class="story-figure">
+    <div class="chart">
+      <svg class="bar-chart" viewBox="0 0 {{ chart_w }} 160" role="img" aria-label="Kaplan–Meier curve of the share of gaps without a next coffee, by days since the last round.">
+        {% if k.band %}<path class="km-band" d="{{ k.band }}" />{% endif %}
+        <line class="half-line" x1="0" x2="{{ chart_w }}" y1="{{ '%.1f' % k.half_y }}" y2="{{ '%.1f' % k.half_y }}" />
+        <path class="km-curve draw" pathLength="1" d="{{ k.path }}" />
+        {% for x, y in k.censor_marks %}<line class="censor" x1="{{ '%.1f' % x }}" x2="{{ '%.1f' % x }}" y1="{{ '%.1f' % (y - 5) }}" y2="{{ '%.1f' % (y + 5) }}" />{% endfor %}
+        <line class="baseline" x1="0" x2="{{ chart_w }}" y1="159.5" y2="159.5" />
+      </svg>
+      <div class="chart-ticks" aria-hidden="true">{% for x, tk in k.ticks %}<span style="left: {{ '%.2f' % x }}%">{{ tk }}</span>{% endfor %}</div>
+      <p class="axis-title">Days since the colleague’s previous round, counting weekends. Gaps still at risk:</p>
+      <div class="chart-ticks at-risk" aria-hidden="true">{% for x, n in k.at_risk %}<span style="left: {{ '%.2f' % x }}%">{{ n }}</span>{% endfor %}</div>
+    </div>
+    <p class="chart-note">The curve shows the share of gaps in which the colleague has not yet had their next coffee, with a 95% band. The small ticks mark censored gaps, and the dashed line marks one half.</p>
+  </div>
+</section>
+{% endif %}
+
+{# ---- Who comes for coffee ---------------------------------------------- #}
+{% if t.ready and t.half_share is not none %}
+<section id="who-comes" class="story" style="--sc: var(--c5)">
+  <div class="story-text">
+    <h2 class="story-title">Who comes for coffee</h2>
+    <p class="headline"><strong class="num">{{ pct(t.half_share) }}</strong> of the department’s colleagues account for half of the drinks in the rounds.</p>
+    <div class="fact-row">
+      {{ fact("cup", "Rounds you have been in:", t.mine or "None yet") }}
+      {{ fact("gauge", "Gini coefficient:", '%.2f' % t.gini ~ ((" (" ~ ci(t.gini_low, t.gini_high) ~ ")") if t.gini_low is not none else "")) }}
+    </div>
+    {% set drift = namespace(max=0) %}{% for g, census, logged in t.mix %}{% set drift.max = [drift.max, (census - logged) | abs] | max %}{% endfor %}
+    <p>{% if drift.max >= 0.05 %}The mix of drinks in the rounds differs from the department’s by up to {{ (drift.max * 100) | round | int }} percentage points, because the rounds draw on the colleagues who come. That difference is selection bias: a study of the rounds alone would describe the people who come for coffee, not the department.{% else %}The mix of drinks in the rounds matches the department’s {% if drift.max < 0.01 %}almost exactly{% else %}to within {{ (drift.max * 100) | round | int }} percentage points{% endif %}. Had it differed, that would be selection bias: a study of the rounds alone would describe the people who come for coffee, not the department.{% endif %}</p>
+    <details class="table-view working">
+      <summary>How this was calculated</summary>
+      <p>The Lorenz curve counts every active colleague, including those who have not yet been in a round, from those who come least often to those who come most. The Gini coefficient is twice the area between the curve and the diagonal of perfect equality, and its interval comes from resampling rounds 500 times. Guests are left out.</p>
+    </details>
+  </div>
+  <div class="story-figure">
+    <div class="square-chart">
+      <svg viewBox="-2 -2 204 204" role="img" aria-label="Lorenz curve of drinks across colleagues.">
+        <rect class="square-frame" x="0" y="0" width="200" height="200" />
+        <line class="diagonal" x1="0" y1="200" x2="200" y2="0" />
+        <path class="lorenz-curve draw" pathLength="1" d="{{ t.lorenz_path }}" />
+      </svg>
+      <p class="chart-note">The curve plots the share of the rounds’ drinks against the share of colleagues, ordered from those who come least often to those who come most. The diagonal is a department where everyone comes equally often.</p>
+    </div>
+    <ul class="share-list mix-list">
+      {% for group, census, logged in t.mix %}
+      <li class="mix-row">
+        <span class="share-label">{{ group }}</span>
+        <span class="mix-bars">
+          <span class="share-track"><span class="share-bar mix-census grow-x" style="width: {{ '%.1f' % (census * 100) }}%"></span></span>
+          <span class="share-track"><span class="share-bar grow-x" style="width: {{ '%.1f' % (logged * 100) }}%"></span></span>
+        </span>
+        <span class="mix-values">{{ pct(census) }}<br>{{ pct(logged) }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="chart-legend"><span class="key key-cool"></span>The department’s usual drinks <span class="key key-section"></span>Colleagues’ drinks in the rounds</p>
+  </div>
+</section>
+{% endif %}
+
+{# ---- Round size --------------------------------------------------------- #}
+{% if z.ready %}
+<section id="round-size" class="story" style="--sc: var(--c1)">
+  <div class="story-text">
+    <h2 class="story-title">Round size</h2>
+    <p class="headline">An average round holds <strong class="num">{{ '%.1f' % z.mean }}</strong> colleagues’ drinks.</p>
+    <p>{% if z.ratio_p < 0.05 and z.ratio > z.expected_ratio %}Round sizes vary more than they would if colleagues joined independently, so colleagues tend to come for coffee together.{% elif z.ratio_p < 0.05 %}Round sizes vary less than they would if colleagues joined independently, so rounds are steadier than chance alone predicts.{% else %}Round sizes vary about as much as they would if each colleague joined each round independently.{% endif %}</p>
+    {% if z.after_big is not none %}<p>Rounds of {{ z.big }} drinks or more were followed by rounds averaging {{ '%.1f' % z.after_big }}, closer to the overall average, as chance alone predicts. A department that changed something after an unusually big round would see the next one shrink and credit the change, which is regression to the mean.</p>{% endif %}
+    <details class="table-view working">
+      <summary>How this was calculated</summary>
+      <p>If each colleague joined each round independently at their own observed rate, round sizes would follow a Poisson-binomial distribution, whose variance on a fixed roster is smaller than its mean. The test compares the observed variance with that expected variance, two-sided, and gives {{ p_eq(z.ratio_p) }}.</p>
+      {% if z.rtm_r is not none %}<p>The scatter plots each round’s size against the next round’s, and the correlation between them is {{ '%.2f' % z.rtm_r }}{% if z.rtm_r | abs < 0.3 %}, so one round predicts little about the next{% endif %}.</p>{% endif %}
+    </details>
+  </div>
+  <div class="story-figure">
+    <div class="chart">
+      <svg class="bar-chart" viewBox="0 0 {{ chart_w }} 120" role="img" aria-label="Rounds of each size, with the counts expected if colleagues joined independently.">
+        {% for x, w, h, k2, ph in z.bars %}
+        <rect class="bar grow" style="--i: {{ loop.index0 }}" x="{{ '%.1f' % x }}" y="{{ '%.1f' % (120 - h * 110) }}" width="{{ '%.1f' % w }}" height="{{ '%.1f' % (h * 110) }}" rx="3" data-tip="{{ loop.index0 }} drinks: {{ k2 }} {{ plural(k2, 'round', 'rounds') }}" />
+        <line class="poisson-mark" x1="{{ '%.1f' % (x - 1) }}" x2="{{ '%.1f' % (x + w + 1) }}" y1="{{ '%.1f' % (120 - ph * 110) }}" y2="{{ '%.1f' % (120 - ph * 110) }}" />
+        {% endfor %}
+        <line class="baseline" x1="0" x2="{{ chart_w }}" y1="119.5" y2="119.5" />
+      </svg>
+      <div class="chart-ticks centred" aria-hidden="true">{% for x, tk in z.size_ticks %}<span style="left: {{ '%.2f' % x }}%">{{ tk }}</span>{% endfor %}</div>
+    </div>
+    <p class="chart-note">The bars count rounds by the number of colleagues’ drinks in them, and each dark line is the count expected if every colleague joined independently.</p>
+    {% if z.rtm_dots %}
+    <div class="square-chart">
+      <svg viewBox="-2 -2 204 204" role="img" aria-label="Each round’s size against the size of the next round.">
+        <rect class="square-frame" x="0" y="0" width="200" height="200" />
+        <line class="diagonal" x1="0" y1="200" x2="200" y2="0" />
+        {% for x, y, r, k in z.rtm_dots %}<circle class="round-dot pop" style="--i: {{ loop.index0 % 40 }}" cx="{{ '%.1f' % x }}" cy="{{ '%.1f' % y }}" r="{{ '%.1f' % r }}" data-tip="{{ k }} {{ plural(k, 'pair', 'pairs') }} of rounds" />{% endfor %}
+        {% if z.rtm_line %}<line class="fit-line" x1="{{ '%.1f' % z.rtm_line[0] }}" y1="{{ '%.1f' % z.rtm_line[1] }}" x2="{{ '%.1f' % z.rtm_line[2] }}" y2="{{ '%.1f' % z.rtm_line[3] }}" />{% endif %}
+      </svg>
+      <p class="chart-note">Each dot places one round’s size across and the next round’s size up, drawn larger where several pairs of rounds share the spot. The diagonal is where the next round matches the last, and the solid line is the trend actually seen.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{# ---- Sections still waiting on rounds ----------------------------------- #}
+{% set wait_rounds = not rounds.ready %}
+{% if wait_rounds or not a.ready or not k.ready or not t.ready or not z.ready %}
+<section class="waiting-card">
+  <h2 class="story-title">{{ "Waiting for rounds" if rounds.n == 0 else "Waiting for more rounds" }}</h2>
+  <p>{% if rounds.n == 0 %}No rounds have been recorded yet.{% else %}{{ rounds.n }} {{ plural(rounds.n, "round has", "rounds have") }} been recorded so far.{% endif %} A round is recorded when an order is cleared, or when it expires 12 hours after the first person is added. Each section below appears once enough rounds have been recorded.</p>
+  <div class="wait-grid">
+    {% if wait_rounds %}{{ waiting("When rounds happen", "The clock of when rounds happen appears once " ~ needs.rounds ~ " rounds have been recorded.", rounds.n, needs.rounds, "rounds") }}{% endif %}
+    {% if not a.ready %}{{ waiting("Caffeine through the day", "The comparison of morning and afternoon caffeine appears once at least " ~ needs.each_side ~ " drinks have been recorded both before and after midday.", [a.before, a.after] | min, needs.each_side, "drinks on the quieter side of midday") }}{% endif %}
+    {% if not k.ready %}{{ waiting("Time to the next coffee", "The curve of time between a colleague’s rounds appears once colleagues have come back for another round " ~ needs.gaps ~ " times.", k.gaps, needs.gaps, "rounds after a colleague’s first") }}{% endif %}
+    {% if not t.ready %}{{ waiting("Who comes for coffee", "The spread of rounds across colleagues appears once " ~ needs.attendance ~ " rounds have been recorded." ~ ((" You have been in " ~ t.mine ~ (" round" if t.mine == 1 else " rounds") ~ " so far.") if t.mine else ""), t.rounds, needs.attendance, "rounds") }}{% endif %}
+    {% if not z.ready %}{{ waiting("Round size", "The analysis of round size appears once " ~ needs.size ~ " rounds have been recorded.", z.rounds, needs.size, "rounds") }}{% endif %}
+  </div>
+</section>
+{% endif %}

@@ -41,3 +41,89 @@
   window.addEventListener("scroll", hide, { passive: true });
   document.addEventListener("htmx:beforeSwap", hide);
 })();
+
+/* Contents bar: mark the section in view, and keep its chip scrolled into
+   sight in the bar. Re-armed after htmx swaps the body. */
+(() => {
+  let observer = null;
+  const arm = () => {
+    observer?.disconnect();
+    const links = new Map(
+      [...document.querySelectorAll(".stats-nav a")]
+        .filter((a) => document.getElementById(a.hash.slice(1)))
+        .map((a) => [a.hash.slice(1), a])
+    );
+    if (!links.size) return;
+    const visible = new Set();
+    observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) e.isIntersecting ? visible.add(e.target.id) : visible.delete(e.target.id);
+        const first = [...links.keys()].find((id) => visible.has(id));
+        for (const [id, a] of links) {
+          const on = id === first;
+          a.classList.toggle("is-current", on);
+          if (on) a.setAttribute("aria-current", "true");
+          else a.removeAttribute("aria-current");
+          if (on) {
+            // Scroll the bar sideways only, never the page.
+            const bar = a.parentElement;
+            const left = a.offsetLeft - bar.offsetLeft;
+            if (left < bar.scrollLeft || left + a.offsetWidth > bar.scrollLeft + bar.clientWidth) {
+              bar.scrollTo({ left: left - 24, behavior: "smooth" });
+            }
+          }
+        }
+      },
+      { rootMargin: "-30% 0px -60% 0px" }
+    );
+    for (const id of links.keys()) {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    }
+  };
+  arm();
+  document.addEventListener("htmx:afterSettle", arm);
+})();
+
+/* Sections play their entrance once, the first time they come into view,
+   and headline numbers count up as they do. Re-armed after htmx swaps. */
+(() => {
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const countUp = (el) => {
+    const text = el.textContent.trim();
+    const m = text.match(/^(\d+(?:\.\d+)?)(.*)$/);
+    if (still || !m) return;
+    const target = parseFloat(m[1]);
+    const places = (m[1].split(".")[1] || "").length;
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / 900);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = (target * eased).toFixed(places) + m[2];
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+  let observer = null;
+  const arm = () => {
+    observer?.disconnect();
+    observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          e.target.classList.add("in-view");
+          e.target.querySelectorAll(".headline .num").forEach(countUp);
+          observer.unobserve(e.target);
+        }
+      },
+      { threshold: 0.12 }
+    );
+    document.querySelectorAll(".story:not(.in-view)").forEach((s) => observer.observe(s));
+  };
+  arm();
+  document.addEventListener("htmx:afterSettle", (e) => {
+    // A swapped-in fragment inside a section that has already played shows at once.
+    e.target.closest?.(".story")?.classList.add("in-view");
+    arm();
+  });
+})();

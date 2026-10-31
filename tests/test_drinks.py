@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from sqlmodel import Session, select
 
 
 def _client() -> TestClient:
@@ -260,6 +261,11 @@ def test_init_db_adds_the_new_columns_to_an_existing_database():
         " notes VARCHAR, updated_at TIMESTAMP);"
         "INSERT INTO \"user\" VALUES ('u1', 'Old Timer', '2026-01-01', NULL, 0);"
         "INSERT INTO saveddrink VALUES ('u1', 'espresso', 'hot', NULL, NULL, 'regular', 'none', NULL, 'Double', '2026-01-01');"
+        # The round log as it first shipped, without links to people.
+        "CREATE TABLE round (id INTEGER PRIMARY KEY, placed_at TIMESTAMP, drink_count INTEGER);"
+        "CREATE TABLE rounddrink (id INTEGER PRIMARY KEY, round_id INTEGER, base_id VARCHAR,"
+        " temp VARCHAR, size VARCHAR, milk VARCHAR, strength VARCHAR, sweetener VARCHAR,"
+        " length VARCHAR, shots INTEGER, has_notes BOOLEAN, guest BOOLEAN);"
     )
     con.commit()
     con.close()
@@ -269,6 +275,51 @@ def test_init_db_adds_the_new_columns_to_an_existing_database():
     con = sqlite3.connect(path)
     cols = {row[1] for row in con.execute("PRAGMA table_info(saveddrink)")}
     row = con.execute("SELECT shots, own_cup, notes FROM saveddrink").fetchone()
+    round_cols = {row[1] for row in con.execute("PRAGMA table_info(round)")}
+    drink_cols = {row[1] for row in con.execute("PRAGMA table_info(rounddrink)")}
+    history = con.execute("SELECT user_id, base_id, changed_at FROM drinkchange").fetchall()
     con.close()
     assert {"shots", "own_cup"} <= cols
     assert row == (None, 0, "Double")
+    assert "owner_id" in round_cols and {"user_id", "own_cup"} <= drink_cols
+    # The drink as it stood seeds the history, once.
+    assert history == [("u1", "espresso", "2026-01-01")]
+    init_db()
+    con = sqlite3.connect(path)
+    assert con.execute("SELECT count(*) FROM drinkchange").fetchone() == (1,)
+    con.close()
+
+
+def _uid(name: str) -> str:
+    from app.db import get_engine
+    from app.models import User
+
+    with Session(get_engine()) as s:
+        return s.exec(select(User).where(User.display_name == name)).first().id
+
+
+def _history(user_id: str) -> list:
+    from app.db import get_engine
+    from app.models import DrinkChange
+
+    with Session(get_engine()) as s:
+        rows = s.exec(select(DrinkChange).where(DrinkChange.user_id == user_id).order_by(DrinkChange.id))
+        return [(r.base_id, r.milk, r.changed_by) for r in rows]
+
+
+def test_drink_history_records_each_change_and_who_made_it():
+    with _client() as me, _client() as other:
+        me.get("/")
+        me.post("/me/name", data={"display_name": "Me"})
+        me.post("/me/drink", data={"base_id": "latte", "size": "small", "milk": "full_cream"})
+        me.post("/me/drink", data={"base_id": "latte", "size": "small", "milk": "full_cream"})
+        me.post("/me/drink", data={"base_id": "latte", "size": "small", "milk": "oat"})
+        me_id = _uid("Me")
+        other.get("/")
+        other.post("/me/name", data={"display_name": "Other"})
+        other.post("/people", data={"display_name": "Newbie", "base_id": "piccolo", "milk": "soy"})
+        other.post("/people", data={"display_name": "Visitor", "base_id": "mocha", "one_off": "1"})
+        other_id = _uid("Other")
+    assert _history(me_id) == [("latte", "full_cream", None), ("latte", "oat", None)]
+    assert _history(_uid("Newbie")) == [("piccolo", "soy", other_id)]
+    assert _history(_uid("Visitor")) == []

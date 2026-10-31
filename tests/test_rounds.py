@@ -52,7 +52,7 @@ def _age_order(owner_id: str, by: timedelta):
         s.commit()
 
 
-def test_clearing_an_order_logs_its_drinks_without_people():
+def test_clearing_an_order_logs_its_drinks_linked_to_people():
     with _client() as me, _client() as alice:
         _onboard(alice, "Alice", base_id="latte", size="large", milk="oat", notes="extra hot please")
         _onboard(me, "Me", base_id="espresso")
@@ -63,23 +63,44 @@ def test_clearing_an_order_logs_its_drinks_without_people():
 
     rounds, drinks = _rounds()
     assert len(rounds) == 1 and rounds[0]["drink_count"] == 3
-    assert sorted(d["base_id"] for d in drinks) == ["espresso", "latte", "piccolo"]
-    latte = next(d for d in drinks if d["base_id"] == "latte")
-    assert latte["milk"] == "oat" and latte["size"] == "large"
-    assert latte["has_notes"] is True
-    assert [d["guest"] for d in drinks if d["base_id"] == "piccolo"] == [True]
-    # Nothing that identifies a person: no ids, names or note text anywhere.
-    logged = repr((rounds, drinks))
-    for needle in (alice_id, me_id, "Alice", "Me'", "Guest", "extra hot"):
-        assert needle not in logged
+    assert rounds[0]["owner_id"] == me_id
+    by_base = {d["base_id"]: d for d in drinks}
+    assert by_base["latte"]["user_id"] == alice_id
+    assert by_base["latte"]["milk"] == "oat" and by_base["latte"]["has_notes"] is True
+    assert by_base["espresso"]["user_id"] == me_id
+    # The guest is deleted with the order, so their drink keeps no link.
+    assert by_base["piccolo"]["guest"] is True and by_base["piccolo"]["user_id"] is None
+    assert "extra hot" not in repr(drinks)
 
 
-def test_placed_at_is_the_last_addition_floored_to_fifteen_minutes():
-    from app.rounds import floor_placed_at
+def test_placed_at_is_the_exact_time_of_the_last_addition():
+    from app.users import _as_naive_utc
 
-    utc = timezone.utc
-    assert floor_placed_at(datetime(2026, 10, 31, 10, 44, 59)) == datetime(2026, 10, 31, 10, 30, tzinfo=utc)
-    assert floor_placed_at(datetime(2026, 10, 31, 10, 45, tzinfo=utc)) == datetime(2026, 10, 31, 10, 45, tzinfo=utc)
+    with _client() as me, _client() as alice:
+        _onboard(alice, "Alice", base_id="latte")
+        _onboard(me, "Me", base_id="espresso")
+        me.post(f"/order/add/{_user_id_by_name('Alice')}")
+        added = _now()
+        me.post("/order/clear")
+    placed = _as_naive_utc(_rounds()[0][0]["placed_at"])
+    assert abs(placed - added) < timedelta(seconds=5)
+
+
+def test_deleting_yourself_detaches_your_rounds_and_deletes_your_history():
+    from app.db import get_engine
+    from app.models import DrinkChange
+
+    with _client() as me, _client() as alice:
+        _onboard(alice, "Alice", base_id="latte")
+        _onboard(me, "Me", base_id="espresso")
+        alice_id = _user_id_by_name("Alice")
+        me.post(f"/order/add/{alice_id}")
+        me.post("/order/clear")
+        alice.post("/me/delete")
+    rounds, drinks = _rounds()
+    assert len(drinks) == 2 and alice_id not in repr(drinks)
+    with Session(get_engine()) as s:
+        assert s.exec(select(DrinkChange).where(DrinkChange.user_id == alice_id)).all() == []
 
 
 def test_an_owner_alone_is_not_a_round():

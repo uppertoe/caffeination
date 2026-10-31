@@ -4,12 +4,13 @@ numbers (SVG coordinates included) so the templates only draw."""
 
 from __future__ import annotations
 
+import math
 import statistics
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Callable, Optional
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from sqlmodel import Session, select
@@ -37,7 +38,7 @@ from app.menu import (
 )
 from app.models import Round, SavedDrink, User
 from app.orders import ACTIVE_WINDOW
-from app.stats import UnusualnessModel, association, even_spread_p, half_window, holm_adjust
+from app.stats import UnusualnessModel, even_spread_p, half_window, rayleigh, wilson
 from app.users import ROSTER_FILTER, _as_naive_utc
 
 MIN_ROUNDS = 5  # round charts appear from this many rounds
@@ -97,6 +98,7 @@ class Usual:
     user_id: str
     options: dict
     line: str
+    active: bool = True  # seen within ACTIVE_WINDOW
 
 
 def load_usuals(session: Session, who: str) -> list[Usual]:
@@ -121,12 +123,13 @@ def load_usuals(session: Session, who: str) -> list[Usual]:
     cutoff = _as_naive_utc(datetime.now(timezone.utc)) - ACTIVE_WINDOW
     usuals = []
     for uid, last_active, created, *drink in session.exec(q):
-        if who == "active" and _as_naive_utc(last_active or created) < cutoff:
+        active = _as_naive_utc(last_active or created) >= cutoff
+        if who == "active" and not active:
             continue
         if get_drink(drink[0]) is None:
             continue  # a drink since removed from the menu
         opts = as_options(*drink)
-        usuals.append(Usual(uid, opts, line_for(opts)))
+        usuals.append(Usual(uid, opts, line_for(opts), active))
     return usuals
 
 
@@ -177,9 +180,24 @@ class Unusual:
     line: str
     more_ordinary: int  # of those, how many score as more ordinary
     excludes_viewer: bool
-    reason: str  # which option makes this drink unusual, with its count
+    working: list["OptionScore"]  # the score, option by option
+    bits: float
+    one_in: str  # "630": the score as odds, 2 ** bits
     chart: BeanChart
     marker_x: float
+
+
+@dataclass
+class OptionScore:
+    """One option's part in a drink's unusualness score."""
+
+    label: str  # "Milk"
+    value: Optional[str]  # "Oat"; None when the option does not apply
+    count: int  # usual drinks with this option
+    total: int  # usual drinks for which the option applies
+    basis: str  # what total counts: "made with milk"
+    bits: float
+    rarest: bool = False
 
 
 UNUSUAL_COLUMNS = 30
@@ -187,51 +205,29 @@ UNUSUAL_COLUMNS = 30
 LENGTH_LABELS = {Length.SHORT.value: "Short", Length.LONG.value: "Long"}
 
 
-def _verb(count: int, one: str, many: str) -> str:
-    return one if count == 1 else many
+SHOT_LABELS = {1: "Single", 2: "Double"}
+
+# The options in the order the working table lists them, with their labels
+# and what each count is out of.
+WORKING = (
+    ("base_id", "Drink", DRINK_LABELS, "usual drinks"),
+    ("size", "Size", SIZE_LABELS, "that come in a size"),
+    ("milk", "Milk", MILK_LABELS, "made with milk"),
+    ("strength", "Strength", STRENGTH_LABELS, "with a strength choice"),
+    ("temp", "Temperature", TEMP_LABELS, "that offer a choice of temperature"),
+    ("sweetener", "Sweetener", SWEETENER_LABELS, "usual drinks"),
+    ("shots", "Shots", SHOT_LABELS, "espressos"),
+    ("length", "Length", LENGTH_LABELS, "macchiatos"),
+)
 
 
-def _reason(axis: str, value, count: int, total: int) -> str:
-    """One sentence naming the drink's least common option and how many of
-    the department's usual drinks share it. Counts, never names: the same
-    numbers are on the menu board."""
-    c = "none" if count == 0 else str(count)
-    if axis == "base_id":
-        drink = DRINK_LABELS[value].lower()
-        return (
-            f"Its least common choice is the drink itself: {c} of the {total} "
-            f"colleagues {_verb(count, 'has', 'have')} {drink} as their usual drink."
-        )
-    if axis == "milk":
-        phrase, basis = f"{MILK_LABELS[value].lower()} milk", "usual drinks made with milk"
-        verb = _verb(count, "uses it", "use it")
-    elif axis == "size":
-        label = SIZE_LABELS[value].lower()
-        phrase, basis = f"the {label} size", "usual drinks that come in a size"
-        verb = _verb(count, f"is {label}", f"are {label}")
-    elif axis == "strength":
-        phrase = {"regular": "regular strength", "weak": "weak strength",
-                  "extra_shot": "an extra shot", "decaf": "decaf"}[value]
-        basis, verb = "usual drinks with a strength choice", _verb(count, "has it", "have it")
-    elif axis == "temp":
-        label = TEMP_LABELS[value].lower()
-        phrase, basis = f"serving it {label}", "usual drinks that can be served extra hot or iced"
-        verb = _verb(count, f"is served {label}", f"are served {label}")
-    elif axis == "sweetener":
-        phrase = {"none": "no sugar", "one_sugar": "one sugar",
-                  "two_sugar": "two sugars", "honey": "honey"}[value]
-        basis, verb = "usual drinks", _verb(count, "takes it", "take it")
-    elif axis == "length":
-        label = LENGTH_LABELS[value].lower()
-        phrase, basis = f"a {label} macchiato", "usual macchiatos"
-        verb = _verb(count, f"is {label}", f"are {label}")
-    else:  # shots
-        word = "double" if value == 2 else "single"
-        phrase, basis = f"a {word} shot", "usual espressos"
-        verb = _verb(count, f"is a {word}", f"are {word}s")
-    if total == 0:
-        return f"Its least common option is {phrase}: no usual drink in the department has it yet."
-    return f"Its least common option is {phrase}: {c} of the {total} {basis} {verb}."
+def _odds(bits: float) -> str:
+    """2 ** bits to two significant figures, with thousands separated."""
+    x = 2 ** bits
+    if x < 10:
+        return f"{x:.0f}"
+    digits = int(math.floor(math.log10(x))) - 1
+    return f"{round(x, -digits):,.0f}"
 
 
 @lru_cache(maxsize=8)
@@ -256,19 +252,25 @@ def build_unusual(usuals: list[Usual], chosen: dict, viewer_id: str) -> Unusual:
         UNUSUAL_COLUMNS,
     )
     others = [s for u, s in zip(usuals, scores) if u.user_id != viewer_id]
-    # The option that contributes most to the score is the one the
-    # department chooses least often among drinks that offer it.
-    axis = max(
-        (a for a in DOMAINS if chosen[a] is not None),
-        key=lambda a: -model.option_probability(a, chosen[a]),
-    )
-    counts = model.counts[axis]
+    working = []
+    for axis, label, labels, basis in WORKING:
+        value = chosen[axis]
+        counts = model.counts[axis]
+        total = sum(counts.values())
+        if value is None:
+            working.append(OptionScore(label, None, 0, total, basis, 0.0))
+            continue
+        bits = -math.log2(model.option_probability(axis, value))
+        working.append(OptionScore(label, labels[value], counts[value], total, basis, bits))
+    max(working, key=lambda o: o.bits).rarest = True
     return Unusual(
         n=len(others),
         line=line_for(chosen),
         more_ordinary=sum(1 for s in others if s < score - 1e-9),
         excludes_viewer=len(others) < len(usuals),
-        reason=_reason(axis, chosen[axis], counts[chosen[axis]], sum(counts.values())),
+        working=working,
+        bits=score,
+        one_in=_odds(score),
         chart=chart,
         marker_x=(col_of(score) + 0.5) * CHART_W / UNUSUAL_COLUMNS,
     )
@@ -320,6 +322,8 @@ class Board:
     top_line: Optional[str]  # None unless one exact order is clearly ahead
     top_count: int
     facets: list[Facet]
+    tied: int = 0  # exact orders tied for most common, when none leads
+    tied_count: int = 0  # colleagues sharing each of those
 
 
 def build_board(usuals: list[Usual]) -> Board:
@@ -342,7 +346,72 @@ def build_board(usuals: list[Usual]) -> Board:
         top_line=ranked[0][0] if clear else None,
         top_count=ranked[0][1] if clear else 0,
         facets=facets,
+        tied=sum(1 for c in lines.values() if ranked and c == ranked[0][1]) if not clear else 0,
+        tied_count=ranked[0][1] if ranked and not clear else 0,
     )
+
+
+@dataclass
+class Segment:
+    label: str
+    count: int
+    share: float
+    start: float  # percent along the bar
+    colour: int  # 1–5, a categorical slot; 0 for "Other"
+    mine: bool  # the viewer's own choice
+    tip: str
+
+
+@dataclass
+class FingerprintRow:
+    tab: str
+    n: int
+    segments: list[Segment]
+
+
+# A stacked bar holds at most this many named options; the rest fold into
+# "Other", so no option ever needs a sixth, generated hue.
+MAX_SEGMENTS = 5
+
+_BASIS = {
+    "base_id": "usual drinks", "milk": "usual drinks made with milk",
+    "size": "usual drinks that come in a size", "strength": "usual drinks with a strength choice",
+    "temp": "usual drinks that offer a choice of temperature", "sweetener": "usual drinks",
+}
+
+
+def build_fingerprint(board: Board, own: Optional[dict]) -> list[FingerprintRow]:
+    """The department's drinks as one 100% bar per option, most chosen first
+    for unordered options, with small shares folded into Other."""
+    rows = []
+    labels_by_key = {key: labels for key, _, labels, _ in FACETS}
+    for facet in board.facets:
+        chosen = [r for r in facet.rows if r.count]
+        if not chosen:
+            continue
+        named, rest = chosen[:MAX_SEGMENTS], chosen[MAX_SEGMENTS:]
+        if rest:
+            named = chosen[:MAX_SEGMENTS - 1]
+            rest = chosen[MAX_SEGMENTS - 1:]
+        mine_label = None
+        if own and own.get(facet.key) is not None:
+            mine_label = labels_by_key[facet.key].get(own[facet.key])
+        segs, start = [], 0.0
+        basis = _BASIS[facet.key]
+        for i, r in enumerate(named):
+            segs.append(Segment(
+                r.label, r.count, r.share, start * 100, i + 1, r.label == mine_label,
+                f"{r.label}: {r.count} of {facet.n} {basis}",
+            ))
+            start += r.share
+        if rest:
+            k = sum(r.count for r in rest)
+            segs.append(Segment(
+                "Other", k, k / facet.n, start * 100, 0, mine_label in {r.label for r in rest},
+                "Other: " + ", ".join(f"{r.label} {r.count}" for r in rest),
+            ))
+        rows.append(FingerprintRow(facet.tab, facet.n, segs))
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -420,88 +489,7 @@ def build_caffeine(usuals: list[Usual], viewer_id: str) -> Caffeine:
 
 
 # ---------------------------------------------------------------------------
-# Options that go together: tested by permutation, reported only when the
-# evidence says there is a link.
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class Finding:
-    sentence: str
-    p_value: float  # Holm-adjusted across the four pairs
-
-    @property
-    def odds(self) -> str:
-        return "1 time in 100" if self.p_value < 0.01 else "1 time in 20"
-
-
-_STRENGTH_PHRASES = {
-    "Regular": "regular strength",
-    "Weak": "weak",
-    "Extra shot": "made with an extra shot",
-    "Decaf": "decaf",
-}
-
-
-def _sugar(u: Usual) -> str:
-    return "none" if u.options["sweetener"] == Sweetener.NONE.value else "some"
-
-
-# Each pairing: a name for the note listing what was tested, how to read the
-# two options off a usual drink, and the sentence for the combination that
-# stands out when the link is real.
-PAIRINGS: tuple[tuple[str, Callable, Callable], ...] = (
-    (
-        "size and temperature",
-        lambda u: (SIZE_LABELS.get(u.options["size"]), TEMP_LABELS.get(u.options["temp"])),
-        lambda size, temp: f"{temp} drinks are more often {size.lower()}",
-    ),
-    (
-        "milk and drink",
-        lambda u: (MILK_LABELS.get(u.options["milk"]), DRINK_LABELS[u.options["base_id"]]),
-        lambda milk, drink: f"{drink} drinkers choose {milk.lower()} milk more often",
-    ),
-    (
-        "strength and size",
-        lambda u: (STRENGTH_LABELS.get(u.options["strength"]), SIZE_LABELS.get(u.options["size"])),
-        lambda strength, size: f"{size} drinks are more often {_STRENGTH_PHRASES[strength]}",
-    ),
-    (
-        "sweetener and drink",
-        lambda u: (_sugar(u), DRINK_LABELS[u.options["base_id"]]),
-        lambda sugar, drink: f"{drink} drinkers {'take a sweetener' if sugar == 'some' else 'go without a sweetener'} more often",
-    ),
-)
-PAIRING_NAMES = tuple(name for name, _, _ in PAIRINGS)
-
-
-@lru_cache(maxsize=32)
-def _association(pairs: tuple[tuple[str, str], ...]):
-    return association(pairs)
-
-
-def build_pairings(usuals: list[Usual]) -> list[Finding]:
-    """Findings that survive a Holm correction across every pair tested;
-    the page shows the panel only when there is at least one."""
-    tested = []
-    for _, pick, sentence in PAIRINGS:
-        pairs = tuple(sorted(p for p in (pick(u) for u in usuals) if None not in p))
-        if len(pairs) < MIN_FOR_PAIRING:
-            continue
-        result = _association(pairs)
-        if result is not None:
-            tested.append((sentence, result))
-    adjusted = holm_adjust([r.p_value for _, r in tested])
-    findings = [
-        Finding(sentence(*r.standout), p)
-        for (sentence, r), p in zip(tested, adjusted)
-        if p < 0.05
-    ]
-    return sorted(findings, key=lambda f: f.p_value)
-
-
-# ---------------------------------------------------------------------------
-# Rounds, from the anonymised log.
+# Rounds, from the round log.
 # ---------------------------------------------------------------------------
 
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -522,12 +510,26 @@ class Rounds:
     n: int
     ready: bool
     typical_drinks: Optional[int] = None
-    half_window: Optional[str] = None  # "9:30 am and 11 am"
+    half_window: Optional[tuple[str, str]] = None  # ("9:30 am", "11 am")
     busiest_day: Optional[str] = None  # None unless one day stands out beyond chance
     time_bars: list[Bar] = field(default_factory=list)
     time_ticks: list[tuple[float, str]] = field(default_factory=list)
     band: Optional[tuple[float, float]] = None
     days: list[tuple[str, int, float]] = field(default_factory=list)  # (day, count, height 0..1)
+    # Each day's share of rounds with its Wilson interval, as heights 0..1
+    # of the day chart: (day, count, share, low, high).
+    day_shares: list[tuple[str, int, float, float, float]] = field(default_factory=list)
+    even_share: float = 0.0  # each day's share if rounds were spread evenly
+    day_scale: float = 1.0  # the share drawn at full height
+    even_spread_p: Optional[float] = None
+    # A 24-hour dial: one wedge per quarter hour with rounds in it, the
+    # half-of-rounds stretch as an arc, and hour labels placed by percent.
+    dial: list[tuple[str, str]] = field(default_factory=list)  # (path, tooltip)
+    dial_arc: str = ""
+    dial_labels: list[tuple[float, float, str]] = field(default_factory=list)
+    mean_time: Optional[str] = None  # circular mean, "10:20 am"
+    resultant: Optional[float] = None  # mean resultant length R, 0..1
+    rayleigh_p: Optional[float] = None
 
 
 def _clock(minutes: float) -> str:
@@ -539,6 +541,39 @@ def _clock(minutes: float) -> str:
         return "midnight"
     hour = (h - 1) % 12 + 1
     return f"{hour}{f':{m:02d}' if m else ''} {'am' if h < 12 else 'pm'}"
+
+
+DIAL_C, DIAL_IN, DIAL_LEN = 120, 46, 66
+
+
+def _polar(minute: float, r: float) -> tuple[float, float]:
+    a = minute / 1440 * 2 * math.pi - math.pi / 2  # midnight at the top
+    return DIAL_C + r * math.cos(a), DIAL_C + r * math.sin(a)
+
+
+def _dial(minutes: list[int], window: tuple[int, int]):
+    per_slot = Counter(m // 15 for m in minutes)
+    peak = max(per_slot.values())
+    wedges = []
+    for slot, k in sorted(per_slot.items()):
+        a0, a1 = slot * 15 + 1.5, slot * 15 + 13.5
+        r1 = DIAL_IN + k / peak * DIAL_LEN
+        (x0, y0), (x1, y1) = _polar(a0, DIAL_IN), _polar(a1, DIAL_IN)
+        (x2, y2), (x3, y3) = _polar(a1, r1), _polar(a0, r1)
+        path = (f"M{x0:.1f},{y0:.1f} A{DIAL_IN},{DIAL_IN} 0 0 1 {x1:.1f},{y1:.1f} "
+                f"L{x2:.1f},{y2:.1f} A{r1:.1f},{r1:.1f} 0 0 0 {x3:.1f},{y3:.1f} Z")
+        t0 = slot * 15
+        wedges.append((path, f"{_clock(t0)} to {_clock(t0 + 15)}: {k} round{'s' if k != 1 else ''}"))
+    start, end = window
+    r = DIAL_IN - 7
+    (sx, sy), (ex, ey) = _polar(start, r), _polar(end, r)
+    large = 1 if (end - start) % 1440 > 720 else 0
+    arc = f"M{sx:.1f},{sy:.1f} A{r},{r} 0 {large} 1 {ex:.1f},{ey:.1f}"
+    labels = []
+    for h in range(0, 24, 3):
+        x, y = _polar(h * 60, DIAL_IN + DIAL_LEN + 12)
+        labels.append((x / (2 * DIAL_C) * 100, y / (2 * DIAL_C) * 100, _clock(h * 60).replace(" ", " ")))
+    return wedges, arc, labels
 
 
 def build_rounds(session: Session) -> Rounds:
@@ -553,7 +588,7 @@ def build_rounds(session: Session) -> Rounds:
     minutes = [t.hour * 60 + t.minute for t in local]
     out.typical_drinks = int(statistics.median(c for _, c in rows))
     w_start, w_end = half_window(minutes)
-    out.half_window = f"{_clock(w_start)} to {_clock(w_end)}"
+    out.half_window = (_clock(w_start), _clock(w_end))
 
     # Quarter-hour bars, the resolution rounds are logged at, so the shaded
     # half-window lines up with whole bars. Widened to take in any outliers.
@@ -580,47 +615,60 @@ def build_rounds(session: Session) -> Rounds:
     shown = range(7) if days[5] or days[6] else range(5)
     top = max(days.values())
     out.days = [(WEEKDAYS[d], days[d], days[d] / top) for d in shown]
-    if even_spread_p([days[d] for d in shown]) < 0.05:
+    out.even_spread_p = even_spread_p([days[d] for d in shown])
+    if out.even_spread_p < 0.05:
         out.busiest_day = WEEKDAYS[max(days, key=days.get)]
+    n = len(local)
+    shares = [(WEEKDAYS[d], days[d], days[d] / n, *wilson(days[d], n)) for d in shown]
+    out.day_scale = max(hi for *_, hi in shares)
+    out.day_shares = shares
+    out.even_share = 1 / len(shown)
+    out.dial, out.dial_arc, out.dial_labels = _dial(minutes, (w_start, w_end))
+    mean, out.resultant, out.rayleigh_p = rayleigh(minutes)
+    out.mean_time = _clock(mean)
     return out
 
 
 # ---------------------------------------------------------------------------
-# The page.
+# The statistics card on the order page: one figure and a slim bar of the
+# department's drinks, from a single grouped count.
 # ---------------------------------------------------------------------------
 
+MIN_FOR_HEADLINE = 3  # usual drinks before the card leads with a figure
 
-def stats_context(session: Session, viewer: User, who: str) -> dict:
-    from app.orders import purge_all_expired_orders
 
-    purge_all_expired_orders(session)
-    usuals = load_usuals(session, who)
-    own = next((u for u in usuals if u.user_id == viewer.id), None)
-    board = build_board(usuals)
-    # The unusual-drink panel starts on the viewer's usual drink, or on the
-    # department's most common one for someone who has not saved a drink.
-    if own:
-        chosen = own.options
-    elif usuals:
-        # Not board.top_line, which is None when no order is clearly ahead.
-        top = Counter(u.line for u in usuals).most_common(1)[0][0]
-        chosen = next(u.options for u in usuals if u.line == top)
-    else:
-        chosen = chosen_from_form({"base_id": DRINKS[0].id})
-    return {
-        "who": who,
-        "has_own": own is not None,
-        "board": board,
-        "unusual": build_unusual(usuals, chosen, viewer.id) if usuals else None,
-        "chosen": chosen,
-        "caffeine": build_caffeine(usuals, viewer.id) if usuals else None,
-        "findings": build_pairings(usuals),
-        "pairing_names": PAIRING_NAMES,
-        "shot_range": MG_PER_SHOT_RANGE,
-        "rounds": build_rounds(session),
-        "min_rounds": MIN_ROUNDS,
-        "shot_mg": MG_PER_SHOT,
-        "chart_w": CHART_W,
-        "bean_w": BEAN_W,
-        "bean_h": BEAN_H,
-    }
+@dataclass
+class Headline:
+    label: str  # the most common usual drink
+    share: float
+    n: int
+    segments: list[Segment]
+
+
+def department_headline(session: Session) -> Optional[Headline]:
+    """Active colleagues only, to match the statistics page's default. The
+    activity test runs in Python, like the roster's, to keep naive and aware
+    datetimes in one place."""
+    rows = session.exec(
+        select(SavedDrink.base_id, User.last_active_at, User.created_at)
+        .join(User, User.id == SavedDrink.user_id)
+        .where(*ROSTER_FILTER)
+    ).all()
+    cutoff = _as_naive_utc(datetime.now(timezone.utc)) - ACTIVE_WINDOW
+    tally = Counter(
+        b for b, last, created in rows
+        if b in DRINK_LABELS and _as_naive_utc(last or created) >= cutoff
+    )
+    counts = sorted(((DRINK_LABELS[b], k) for b, k in tally.items()), key=lambda r: -r[1])
+    n = sum(k for _, k in counts)
+    if n < MIN_FOR_HEADLINE:
+        return None
+    named = counts if len(counts) <= MAX_SEGMENTS else counts[:MAX_SEGMENTS - 1]
+    segments, start = [], 0.0
+    for i, (label, k) in enumerate(named):
+        segments.append(Segment(label, k, k / n, start * 100, i + 1, False, f"{label}: {k} of {n} usual drinks"))
+        start += k / n
+    if len(named) < len(counts):
+        k = n - sum(c for _, c in named)
+        segments.append(Segment("Other", k, k / n, start * 100, 0, False, f"Other drinks: {k} of {n} usual drinks"))
+    return Headline(counts[0][0], counts[0][1] / n, n, segments)

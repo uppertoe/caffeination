@@ -4,6 +4,9 @@
 {% block title %}Department statistics, {{ app_name }}{% endblock %}
 
 {% block content %}
+{# Sections are hidden for their entrance animation only once this has run,
+   so the page reads in full without JavaScript. #}
+<script>document.documentElement.classList.add("motion");</script>
 {{ bean_defs() }}
 <div class="stats-page">
   <header class="stats-head">
@@ -26,7 +29,7 @@
           <label><input type="radio" name="who" value="all" {% if who == "all" %}checked{% endif %}> Everyone on the roster</label>
         </div>
       </fieldset>
-      <p class="filter-note">Active means having used the app, or been added to an order, in the last 90 days. This setting applies to every section except Rounds.</p>
+      <p class="filter-note">Active colleagues have used the app, or been added to an order, in the last 90 days. The choice of colleagues applies to every section that uses usual drinks.</p>
     </form>
   </header>
 

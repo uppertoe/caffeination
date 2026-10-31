@@ -336,13 +336,15 @@ def rules_for_template() -> dict[str, dict]:
 # Caffeine estimates for the statistics page. Café coffee varies severalfold,
 # so these are averages, not measurements of any one cup.
 #
-# Espresso: 107 mg per café serve, the Australian average measured by
-# Desbrow et al. (Food Chem Toxicol 2007; J Food Compos Anal 2012), ranging
-# from 25 to 214 mg. Filter, tea and hot chocolate: the Australian Institute
+# Espresso: 106 ± 38 mg (mean ± SD) per café serve, ranging from 25 to
+# 214 mg, measured in 97 Gold Coast café espressos by Desbrow et al., Food
+# Chem Toxicol 2007;45:1588-92. (The often-quoted "107 (25-214)" pairs the
+# 2012 follow-up's mean with this paper's range.) Filter, tea and hot chocolate: the Australian Institute
 # of Sport's caffeine table. Cold brew, chai and matcha: no Australian
 # measurements found, so these are overseas estimates.
 # ---------------------------------------------------------------------------
-MG_PER_SHOT = 107
+MG_PER_SHOT = 106
+MG_PER_SHOT_SD = 38
 MG_PER_SHOT_RANGE = (25, 214)
 
 # Shots in each espresso drink; milk drinks scale with size.
@@ -362,12 +364,14 @@ _NON_ESPRESSO_MG: dict[str, float] = {
 }
 
 
-def estimated_caffeine_mg(
+def caffeine_parts(
     base_id: str, size: Optional[str], strength: str, shots: Optional[int] = None
-) -> float:
-    """Estimated caffeine in one drink, in milligrams."""
+) -> tuple[float, float]:
+    """A drink's caffeine as (espresso shots, other milligrams), so that the
+    uncertainty in a café shot can be applied to the shots alone. A decaf
+    shot counts as 3% of a shot."""
     if base_id in _NON_ESPRESSO_MG:
-        return _NON_ESPRESSO_MG[base_id]
+        return 0.0, _NON_ESPRESSO_MG[base_id]
     if base_id == "espresso":
         n = shots or 1
     elif base_id in _FIXED_SHOTS:
@@ -380,9 +384,15 @@ def estimated_caffeine_mg(
         n += 1
     elif strength == Strength.WEAK.value:
         n = max(n - 0.5, 0.5)
-    mg = n * MG_PER_SHOT
     if strength == Strength.DECAF.value:
-        mg *= 0.03
-    if base_id == "dirty_chai":
-        mg += _NON_ESPRESSO_MG["chai_latte"]
-    return mg
+        n *= 0.03
+    other = _NON_ESPRESSO_MG["chai_latte"] if base_id == "dirty_chai" else 0.0
+    return float(n), other
+
+
+def estimated_caffeine_mg(
+    base_id: str, size: Optional[str], strength: str, shots: Optional[int] = None
+) -> float:
+    """Estimated caffeine in one drink, in milligrams."""
+    n, other = caffeine_parts(base_id, size, strength, shots)
+    return n * MG_PER_SHOT + other
