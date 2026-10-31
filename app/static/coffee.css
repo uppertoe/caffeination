@@ -1020,3 +1020,157 @@ article form legend {
 @media (max-width: 480px) {
   .share-row { grid-template-columns: 6.2rem 1fr 2.6rem; gap: 0.5rem; font-size: 0.92rem; }
 }
+
+/* ---- Statistics: the method panels --------------------------------------- *
+   A second, cool hue for "fewer than expected", so a residual reads by
+   direction: caramel above what independence predicts, slate blue below. */
+:root:not([data-theme="dark"]) { --cool: #4f7491; }
+:root[data-theme="dark"] { --cool: #86a9c4; }
+
+.part-head { margin: 2.6rem 0 1rem; }
+.part-head:first-child { margin-top: 0.4rem; }
+.part-title {
+  font-family: var(--font-hero);
+  font-synthesis: none;
+  font-weight: 400;
+  font-size: 1.7rem;
+  margin: 0 0 0.3rem;
+  color: var(--heading);
+}
+.part-head p { color: var(--ink-muted); max-width: 42rem; margin: 0; }
+
+/* Working folds: the calculation behind a panel, in plain prose. */
+.working p { font-size: 0.9rem; margin: 0.6rem 0 0; max-width: 44rem; }
+.working-sum {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.4rem;
+  background: var(--row-tint);
+}
+
+/* Contingency table, shaded by Pearson residual. */
+.xtab-wrap { overflow-x: auto; margin-top: 1.1rem; }
+.xtab, .baseline-table { width: 100%; font-variant-numeric: tabular-nums; margin: 0; }
+.xtab th, .xtab td { text-align: center; padding: 0.45rem 0.5rem; background: transparent; }
+.xtab thead th { font-size: 0.82rem; color: var(--ink-muted); font-weight: 600; }
+.xtab tbody th { text-align: left; font-weight: 600; }
+.xtab-corner { text-align: left !important; }
+.xtab-total, .xtab tr.xtab-total td, .xtab tr.xtab-total th { color: var(--ink-muted); font-size: 0.88rem; }
+.xcell { position: relative; border-radius: 0.4rem; }
+.xcell::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 0.4rem;
+  opacity: calc(0.12 + var(--s) * 0.55);
+  z-index: 0;
+}
+.xcell-above::before { background: var(--accent); }
+.xcell-below::before { background: var(--cool); }
+.xcell-even::before { background: var(--soft-line); opacity: 0.25; }
+.xcell > span { position: relative; z-index: 1; display: block; }
+.xcell-o { font-size: 1.25rem; font-weight: 700; color: var(--ink-strong); line-height: 1.2; }
+.xcell-e { font-size: 0.74rem; color: var(--ink); }
+
+/* Permutation histogram with the textbook density over it. */
+.hist-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.bar-extreme { fill: var(--ink-strong); opacity: 0.85; }
+.density { fill: none; stroke: var(--cool); stroke-width: 2; }
+.expected { stroke: var(--ink-strong); stroke-width: 1.2; stroke-dasharray: 5 4; }
+
+/* The unusual-drink working. */
+.unusual-score { margin: 1.1rem 0 0.4rem; }
+.working-table { width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; margin: 0; }
+.working-table caption { text-align: left; font-size: 0.82rem; color: var(--ink-muted); padding-bottom: 0.3rem; }
+.working-table th, .working-table td { background: transparent; padding: 0.32rem 0.45rem; }
+.working-table thead th { font-size: 0.78rem; color: var(--ink-muted); }
+.working-table .num { text-align: right; white-space: nowrap; }
+.working-table tr.is-na td, .working-table tr.is-na th { color: var(--ink-muted); opacity: 0.7; }
+.working-table tr.is-rarest th, .working-table tr.is-rarest td { background: var(--row-tint); font-weight: 600; }
+.working-table tfoot th, .working-table tfoot td { font-weight: 700; border-top: 1px solid var(--soft-line); }
+.bits-bar {
+  display: inline-block;
+  width: calc(var(--w) * 0.5);
+  max-width: 3rem;
+  height: 0.5rem;
+  margin-right: 0.4rem;
+  border-radius: 0.25rem;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+/* Caffeine simulation: a strip of simulated rounds with its 95% range. */
+.sim-chart { margin-top: 0.9rem; }
+.sim-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 12rem) 1fr;
+  gap: 0.8rem;
+  align-items: center;
+  margin-bottom: 0.7rem;
+}
+.sim-label { font-size: 0.88rem; color: var(--ink-strong); }
+.sim-track { position: relative; height: 2.4rem; }
+.sim-strip {
+  position: absolute;
+  bottom: 50%;
+  width: 1.4%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  opacity: 0.45;
+  border-radius: 1px 1px 0 0;
+}
+.sim-whisker {
+  position: absolute;
+  top: 50%;
+  height: 0;
+  border-top: 2px solid var(--ink-strong);
+}
+.sim-whisker::before, .sim-whisker::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  height: 10px;
+  border-left: 2px solid var(--ink-strong);
+}
+.sim-whisker::before { left: 0; }
+.sim-whisker::after { right: 0; }
+.sim-dot {
+  position: absolute;
+  top: 50%;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--ink-strong);
+  border: 2px solid var(--card-bg);
+}
+.sim-ticks { margin-left: calc(min(12rem, 35%) + 0.8rem); }
+@media (max-width: 560px) {
+  .sim-row { grid-template-columns: 1fr; gap: 0.2rem; }
+  .sim-ticks { margin-left: 0; }
+}
+
+/* Randomisation: a trial-style Table 1. */
+.baseline-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.baseline-head h3 { margin: 0.4rem 0 0; }
+.allocate-btn { width: auto; margin: 0; padding: 0.35rem 0.9rem; font-size: 0.88rem; }
+.baseline-table { font-size: 0.88rem; }
+.baseline-table th, .baseline-table td { background: transparent; padding: 0.3rem 0.5rem; }
+.baseline-table thead th { font-size: 0.8rem; color: var(--ink-muted); }
+.baseline-table tbody + tbody { border-top: 1px solid var(--soft-line); }
+.baseline-level th { padding-left: 1.4rem !important; font-weight: 400; }
+.baseline-var th { font-weight: 600; }
+.baseline-table .num { text-align: right; }
+.p-low { font-weight: 700; color: var(--danger); }
+
+/* The way in from the order page. */
+.stats-teaser {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem 1.2rem;
+}
+.stats-teaser p { margin: 0; flex: 1 1 18rem; }
+.stats-teaser a[role="button"] { margin: 0; white-space: nowrap; }

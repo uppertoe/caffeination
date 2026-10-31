@@ -70,9 +70,9 @@ def test_half_window_finds_the_busy_stretch_and_crosses_midnight():
 def test_caffeine_estimates_follow_the_drink():
     from app.menu import estimated_caffeine_mg
 
-    assert estimated_caffeine_mg("espresso", None, "regular") == 107
-    assert estimated_caffeine_mg("espresso", None, "regular", shots=2) == 214
-    assert estimated_caffeine_mg("latte", "large", "extra_shot") == 321
+    assert estimated_caffeine_mg("espresso", None, "regular") == 106
+    assert estimated_caffeine_mg("espresso", None, "regular", shots=2) == 212
+    assert estimated_caffeine_mg("latte", "large", "extra_shot") == 318
     assert estimated_caffeine_mg("latte", "small", "decaf") < 5
     assert estimated_caffeine_mg("hot_chocolate", "large", "regular") == 5
     assert estimated_caffeine_mg("filter", "small", "regular") == 80
@@ -129,10 +129,7 @@ def test_scoring_a_drink_returns_just_the_result():
     assert r.status_code == 200
     assert 'id="unusual-result"' in r.text
     assert "large iced soy matcha latte" in r.text
-    assert (
-        "Its least common choice is the drink itself: none of the 2 colleagues "
-        "have matcha latte as their usual drink."
-    ) in r.text
+    assert "<td>Matcha latte</td>" in r.text and "<td>0 of 2 usual drinks</td>" in r.text
 
 
 def test_colleagues_filter_returns_the_body_alone():
@@ -208,13 +205,22 @@ def test_trying_a_drink_never_says_whether_a_colleague_has_it():
         assert "no one else" not in text.lower()
 
 
-def test_the_reason_names_the_option_that_makes_a_drink_unusual():
+def test_the_working_shows_what_each_option_adds_to_the_score():
+    import re
+
     with _client() as me, _client() as a, _client() as b:
         _onboard(a, "A", base_id="latte", size="small", milk="full_cream")
         _onboard(b, "B", base_id="latte", size="small", milk="full_cream")
         _onboard(me, "Me", base_id="latte", size="small", milk="lactose_free")
         r = me.get("/stats")
-    assert "Its least common option is lactose-free milk: 1 of the 3 usual drinks made with milk uses it." in r.text
+    rows = re.findall(r'<tr class="([^"]*)">\s*<th scope="row">(\w+)</th>(.*?)</tr>', r.text, re.S)
+    by_label = {label: (cls, body) for cls, label, body in rows}
+    cls, body = by_label["Milk"]
+    assert cls == "is-rarest" and "Lactose-free" in body and "1 of 3 made with milk" in body
+    assert by_label["Shots"][0] == "is-na" and "Does not apply" in by_label["Shots"][1]
+    # Milk is 1 of 3 with six milks and half a drink each: −log₂(1.5 / 6) = 2 bits.
+    assert ">2.0</td>" in body
+    assert "This drink scores" in r.text and "bits</strong>, as surprising as a 1 in" in r.text
 
 
 def test_someone_without_a_drink_starts_on_the_most_common_one():
@@ -247,3 +253,93 @@ def test_caffeine_wording_and_rows_agree_in_half_shots():
     assert describe_mg(160) == "about one and a half shots"
     for mg in (0, 5, 40, 54, 80, 107, 160, 214, 321):
         assert describe_mg(mg) == CAFFEINE_ROWS[half_shots(mg)].lower()
+
+
+# ---------------------------------------------------------------------------
+# The method panels.
+# ---------------------------------------------------------------------------
+
+
+def test_chi2_tail_matches_tables():
+    from app.stats import chi2_sf
+
+    assert chi2_sf(3.841459, 1) == pytest.approx(0.05, abs=1e-6)
+    assert chi2_sf(9.487729, 4) == pytest.approx(0.05, abs=1e-6)
+    assert chi2_sf(2.0, 10) == pytest.approx(0.99634, abs=1e-5)
+    assert chi2_sf(0.0, 3) == 1.0
+
+
+def test_chi_square_working_adds_up():
+    from app.stats import chi_square
+
+    pairs = [("oat", "large")] * 6 + [("oat", "small")] * 2 + [("dairy", "large")] * 3 + [("dairy", "small")] * 9
+    t = chi_square(pairs)
+    cells = [(i, j) for i in range(2) for j in range(2)]
+    assert sum(t.contribution(i, j) for i, j in cells) == pytest.approx(t.chi2)
+    assert sum(sum(row) for row in t.expected) == pytest.approx(t.n)
+    assert t.df == 1 and len(t.null) == 499
+    assert t.p_permutation == pytest.approx((t.as_extreme + 1) / 500)
+    assert t.sparse_cells == 2  # oat-large 3.6 and oat-small 4.4
+
+
+def test_random_allocations_give_evenly_spread_baseline_p_values():
+    import random
+
+    from app.stats import randomised_baseline_ps
+
+    rng = random.Random(3)
+    values = [rng.random() for _ in range(60)]
+    groups = [rng.choice("abc") for _ in range(60)]
+    ps = randomised_baseline_ps([(values, "number"), (groups, "category")], randomisations=600)
+    for j in range(2):
+        below = sum(p[j] < 0.05 for p in ps) / len(ps)
+        assert 0.02 < below < 0.09
+
+
+def test_one_cafe_rounds_are_far_less_certain_than_mixed_ones():
+    from app.stats import simulate_caffeine
+
+    sims = simulate_caffeine([(1.0, 0.0)] * 30 + [(0.0, 35.0)] * 4, 106, 38)
+    one, mixed = sims["one_cafe"], sims["separate"]
+    assert one.estimate == mixed.estimate == 30 * 106 + 140
+    assert one.high - one.low > 3 * (mixed.high - mixed.low)
+    assert one.low < one.estimate < one.high
+
+
+def test_power_calculations_match_textbook_values():
+    from app.stats import n2_for_power, n_per_group_for_means, power_two_proportions
+
+    # Two groups of 100 at 50% against 70%: about 83% power.
+    assert power_two_proportions(0.5, 0.7, 100, 100) == pytest.approx(0.83, abs=0.02)
+    assert n_per_group_for_means(0.5, 1.0) == 63
+    n2 = n2_for_power(0.3, 0.5, 200)
+    assert power_two_proportions(0.3, 0.5, 200, n2) >= 0.8 > power_two_proportions(0.3, 0.5, 200, n2 - 1)
+    # A first group too small for any second group to reach 80% power.
+    assert n2_for_power(0.3, 0.5, 20) is None
+
+
+def test_method_panels_render_and_reallocate():
+    with _client() as me:
+        _onboard(me, "Me", base_id="latte", size="small", milk="oat")
+        for i, (base, milk, size) in enumerate(
+            [("latte", "full_cream", "small"), ("flat_white", "oat", "large"), ("cappuccino", "soy", "regular"),
+             ("latte", "full_cream", "large"), ("chai_latte", "oat", "small"), ("mocha", "full_cream", "regular")] * 3
+        ):
+            with _client() as c:
+                _onboard(c, f"P{i}", base_id=base, milk=milk, size=size)
+        page = me.get("/stats")
+        again = me.get("/stats/randomise", params={"allocation": 2})
+    assert "Options that go together" in page.text
+    assert "χ² = " in page.text and "shuffled tables had a χ² at least as large" in page.text
+    assert "Table 1, allocation 1" in page.text and "Across 1,000 random allocations" in page.text
+    assert "A round for the whole department" in page.text
+    assert "This comparison needs at least 10 colleagues who have moved on, and 0 have so far." in page.text
+    assert again.status_code == 200 and "Table 1, allocation 2" in again.text
+    assert "allocation=3" in again.text
+
+
+def test_order_page_offers_the_statistics():
+    with _client() as me:
+        _onboard(me, "Me", base_id="latte")
+        r = me.get("/")
+    assert 'class="stats-teaser"' in r.text and 'href="/stats"' in r.text

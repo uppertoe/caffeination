@@ -1,5 +1,4 @@
-{% from "_stats_macros.html" import fact, plural %}
-{% macro pct(x) %}{{ (x * 100) | round | int }}%{% endmacro %}
+{% from "_stats_macros.html" import fact, plural, pct, pval, pair_test %}
 <div id="stats" class="stats-body">
 
 {% if board.n == 0 %}
@@ -7,6 +6,11 @@
     <p>No one in this group has saved a usual drink yet. The statistics will appear once someone has.</p>
   </article>
 {% else %}
+
+  <header class="part-head">
+    <h2 class="part-title">The department now</h2>
+    <p>These sections use every colleague’s usual drink. They describe the whole department rather than a sample of it, so the shares carry no error bars.</p>
+  </header>
 
   {# ---- What the department drinks: exact shares (a census, so no
      intervals). Leads because every reader found it the most useful. #}
@@ -99,7 +103,13 @@
       </form>
       {% include "_stats_unusual.html" %}
     </div>
-    <p class="chart-note">Each bean is one colleague’s usual drink{% if has_own %}, and the ringed bean is yours{% endif %}. A drink’s score adds up how seldom the department chooses each of its options, so several slightly uncommon options can outweigh one rare one.</p>
+    <p class="chart-note">Each bean is one colleague’s usual drink{% if has_own %}, and the ringed bean is yours{% endif %}.</p>
+    <details class="table-view working">
+      <summary>How the score is calculated</summary>
+      <p>Each option scores −log₂ of its share among the usual drinks it applies to. An option chosen by half the department scores 1 bit, one chosen by a quarter scores 2 bits, and one chosen by an eighth scores 3 bits.</p>
+      <p>A drink’s score is the sum of its options’ bits, so several slightly uncommon options can outweigh one rare one. Adding the bits treats the options as independent of one another, which the section on options that go together tests.</p>
+      <p>Each share includes an allowance of half a drink for every possible choice, so an option no one has chosen scores high rather than infinitely. The bits therefore differ slightly from the counts shown beside them.</p>
+    </details>
   </article>
 
   {# ---- Caffeine, in shots first ----------------------------------------- #}
@@ -125,10 +135,86 @@
     <p class="chart-note">Each bean is one colleague’s usual drink{% if caffeine.mine %}, and the ringed bean is yours{% endif %}. Little or none covers decaf, hot chocolate and the tea-based drinks.</p>
     <details class="table-view">
       <summary>How the estimate is made</summary>
-      <p class="chart-note">The typical drink is the median of the department’s usual drinks. Small and regular milk drinks are counted as one espresso shot, and large milk drinks and long blacks as two. An extra shot adds one, and a weak drink takes off half. A café espresso shot averages {{ shot_mg }} mg in Australian testing, though single shots have measured anywhere from {{ shot_range[0] }} to {{ shot_range[1] }} mg (Desbrow and colleagues, 2007 and 2012).</p>
+      <p class="chart-note">The typical drink is the median of the department’s usual drinks. Small and regular milk drinks are counted as one espresso shot, and large milk drinks and long blacks as two. An extra shot adds one, and a weak drink takes off half. A café espresso shot averaged {{ shot_mg }} mg in Australian testing, though single shots have measured anywhere from {{ shot_range[0] }} to {{ shot_range[1] }} mg (Desbrow and colleagues, 2007).</p>
     </details>
+
+    {% if caffeine_sim %}{% set sim = caffeine_sim %}
+    <h3>A round for the whole department</h3>
+    <p>A round of every colleague’s usual drink would contain about <strong>{{ '%.1f' % sim.estimate_g }} g</strong> of caffeine, from about {{ sim.shots | round | int }} espresso shots.</p>
+    <div class="sim-chart">
+      {% for sc in sim.scenarios %}
+      <div class="sim-row">
+        <span class="sim-label">{{ "Every drink from one café" if sc.key == "one_cafe" else "Each drink from a different café" }}</span>
+        <span class="sim-track" data-tip="95% of simulated rounds: {{ '%.1f' % (sc.interval.low / 1000) }} to {{ '%.1f' % (sc.interval.high / 1000) }} g">
+          {% for x, h in sc.strip %}<span class="sim-strip" style="left: {{ '%.2f' % x }}%; height: {{ '%.0f' % (h * 50) }}%"></span>{% endfor %}
+          <span class="sim-whisker" style="left: {{ '%.2f' % sc.low_x }}%; width: {{ '%.2f' % (sc.high_x - sc.low_x) }}%"></span>
+          <span class="sim-dot" style="left: {{ '%.2f' % sc.estimate_x }}%"></span>
+        </span>
+      </div>
+      {% endfor %}
+      <div class="chart-ticks sim-ticks" aria-hidden="true">
+        {% for x, text in sim.ticks %}<span style="left: {{ '%.2f' % x }}%">{{ text }}</span>{% endfor %}
+      </div>
+    </div>
+    {% set one, sep = sim.scenarios[0].interval, sim.scenarios[1].interval %}
+    <p class="chart-note">Each strip shows 2,000 simulated rounds, and the line spans the middle 95% of them. Bought from one café, the round could plausibly hold anywhere from {{ '%.1f' % (one.low / 1000) }} to {{ '%.1f' % (one.high / 1000) }} g, because one café’s shots run strong or weak together. Spread across different cafés, the errors partly cancel and the range narrows to {{ '%.1f' % (sep.low / 1000) }} to {{ '%.1f' % (sep.high / 1000) }} g.</p>
+    <details class="table-view working">
+      <summary>How the simulation works</summary>
+      <p>Each simulated shot’s caffeine is drawn from a gamma distribution with a mean of {{ shot_mg }} mg and a standard deviation of {{ sim.shot_sd }} mg. Those are the mean and standard deviation of 97 café espressos measured on the Gold Coast by Desbrow and colleagues in 2007. Drinks without espresso keep their fixed estimate.</p>
+      <p>In the first case, one draw sets the strength of every shot in the round. In the second, each drink draws its own. Errors that move together do not average out, which is why the first range is so much wider, and why a single café’s round is the realistic case.</p>
+    </details>
+    {% endif %}
+  </article>
+
+  {# ---- Options that go together: a χ² test with all of its working. ---- #}
+  {% set tested = pairs | selectattr("ready") | list | length %}
+  <article class="pairs" x-data='{ pair: {{ pairs[0].key | tojson }} }'>
+    <header><h2>Options that go together</h2></header>
+    <p class="panel-intro">Each tab tests whether two options are chosen independently of each other, using a χ² test on the department’s usual drinks.</p>
+    <div class="tabs" role="tablist" aria-label="Pair of options">
+      {% for v in pairs %}
+      <button type="button" role="tab" class="tab"
+        :aria-selected="pair === '{{ v.key }}'" aria-selected="{{ 'true' if loop.first else 'false' }}"
+        @click="pair = '{{ v.key }}'">{{ v.tab }}</button>
+      {% endfor %}
+    </div>
+    {% for v in pairs %}
+    <div role="tabpanel" x-show="pair === '{{ v.key }}'" {% if not loop.first %}x-cloak{% endif %}>
+      {{ pair_test(v, tests=tested if tested > 1 else none, independent="The usual drinks are the whole department, so the test does not generalise to a wider population. It asks whether a pattern this strong would be likely if each colleague had chosen the two options independently.") }}
+    </div>
+    {% endfor %}
+  </article>
+
+  {# ---- Randomisation and the baseline table ---------------------------- #}
+  {% if randomisation %}
+  <article class="randomise-panel">
+    <header><h2>Randomisation and the baseline table</h2></header>
+    <p class="panel-intro">This section splits the department into two arms at random, as a trial would, and compares the arms on their usual drinks.</p>
+    {% include "_stats_randomise.html" %}
+  </article>
+  {% endif %}
+
+  {# ---- Colleagues who have moved on: survivorship ----------------------- #}
+  <article class="moved-on">
+    <header><h2>Colleagues who have moved on</h2></header>
+    <p class="panel-intro">Registrars and fellows drop into the inactive list after their rotation ends. Comparing their usual drinks with the department today shows whether the people still here differ from everyone who has passed through, which is survivorship bias on a small scale.</p>
+    {% set m = moved_on %}
+    {% if not m.ready %}
+      <p class="stats-wait">This comparison needs at least {{ min_moved_on }} colleagues who have moved on, and {{ m.inactive }} {{ plural(m.inactive, "has", "have") }} so far.
+      {% if m.plant_active is not none %}
+        {% if m.needed %}To detect a plant-milk share 20 percentage points away from today’s {{ pct(m.plant_active) }} with 80% power, about {{ m.needed }} colleagues who have moved on would be needed.
+        {% else %}Detecting a plant-milk share 20 percentage points away from today’s {{ pct(m.plant_active) }} with 80% power would need more colleagues than the department is likely to see.{% endif %}
+      {% endif %}</p>
+    {% else %}
+      {{ pair_test(m.pair, independent="The colleagues still here and those who have moved on are compared as two groups from the same department.") }}
+    {% endif %}
   </article>
 {% endif %}
+
+  <header class="part-head">
+    <h2 class="part-title">Rounds over time</h2>
+    <p>These sections use the rounds recorded so far, which are a sample of the department’s coffee runs. Their estimates carry intervals, and the intervals narrow as more rounds are recorded.</p>
+  </header>
 
   {# ---- Rounds ----------------------------------------------------------- #}
   <article class="rounds">
@@ -187,17 +273,4 @@
     {% endif %}
   </article>
 
-{% if findings %}
-  {# ---- Options that go together: shown only when a link survives a Holm
-     correction across every pair tested. #}
-  <article class="pairings">
-    <header><h2>Options that go together</h2></header>
-    <ul class="finding-list">
-      {% for f in findings %}
-      <li>{{ f.sentence }} than chance alone would explain. A difference this large would arise by chance less than {{ f.odds }}.</li>
-      {% endfor %}
-    </ul>
-    <p class="chart-note">Four pairs of options are checked: {{ pairing_names[:-1] | join("; ") }}; and {{ pairing_names[-1] }}.</p>
-  </article>
-{% endif %}
 </div>

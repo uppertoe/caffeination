@@ -1,0 +1,70 @@
+{% from "_stats_macros.html" import pct, pval %}
+{# The baseline table for one random allocation, and the p-values of a
+   thousand. "Allocate again" swaps this fragment for the next allocation. #}
+{% set r = randomisation %}
+<div id="randomise" class="randomise">
+  <div class="baseline-head">
+    <h3>Table 1, allocation {{ r.allocation }}</h3>
+    <button type="button" class="secondary outline allocate-btn"
+      hx-get="/stats/randomise?who={{ who }}&allocation={{ r.allocation + 1 }}"
+      hx-target="#randomise" hx-swap="outerHTML">Allocate again</button>
+  </div>
+  <div class="xtab-wrap">
+  <table class="baseline-table">
+    <thead>
+      <tr>
+        <th scope="col">Usual drink</th>
+        <th scope="col">Arm A (n = {{ r.arm_sizes[0] }})</th>
+        <th scope="col">Arm B (n = {{ r.arm_sizes[1] }})</th>
+        <th scope="col" class="num">p</th>
+      </tr>
+    </thead>
+    {% for v in r.variables %}
+    <tbody>
+      {% if v.rows | length == 1 and not v.rows[0].level %}
+      <tr>
+        <th scope="row">{{ v.label }}, median (interquartile range)</th>
+        <td>{{ v.rows[0].arms[0] }}</td><td>{{ v.rows[0].arms[1] }}</td>
+        <td class="num{% if v.p < 0.05 %} p-low{% endif %}">{{ pval(v.p) }}</td>
+      </tr>
+      {% else %}
+      <tr class="baseline-var">
+        <th scope="row">{{ v.label }}, number (%)</th><td></td><td></td>
+        <td class="num{% if v.p < 0.05 %} p-low{% endif %}">{{ pval(v.p) }}</td>
+      </tr>
+      {% for row in v.rows %}
+      <tr class="baseline-level"><th scope="row">{{ row.label }}</th><td>{{ row.arms[0] }}</td><td>{{ row.arms[1] }}</td><td></td></tr>
+      {% endfor %}
+      {% endif %}
+    </tbody>
+    {% endfor %}
+  </table>
+  </div>
+  <p class="chart-note">
+    {% if r.any_below %}This allocation has a baseline p-value below 0.05, although the arms differ only by chance.
+    {% else %}No baseline p-value in this allocation is below 0.05.{% endif %}
+    Caffeine is compared with a rank-sum test and the other rows with a χ² test, as a trial’s Table 1 often is.
+  </p>
+
+  <h3>A thousand allocations</h3>
+  <p>Across 1,000 random allocations, <strong>{{ pct(r.share_below) }}</strong> of baseline p-values fell below 0.05, and <strong>{{ pct(r.tables_with_any) }}</strong> of tables had at least one. After a Holm correction within each table, {{ pct(r.tables_with_any_holm) }} did.</p>
+  <div class="chart">
+    <svg class="bar-chart" viewBox="0 0 600 120" role="img" aria-label="Baseline p-values from 1,000 random allocations, in steps of 0.05, against the even spread that chance predicts.">
+      {% for x, h, count in r.p_bars %}
+      <rect class="bar{% if loop.first %} bar-extreme{% endif %}" x="{{ '%.1f' % (x + 0.75) }}" y="{{ '%.1f' % (120 - h * 108) }}" width="{{ '%.1f' % (600 / 20 - 1.5) }}" height="{{ '%.1f' % (h * 108) }}" rx="2" data-tip="p from {{ '%.2f' % (loop.index0 * 0.05) }} to {{ '%.2f' % (loop.index * 0.05) }}: {{ count }}" />
+      {% endfor %}
+      <line class="expected" x1="0" x2="600" y1="{{ '%.1f' % (120 - r.expected_x * 108) }}" y2="{{ '%.1f' % (120 - r.expected_x * 108) }}" />
+      <line class="baseline" x1="0" x2="600" y1="119.5" y2="119.5" />
+    </svg>
+    <div class="chart-ticks" aria-hidden="true">
+      {% for x, text in ((0, "0"), (25, "0.25"), (50, "0.5"), (75, "0.75"), (100, "1")) %}<span style="left: {{ x }}%">{{ text }}</span>{% endfor %}
+    </div>
+  </div>
+  <p class="chart-note">The bars count baseline p-values in steps of 0.05, and the darker bar holds those below 0.05. The dashed line is the even spread that chance predicts.</p>
+  <details class="table-view working">
+    <summary>Why baseline p-values mean nothing</summary>
+    <p>When people are allocated at random, any difference between the arms at baseline is chance by construction, so baseline p-values spread evenly between 0 and 1. With five rows in the table, about a fifth of allocations show a “significant” difference somewhere. The CONSORT statement advises against testing baseline differences for this reason.</p>
+    <p>With only {{ r.n }} colleagues, each test can produce only a limited set of p-values, so the bars are lumpier than the even spread a large trial would show.</p>
+    <p>Carlisle turned the same fact around. In a 2017 analysis of more than 5,000 trials published in anaesthetic and general medical journals, he looked for baseline tables whose p-values were too evenly matched, or too extreme, to have come from random allocation, and found trials whose data were later shown to be flawed or fabricated.</p>
+  </details>
+</div>

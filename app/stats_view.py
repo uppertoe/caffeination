@@ -4,12 +4,13 @@ numbers (SVG coordinates included) so the templates only draw."""
 
 from __future__ import annotations
 
+import math
 import statistics
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Callable, Optional
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from sqlmodel import Session, select
@@ -37,7 +38,7 @@ from app.menu import (
 )
 from app.models import Round, SavedDrink, User
 from app.orders import ACTIVE_WINDOW
-from app.stats import UnusualnessModel, association, even_spread_p, half_window, holm_adjust
+from app.stats import UnusualnessModel, even_spread_p, half_window
 from app.users import ROSTER_FILTER, _as_naive_utc
 
 MIN_ROUNDS = 5  # round charts appear from this many rounds
@@ -97,6 +98,7 @@ class Usual:
     user_id: str
     options: dict
     line: str
+    active: bool = True  # seen within ACTIVE_WINDOW
 
 
 def load_usuals(session: Session, who: str) -> list[Usual]:
@@ -121,12 +123,13 @@ def load_usuals(session: Session, who: str) -> list[Usual]:
     cutoff = _as_naive_utc(datetime.now(timezone.utc)) - ACTIVE_WINDOW
     usuals = []
     for uid, last_active, created, *drink in session.exec(q):
-        if who == "active" and _as_naive_utc(last_active or created) < cutoff:
+        active = _as_naive_utc(last_active or created) >= cutoff
+        if who == "active" and not active:
             continue
         if get_drink(drink[0]) is None:
             continue  # a drink since removed from the menu
         opts = as_options(*drink)
-        usuals.append(Usual(uid, opts, line_for(opts)))
+        usuals.append(Usual(uid, opts, line_for(opts), active))
     return usuals
 
 
@@ -177,9 +180,24 @@ class Unusual:
     line: str
     more_ordinary: int  # of those, how many score as more ordinary
     excludes_viewer: bool
-    reason: str  # which option makes this drink unusual, with its count
+    working: list["OptionScore"]  # the score, option by option
+    bits: float
+    one_in: str  # "630": the score as odds, 2 ** bits
     chart: BeanChart
     marker_x: float
+
+
+@dataclass
+class OptionScore:
+    """One option's part in a drink's unusualness score."""
+
+    label: str  # "Milk"
+    value: Optional[str]  # "Oat"; None when the option does not apply
+    count: int  # usual drinks with this option
+    total: int  # usual drinks for which the option applies
+    basis: str  # what total counts: "made with milk"
+    bits: float
+    rarest: bool = False
 
 
 UNUSUAL_COLUMNS = 30
@@ -187,51 +205,29 @@ UNUSUAL_COLUMNS = 30
 LENGTH_LABELS = {Length.SHORT.value: "Short", Length.LONG.value: "Long"}
 
 
-def _verb(count: int, one: str, many: str) -> str:
-    return one if count == 1 else many
+SHOT_LABELS = {1: "Single", 2: "Double"}
+
+# The options in the order the working table lists them, with their labels
+# and what each count is out of.
+WORKING = (
+    ("base_id", "Drink", DRINK_LABELS, "usual drinks"),
+    ("size", "Size", SIZE_LABELS, "that come in a size"),
+    ("milk", "Milk", MILK_LABELS, "made with milk"),
+    ("strength", "Strength", STRENGTH_LABELS, "with a strength choice"),
+    ("temp", "Temperature", TEMP_LABELS, "that can be served extra hot or iced"),
+    ("sweetener", "Sugar", SWEETENER_LABELS, "usual drinks"),
+    ("shots", "Shots", SHOT_LABELS, "espressos"),
+    ("length", "Length", LENGTH_LABELS, "macchiatos"),
+)
 
 
-def _reason(axis: str, value, count: int, total: int) -> str:
-    """One sentence naming the drink's least common option and how many of
-    the department's usual drinks share it. Counts, never names: the same
-    numbers are on the menu board."""
-    c = "none" if count == 0 else str(count)
-    if axis == "base_id":
-        drink = DRINK_LABELS[value].lower()
-        return (
-            f"Its least common choice is the drink itself: {c} of the {total} "
-            f"colleagues {_verb(count, 'has', 'have')} {drink} as their usual drink."
-        )
-    if axis == "milk":
-        phrase, basis = f"{MILK_LABELS[value].lower()} milk", "usual drinks made with milk"
-        verb = _verb(count, "uses it", "use it")
-    elif axis == "size":
-        label = SIZE_LABELS[value].lower()
-        phrase, basis = f"the {label} size", "usual drinks that come in a size"
-        verb = _verb(count, f"is {label}", f"are {label}")
-    elif axis == "strength":
-        phrase = {"regular": "regular strength", "weak": "weak strength",
-                  "extra_shot": "an extra shot", "decaf": "decaf"}[value]
-        basis, verb = "usual drinks with a strength choice", _verb(count, "has it", "have it")
-    elif axis == "temp":
-        label = TEMP_LABELS[value].lower()
-        phrase, basis = f"serving it {label}", "usual drinks that can be served extra hot or iced"
-        verb = _verb(count, f"is served {label}", f"are served {label}")
-    elif axis == "sweetener":
-        phrase = {"none": "no sugar", "one_sugar": "one sugar",
-                  "two_sugar": "two sugars", "honey": "honey"}[value]
-        basis, verb = "usual drinks", _verb(count, "takes it", "take it")
-    elif axis == "length":
-        label = LENGTH_LABELS[value].lower()
-        phrase, basis = f"a {label} macchiato", "usual macchiatos"
-        verb = _verb(count, f"is {label}", f"are {label}")
-    else:  # shots
-        word = "double" if value == 2 else "single"
-        phrase, basis = f"a {word} shot", "usual espressos"
-        verb = _verb(count, f"is a {word}", f"are {word}s")
-    if total == 0:
-        return f"Its least common option is {phrase}: no usual drink in the department has it yet."
-    return f"Its least common option is {phrase}: {c} of the {total} {basis} {verb}."
+def _odds(bits: float) -> str:
+    """2 ** bits to two significant figures, with thousands separated."""
+    x = 2 ** bits
+    if x < 10:
+        return f"{x:.0f}"
+    digits = int(math.floor(math.log10(x))) - 1
+    return f"{round(x, -digits):,.0f}"
 
 
 @lru_cache(maxsize=8)
@@ -256,19 +252,25 @@ def build_unusual(usuals: list[Usual], chosen: dict, viewer_id: str) -> Unusual:
         UNUSUAL_COLUMNS,
     )
     others = [s for u, s in zip(usuals, scores) if u.user_id != viewer_id]
-    # The option that contributes most to the score is the one the
-    # department chooses least often among drinks that offer it.
-    axis = max(
-        (a for a in DOMAINS if chosen[a] is not None),
-        key=lambda a: -model.option_probability(a, chosen[a]),
-    )
-    counts = model.counts[axis]
+    working = []
+    for axis, label, labels, basis in WORKING:
+        value = chosen[axis]
+        counts = model.counts[axis]
+        total = sum(counts.values())
+        if value is None:
+            working.append(OptionScore(label, None, 0, total, basis, 0.0))
+            continue
+        bits = -math.log2(model.option_probability(axis, value))
+        working.append(OptionScore(label, labels[value], counts[value], total, basis, bits))
+    max(working, key=lambda o: o.bits).rarest = True
     return Unusual(
         n=len(others),
         line=line_for(chosen),
         more_ordinary=sum(1 for s in others if s < score - 1e-9),
         excludes_viewer=len(others) < len(usuals),
-        reason=_reason(axis, chosen[axis], counts[chosen[axis]], sum(counts.values())),
+        working=working,
+        bits=score,
+        one_in=_odds(score),
         chart=chart,
         marker_x=(col_of(score) + 0.5) * CHART_W / UNUSUAL_COLUMNS,
     )
@@ -420,87 +422,6 @@ def build_caffeine(usuals: list[Usual], viewer_id: str) -> Caffeine:
 
 
 # ---------------------------------------------------------------------------
-# Options that go together: tested by permutation, reported only when the
-# evidence says there is a link.
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class Finding:
-    sentence: str
-    p_value: float  # Holm-adjusted across the four pairs
-
-    @property
-    def odds(self) -> str:
-        return "1 time in 100" if self.p_value < 0.01 else "1 time in 20"
-
-
-_STRENGTH_PHRASES = {
-    "Regular": "regular strength",
-    "Weak": "weak",
-    "Extra shot": "made with an extra shot",
-    "Decaf": "decaf",
-}
-
-
-def _sugar(u: Usual) -> str:
-    return "none" if u.options["sweetener"] == Sweetener.NONE.value else "some"
-
-
-# Each pairing: a name for the note listing what was tested, how to read the
-# two options off a usual drink, and the sentence for the combination that
-# stands out when the link is real.
-PAIRINGS: tuple[tuple[str, Callable, Callable], ...] = (
-    (
-        "size and temperature",
-        lambda u: (SIZE_LABELS.get(u.options["size"]), TEMP_LABELS.get(u.options["temp"])),
-        lambda size, temp: f"{temp} drinks are more often {size.lower()}",
-    ),
-    (
-        "milk and drink",
-        lambda u: (MILK_LABELS.get(u.options["milk"]), DRINK_LABELS[u.options["base_id"]]),
-        lambda milk, drink: f"{drink} drinkers choose {milk.lower()} milk more often",
-    ),
-    (
-        "strength and size",
-        lambda u: (STRENGTH_LABELS.get(u.options["strength"]), SIZE_LABELS.get(u.options["size"])),
-        lambda strength, size: f"{size} drinks are more often {_STRENGTH_PHRASES[strength]}",
-    ),
-    (
-        "sweetener and drink",
-        lambda u: (_sugar(u), DRINK_LABELS[u.options["base_id"]]),
-        lambda sugar, drink: f"{drink} drinkers {'take a sweetener' if sugar == 'some' else 'go without a sweetener'} more often",
-    ),
-)
-PAIRING_NAMES = tuple(name for name, _, _ in PAIRINGS)
-
-
-@lru_cache(maxsize=32)
-def _association(pairs: tuple[tuple[str, str], ...]):
-    return association(pairs)
-
-
-def build_pairings(usuals: list[Usual]) -> list[Finding]:
-    """Findings that survive a Holm correction across every pair tested;
-    the page shows the panel only when there is at least one."""
-    tested = []
-    for _, pick, sentence in PAIRINGS:
-        pairs = tuple(sorted(p for p in (pick(u) for u in usuals) if None not in p))
-        if len(pairs) < MIN_FOR_PAIRING:
-            continue
-        result = _association(pairs)
-        if result is not None:
-            tested.append((sentence, result))
-    adjusted = holm_adjust([r.p_value for _, r in tested])
-    findings = [
-        Finding(sentence(*r.standout), p)
-        for (sentence, r), p in zip(tested, adjusted)
-        if p < 0.05
-    ]
-    return sorted(findings, key=lambda f: f.p_value)
-
-
-# ---------------------------------------------------------------------------
 # Rounds, from the round log.
 # ---------------------------------------------------------------------------
 
@@ -583,44 +504,3 @@ def build_rounds(session: Session) -> Rounds:
     if even_spread_p([days[d] for d in shown]) < 0.05:
         out.busiest_day = WEEKDAYS[max(days, key=days.get)]
     return out
-
-
-# ---------------------------------------------------------------------------
-# The page.
-# ---------------------------------------------------------------------------
-
-
-def stats_context(session: Session, viewer: User, who: str) -> dict:
-    from app.orders import purge_all_expired_orders
-
-    purge_all_expired_orders(session)
-    usuals = load_usuals(session, who)
-    own = next((u for u in usuals if u.user_id == viewer.id), None)
-    board = build_board(usuals)
-    # The unusual-drink panel starts on the viewer's usual drink, or on the
-    # department's most common one for someone who has not saved a drink.
-    if own:
-        chosen = own.options
-    elif usuals:
-        # Not board.top_line, which is None when no order is clearly ahead.
-        top = Counter(u.line for u in usuals).most_common(1)[0][0]
-        chosen = next(u.options for u in usuals if u.line == top)
-    else:
-        chosen = chosen_from_form({"base_id": DRINKS[0].id})
-    return {
-        "who": who,
-        "has_own": own is not None,
-        "board": board,
-        "unusual": build_unusual(usuals, chosen, viewer.id) if usuals else None,
-        "chosen": chosen,
-        "caffeine": build_caffeine(usuals, viewer.id) if usuals else None,
-        "findings": build_pairings(usuals),
-        "pairing_names": PAIRING_NAMES,
-        "shot_range": MG_PER_SHOT_RANGE,
-        "rounds": build_rounds(session),
-        "min_rounds": MIN_ROUNDS,
-        "shot_mg": MG_PER_SHOT,
-        "chart_w": CHART_W,
-        "bean_w": BEAN_W,
-        "bean_h": BEAN_H,
-    }

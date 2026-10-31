@@ -37,7 +37,9 @@ from app.orders import (
     remove_from_order,
     till_summary,
 )
-from app.stats_view import build_unusual, chosen_from_form, load_usuals, stats_context
+from app.stats_page import stats_context, usuals_for
+from app.stats_panels import build_randomisation
+from app.stats_view import build_unusual, chosen_from_form, load_usuals
 from app.timing import ServerTimingMiddleware
 from app.users import (
     can_edit_person,
@@ -658,12 +660,26 @@ def create_app() -> FastAPI:
         session: Session = Depends(get_session),
     ):
         """Re-score the drink picked in "How unusual is a drink"."""
-        usuals = load_usuals(session, _stats_who(who))
+        usuals = usuals_for(load_usuals(session, "all"), _stats_who(who))
         chosen = chosen_from_form(dict(request.query_params))
         if not usuals or chosen is None:
             return HTMLResponse("")
         return templates.TemplateResponse(
             request, "_stats_unusual.html", {"unusual": build_unusual(usuals, chosen, user.id)}
+        )
+
+    @app.get("/stats/randomise", response_class=HTMLResponse)
+    def stats_randomise(
+        request: Request,
+        who: str = "active",
+        allocation: int = 1,
+        session: Session = Depends(get_session),
+    ):
+        """Another random allocation for the baseline table."""
+        usuals = usuals_for(load_usuals(session, "all"), _stats_who(who))
+        return templates.TemplateResponse(
+            request, "_stats_randomise.html",
+            {"randomisation": build_randomisation(usuals, max(1, allocation)), "who": _stats_who(who)},
         )
 
     return app
