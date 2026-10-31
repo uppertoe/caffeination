@@ -201,8 +201,11 @@
   <section id="randomisation" class="story" style="--sc: var(--c3)">
     <div class="story-text">
       <h2 class="story-title">Randomisation and the baseline table</h2>
-      <p class="headline"><strong class="num">{{ pct(randomisation.tables_with_any) }}</strong> of a thousand random splits of the department into two arms have at least one baseline p-value below 0.05 among their five rows, although every difference is chance.</p>
-      <p>Select Allocate again to draw another Table 1. The page keeps count of how often chance alone produces a p-value below 0.05.</p>
+      <p class="headline">Demonstrating the limits of a p-value: splitting the department into two groups at random, a thousand times over, produces a “significant” difference between the groups <strong class="num">{{ pct(randomisation.tables_with_any) }}</strong> of the time.</p>
+      <p>Each split is like tossing a coin for every colleague to decide their group. The coin knows nothing about anyone’s coffee, so there is no real reason for the groups to differ, and any difference between them comes down to how the coins fell. Every one of those “significant” results is therefore a false alarm.</p>
+      <p>The groups are compared on five things about their usual drinks: caffeine, drink, milk, size and sugar.</p>
+      <p>Each comparison has a 1 in 20 chance of a p-value below 0.05 when nothing is going on. With five comparisons, the chance that at least one falls below 0.05 is 1 − 0.95⁵, about 23%, and sparse tables push it a little higher. A p-value below 0.05 is therefore not proof of a real difference, least of all when it is one of many tests.</p>
+      <p>Select Allocate again to draw another simulated Table 1, and watch how often chance alone produces one.</p>
       <details class="table-view working">
         <summary>Why baseline differences should not be tested</summary>
         <p>When people are allocated at random, any baseline difference between the arms is chance by construction, so baseline p-values should spread evenly between 0 and 1. The CONSORT statement advises against testing them for this reason.</p>

@@ -323,7 +323,7 @@ def test_method_panels_render_and_reallocate():
         again = me.get("/stats/randomise", params={"allocation": 2})
     assert "Options that go together" in page.text
     assert "χ² = " in page.text and "of the shuffled tables had a χ² at least as large" in page.text
-    assert "Table 1, allocation 1" in page.text and "of a thousand random splits of the department" in page.text
+    assert "Table 1, allocation 1" in page.text and "Demonstrating the limits of a p-value" in page.text
     assert "moved on" not in page.text
     assert again.status_code == 200 and "Table 1, allocation 2" in again.text
     assert "allocation=3" in again.text and "seen=2" in again.text

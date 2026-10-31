@@ -1753,12 +1753,15 @@ article form legend {
    pinned column, the statistics contents bar) use as their top offset. On a
    phone the header scrolls away, to save room, and --brand-h is 0. */
 @media (min-width: 1000px) {
+  /* The page's top padding moves into the header, so the header starts at
+     the top of the window and sticks from the first pixel of scroll. */
+  main.container { padding-top: 0; }
   .brand {
     position: sticky;
     top: 0;
     z-index: 30;
     margin-bottom: 0.8rem;
-    padding-top: 0.8rem;
+    padding-top: calc(var(--pico-block-spacing-vertical) + 0.8rem);
     background: var(--page-bg);
   }
 }
