@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import statistics
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Optional
@@ -111,6 +111,7 @@ class Dot:
     x: float
     y: float
     tip: str
+    r: float = 4.5  # larger where several rounds share the spot
 
 
 @dataclass
@@ -176,11 +177,15 @@ def build_afternoon(rounds: list[LoggedRound], usuals: list[Usual]) -> Afternoon
     per_round = [(r, [d.shots for d in r.drinks if not d.guest]) for r in rounds]
     per_round = [(r, xs) for r, xs in per_round if xs]
     top = max(3.0, max(statistics.fmean(xs) for _, xs in per_round))
-    for r, xs in per_round:
-        m = statistics.fmean(xs)
+    # Rounds in the same quarter hour with the same average to a quarter of
+    # a shot share one dot, sized by how many, so the chart stays the same
+    # size however many rounds are logged.
+    spots = Counter((r.minutes // 15, round(statistics.fmean(xs) * 4) / 4) for r, xs in per_round)
+    for (slot, m), k in sorted(spots.items()):
         out.dots.append(Dot(
-            (r.minutes - lo_t) / (hi_t - lo_t) * CHART_W, CHART_H - m / top * (CHART_H - 6),
-            f"A round of {len(xs)}: {_fmt(m)} shots a drink",
+            (slot * 15 + 7.5 - lo_t) / (hi_t - lo_t) * CHART_W, CHART_H - m / top * (CHART_H - 6),
+            f"{k} round{'s' if k != 1 else ''} averaging {_fmt(m)} shots a drink",
+            4.5 if k == 1 else 4.5 + 2 * math.sqrt(k - 1),
         ))
     from app.stats_view import _clock
     out.dot_ticks = [((t - lo_t) / (hi_t - lo_t) * 100, _clock(t)) for t in range(lo_t - lo_t % 120 + 120, hi_t, 120)]
@@ -249,26 +254,38 @@ def build_next_coffee(rounds: list[LoggedRound], now: Optional[datetime] = None)
     span = min(KM_DAYS, max(7.0, max(durations)))
     x = lambda t: min(t, span) / span * CHART_W
     y = lambda s: CHART_H - s * (CHART_H - 4)
+    # The curve and its band are drawn on a fixed grid of columns, one every
+    # 2 units across, so the chart's size does not grow with the number of
+    # gaps: each column takes the estimate in force at its right-hand edge.
+    columns = CHART_W // 2
+    edges = [(i + 1) * span / columns for i in range(columns)]
+    at = []
+    j = 0
+    current = steps[0]
+    for t in edges:
+        while j + 1 < len(steps) and steps[j + 1].t <= t:
+            j += 1
+            current = steps[j]
+        at.append(current)
     path, upper, lower = [f"M0,{y(1):.1f}"], [], []
-    prev = steps[0]
-    for st in steps[1:]:
-        if st.t > span:
-            break
-        path.append(f"H{x(st.t):.1f} V{y(st.survival):.1f}")
-        upper.append((x(st.t), y(prev.high)))
-        upper.append((x(st.t), y(st.high)))
-        lower.append((x(st.t), y(prev.low)))
-        lower.append((x(st.t), y(st.low)))
-        prev = st
+    last_s = 1.0
+    for i, st in enumerate(at):
+        x0 = i * 2
+        if st.survival != last_s:
+            path.append(f"H{x0} V{y(st.survival):.1f}")
+            last_s = st.survival
+        upper.append((x0, y(st.high)))
+        upper.append((x0 + 2, y(st.high)))
+        lower.append((x0, y(st.low)))
+        lower.append((x0 + 2, y(st.low)))
     path.append(f"H{CHART_W}")
     out.path = " ".join(path)
-    if upper:
-        pts = [(0, y(1))] + upper + [(CHART_W, upper[-1][1]), (CHART_W, lower[-1][1])] + lower[::-1] + [(0, y(1))]
-        out.band = "M" + " L".join(f"{a:.1f},{b:.1f}" for a, b in pts)
+    pts = upper + lower[::-1]
+    out.band = "M" + " L".join(f"{a:.0f},{b:.1f}" for a, b in pts) + " Z"
     survival_at = lambda t: next((st.survival for st in reversed(steps) if st.t <= t), 1.0)
-    out.censor_marks = [
-        (x(t), y(survival_at(t))) for t, e in zip(durations, events) if not e and t <= span
-    ]
+    out.censor_marks = sorted({
+        (round(x(t) / 2) * 2, round(y(survival_at(t)))) for t, e in zip(durations, events) if not e and t <= span
+    })
     step = 7 if span > 14 else 2
     out.ticks = [(t / span * 100, f"{t:g}") for t in range(0, int(span) + 1, step)]
     out.at_risk = [(t / span * 100, sum(1 for d in durations if d >= t)) for t in range(0, int(span) + 1, step)]
@@ -298,7 +315,7 @@ class Attendance:
     mix: list[tuple[str, float, float]] = field(default_factory=list)  # (group, census, rounds)
 
 
-def build_attendance(rounds: list[LoggedRound], usuals: list[Usual], viewer_id: str) -> Attendance:
+def build_attendance(rounds: list[LoggedRound], usuals: list[Usual], viewer_id: Optional[str]) -> Attendance:
     counts = Counter(d.person for r, d in _colleague_drinks(rounds))
     out = Attendance(len(rounds) >= MIN_FOR_ATTENDANCE, len(rounds), counts.get(viewer_id) or None)
     if not out.ready or not usuals:
@@ -389,7 +406,12 @@ def build_round_size(rounds: list[LoggedRound]) -> RoundSize:
         m = max(sizes) + 1
         out.rtm_max = m
         scale = lambda v: v / m * 200
-        out.rtm_dots = [(scale(a), 200 - scale(b)) for a, b in pairs]
+        # Sizes are whole numbers, so repeated pairs share one dot, sized by
+        # how many: (x, y, radius, rounds).
+        out.rtm_dots = [
+            (scale(a), 200 - scale(b), 3.2 + 1.6 * math.sqrt(k - 1), k)
+            for (a, b), k in sorted(Counter(pairs).items())
+        ]
         out.rtm_line = (0, 200 - scale(my - slope * mx), 200, 200 - scale(my + slope * (m - mx)))
 
     return out
@@ -403,11 +425,32 @@ class RoundPanels:
     size: RoundSize
 
 
+# The round sections cost tens to hundreds of milliseconds to compute, from
+# their resampling, and change only when a round is logged or the roster
+# does, so the last few results are kept, keyed on both. The time to the
+# next coffee also depends on today's date, which is part of the key.
+_PANELS: dict[tuple, RoundPanels] = {}
+_PANELS_KEPT = 4
+
+
 def build_round_panels(session: Session, usuals: list[Usual], viewer_id: str) -> RoundPanels:
     rounds = load_rounds(session)
-    return RoundPanels(
-        afternoon=build_afternoon(rounds, usuals),
-        next_coffee=build_next_coffee(rounds),
-        attendance=build_attendance(rounds, usuals, viewer_id),
-        size=build_round_size(rounds),
+    key = (
+        tuple((r.placed, r.size, tuple(d.person for d in r.drinks)) for r in rounds),
+        tuple((u.user_id, u.line, u.active) for u in usuals),
+        datetime.now(timezone.utc).date(),
     )
+    panels = _PANELS.get(key)
+    if panels is None:
+        panels = RoundPanels(
+            afternoon=build_afternoon(rounds, usuals),
+            next_coffee=build_next_coffee(rounds),
+            attendance=build_attendance(rounds, usuals, None),
+            size=build_round_size(rounds),
+        )
+        if len(_PANELS) >= _PANELS_KEPT:
+            _PANELS.pop(next(iter(_PANELS)))
+        _PANELS[key] = panels
+    # The viewer's own count is the one part that differs between viewers.
+    mine = sum(1 for r in rounds for d in r.drinks if d.person == viewer_id) or None
+    return replace(panels, attendance=replace(panels.attendance, mine=mine))

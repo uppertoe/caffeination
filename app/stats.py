@@ -17,6 +17,7 @@ import statistics
 from collections import Counter
 from collections.abc import Hashable, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Optional
 
 
@@ -344,16 +345,16 @@ def holm_adjust(p_values: Sequence[float]) -> list[float]:
     return adjusted
 
 
-def even_spread_p(counts: Sequence[int], simulations: int = 1999, seed: int = 0) -> float:
-    """p-value for counts as uneven as these if every category (weekday)
-    were equally likely: a χ² goodness-of-fit test, with the reference
-    distribution simulated so it stays exact at a handful of rounds."""
+@lru_cache(maxsize=32)
+def _even_spread_p(counts: tuple[int, ...], simulations: int, seed: int) -> float:
     n, k = sum(counts), len(counts)
-    if n == 0 or k < 2:
-        return 1.0
     expected = n / k
     stat = lambda cs: sum((c - expected) ** 2 for c in cs)
     observed = stat(counts) - 1e-9
+    if expected >= 5:
+        # Cochran's rule holds, so the textbook χ² distribution is accurate
+        # and the simulation, which grows with every round, is not needed.
+        return chi2_sf(stat(counts) / expected, k - 1)
     rng = random.Random(seed)
     at_least = 0
     for _ in range(simulations):
@@ -363,6 +364,17 @@ def even_spread_p(counts: Sequence[int], simulations: int = 1999, seed: int = 0)
         if stat(sim) >= observed:
             at_least += 1
     return (at_least + 1) / (simulations + 1)
+
+
+def even_spread_p(counts: Sequence[int], simulations: int = 1999, seed: int = 0) -> float:
+    """p-value for counts as uneven as these if every category (weekday)
+    were equally likely: a χ² goodness-of-fit test. While any category
+    expects fewer than 5, the reference distribution is simulated so the
+    test stays exact at a handful of rounds; beyond that, the textbook χ²
+    distribution is accurate and far cheaper."""
+    if sum(counts) == 0 or len(counts) < 2:
+        return 1.0
+    return _even_spread_p(tuple(counts), simulations, seed)
 
 
 # ---------------------------------------------------------------------------
@@ -524,37 +536,57 @@ def welch(a: Sequence[float], b: Sequence[float]) -> Optional[Welch]:
     return Welch(diff, se, df, min(1.0, 2 * t_sf(abs(diff) / se, df)), diff - tq * se, diff + tq * se)
 
 
+@lru_cache(maxsize=8)
+def _cluster_bootstrap_diff(
+    sums: tuple[tuple[float, int, float, int], ...], resamples: int, seed: int
+) -> Optional[tuple[float, float, float]]:
+    def diff(rows) -> Optional[float]:
+        s1 = n1 = s0 = n0 = 0.0
+        for a, b, c, d in rows:
+            s1 += a
+            n1 += b
+            s0 += c
+            n0 += d
+        if not n1 or not n0:
+            return None
+        return s1 / n1 - s0 / n0
+
+    est = diff(sums)
+    if est is None or len(sums) < 2:
+        return None
+    rng = random.Random(seed)
+    k = len(sums)
+    out = []
+    for _ in range(resamples):
+        d = diff([sums[rng.randrange(k)] for _ in range(k)])
+        if d is not None:
+            out.append(d)
+    out.sort()
+    return est, _percentile(out, 0.025), _percentile(out, 0.975)
+
+
 def cluster_bootstrap_diff(
     items: Sequence[tuple[Hashable, int, float]], resamples: int = 2000, seed: int = 0
 ) -> Optional[tuple[float, float, float]]:
     """Difference in mean value between group 1 and group 0, with a 95%
     percentile interval from resampling whole clusters (people) with
     replacement, so a person's repeat drinks count as one person's evidence.
-    Items are (cluster, group, value). Returns (difference, low, high)."""
-    clusters: dict[Hashable, list[tuple[int, float]]] = {}
+    Items are (cluster, group, value). Returns (difference, low, high).
+
+    Each cluster is reduced first to its sums and counts in each group, so a
+    resample adds up clusters rather than every drink, and the result is
+    cached on those sums."""
+    totals: dict[Hashable, list[float]] = {}
     for c, g, v in items:
-        clusters.setdefault(c, []).append((g, v))
-    keys = list(clusters)
-
-    def diff(pool: list[tuple[int, float]]) -> Optional[float]:
-        g1 = [v for g, v in pool if g == 1]
-        g0 = [v for g, v in pool if g == 0]
-        if not g1 or not g0:
-            return None
-        return statistics.fmean(g1) - statistics.fmean(g0)
-
-    est = diff([gv for k in keys for gv in clusters[k]])
-    if est is None or len(keys) < 2:
-        return None
-    rng = random.Random(seed)
-    out = []
-    for _ in range(resamples):
-        pool = [gv for _ in keys for gv in clusters[keys[rng.randrange(len(keys))]]]
-        d = diff(pool)
-        if d is not None:
-            out.append(d)
-    out.sort()
-    return est, _percentile(out, 0.025), _percentile(out, 0.975)
+        t = totals.setdefault(c, [0.0, 0, 0.0, 0])
+        if g == 1:
+            t[0] += v
+            t[1] += 1
+        else:
+            t[2] += v
+            t[3] += 1
+    sums = tuple(sorted(tuple(t) for t in totals.values()))
+    return _cluster_bootstrap_diff(sums, resamples, seed)
 
 
 @dataclass(frozen=True)

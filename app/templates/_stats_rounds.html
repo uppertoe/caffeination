@@ -110,12 +110,12 @@
     <div class="chart">
       <svg class="bar-chart" viewBox="0 0 {{ chart_w }} 160" role="img" aria-label="Each round’s average caffeine a drink against its time of day.">
         <line class="midday" x1="{{ '%.1f' % a.midday_x }}" x2="{{ '%.1f' % a.midday_x }}" y1="0" y2="160" />
-        {% for dot in a.dots %}<circle class="round-dot pop" style="--i: {{ loop.index0 % 40 }}" cx="{{ '%.1f' % dot.x }}" cy="{{ '%.1f' % dot.y }}" r="4.5" data-tip="{{ dot.tip }}" />{% endfor %}
+        {% for dot in a.dots %}<circle class="round-dot pop" style="--i: {{ loop.index0 % 40 }}" cx="{{ '%.1f' % dot.x }}" cy="{{ '%.1f' % dot.y }}" r="{{ '%.1f' % dot.r }}" data-tip="{{ dot.tip }}" />{% endfor %}
         <line class="baseline" x1="0" x2="{{ chart_w }}" y1="159.5" y2="159.5" />
       </svg>
       <div class="chart-ticks" aria-hidden="true">{% for x, tk in a.dot_ticks %}<span style="left: {{ '%.2f' % x }}%">{{ tk }}</span>{% endfor %}</div>
     </div>
-    <p class="chart-note">Each dot is one round, placed by its time of day and the average caffeine of its drinks, in espresso shots. The dashed line marks midday.</p>
+    <p class="chart-note">Each dot is a round, placed by its time of day and the average caffeine of its drinks, in espresso shots, and drawn larger where several rounds fall together. The dashed line marks midday.</p>
     <div class="ci-chart">
       {% set rows = [("Every drink treated as independent", a.bar_naive, (a.naive.low, a.naive.high))] %}
       {% if a.clustered %}{% set rows = rows + [("Colleagues resampled, each with all of their drinks", a.bar_clustered, (a.clustered[1], a.clustered[2]))] %}{% endif %}
@@ -248,10 +248,10 @@
       <svg viewBox="-2 -2 204 204" role="img" aria-label="Each round’s size against the size of the next round.">
         <rect class="square-frame" x="0" y="0" width="200" height="200" />
         <line class="diagonal" x1="0" y1="200" x2="200" y2="0" />
-        {% for x, y in z.rtm_dots %}<circle class="round-dot pop" style="--i: {{ loop.index0 % 40 }}" cx="{{ '%.1f' % x }}" cy="{{ '%.1f' % y }}" r="3.2" />{% endfor %}
+        {% for x, y, r, k in z.rtm_dots %}<circle class="round-dot pop" style="--i: {{ loop.index0 % 40 }}" cx="{{ '%.1f' % x }}" cy="{{ '%.1f' % y }}" r="{{ '%.1f' % r }}" data-tip="{{ k }} {{ plural(k, 'pair', 'pairs') }} of rounds" />{% endfor %}
         {% if z.rtm_line %}<line class="fit-line" x1="{{ '%.1f' % z.rtm_line[0] }}" y1="{{ '%.1f' % z.rtm_line[1] }}" x2="{{ '%.1f' % z.rtm_line[2] }}" y2="{{ '%.1f' % z.rtm_line[3] }}" />{% endif %}
       </svg>
-      <p class="chart-note">Each dot places one round’s size across and the next round’s size up. The diagonal is where the next round matches the last, and the solid line is the trend actually seen.</p>
+      <p class="chart-note">Each dot places one round’s size across and the next round’s size up, drawn larger where several pairs of rounds share the spot. The diagonal is where the next round matches the last, and the solid line is the trend actually seen.</p>
     </div>
     {% endif %}
   </div>

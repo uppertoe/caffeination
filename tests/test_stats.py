@@ -1,4 +1,5 @@
 import math
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -80,6 +81,14 @@ def test_caffeine_estimates_follow_the_drink():
 # ---------------------------------------------------------------------------
 # The page.
 # ---------------------------------------------------------------------------
+
+
+def _uid(name: str) -> str:
+    from app.db import get_engine
+    from app.models import User
+
+    with Session(get_engine()) as s:
+        return s.exec(select(User).where(User.display_name == name)).first().id
 
 
 def _client() -> TestClient:
@@ -412,3 +421,28 @@ def test_order_page_card_leads_with_the_most_common_drink():
     assert "chosen by 67% of colleagues" in stats and '<strong class="num">flat white</strong>' in stats
     # The card sits above the order.
     assert home.index('class="stats-teaser"') < home.index('id="order-section"')
+
+
+def test_round_sections_refresh_when_a_round_is_logged_and_keep_each_viewers_count():
+    with _client() as me, _client() as other:
+        _onboard(me, "Me", base_id="latte", size="small", milk="oat")
+        _onboard(other, "Other", base_id="flat_white", size="small", milk="oat")
+        for i, base in enumerate(["cappuccino", "long_black", "piccolo", "espresso", "chai_latte"]):
+            with _client() as c:
+                _onboard(c, f"P{i}", base_id=base, size="regular", milk="full_cream")
+        _log_rounds(25)
+        first = me.get("/stats").text
+        _log_rounds(1)
+        second = me.get("/stats").text
+        theirs = other.get("/stats").text
+    count = lambda html: int(re.search(r'Rounds recorded:</span>\s*<span class="fact-value">(\d+)', html).group(1))
+    assert count(first) == 25 and count(second) == 26
+    # The cached sections still show each viewer their own count.
+    from app.db import get_engine
+    from app.models import RoundDrink
+
+    with Session(get_engine()) as s:
+        drinks = s.exec(select(RoundDrink.user_id)).all()
+    mine = lambda html: re.search(r'Rounds you have been in:</span>\s*<span class="fact-value">([^<]+)', html).group(1)
+    assert mine(second) == str(drinks.count(_uid("Me")))
+    assert mine(theirs) == str(drinks.count(_uid("Other")))
