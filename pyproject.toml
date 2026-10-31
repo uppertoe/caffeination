@@ -15,6 +15,7 @@ dependencies = [
     "itsdangerous>=2.2",
     "python-multipart>=0.0.12",
     "pydantic-settings>=2.5",
+    "tzdata>=2024.1",  # zoneinfo data; the slim image ships none
 ]
 
 [project.optional-dependencies]

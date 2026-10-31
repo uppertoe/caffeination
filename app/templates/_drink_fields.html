@@ -2,7 +2,11 @@
   Shared drink-builder controls. The parent <form> owns the Alpine x-data
   with: rules, baseId, temp, size, milk, strength, sweetener, length,
   notes, rule() and onBaseChange(). The render context must provide: drinks,
-  milk_options, strength_options, sweetener_options.
+  milk_options, strength_options, sweetener_options and initial. Shots and
+  own cup take their starting state from initial rather than the Alpine
+  data, so forms that include these fields need no extra keys. Set
+  without_notes to leave out own cup, notes and the served note (the
+  statistics page scores drinks without them).
 #}
 <label>
   Base drink
@@ -13,11 +17,20 @@
   </select>
 </label>
 
-<fieldset x-show="rule.allowsIced" x-cloak>
+<fieldset x-show="rule.shotChoices.length" x-cloak>
+  <legend>Shots</legend>
+  <div class="pill-row">
+    <label><input type="radio" name="shots" value="1" {% if (initial.shots or 1) == 1 %}checked{% endif %}> Single</label>
+    <label><input type="radio" name="shots" value="2" {% if initial.shots == 2 %}checked{% endif %}> Double</label>
+  </div>
+</fieldset>
+
+<fieldset x-show="rule.allowsIced || rule.allowsExtraHot" x-cloak>
   <legend>Temperature</legend>
   <div class="pill-row">
     <label><input type="radio" name="temp" value="hot" x-model="temp"> Hot</label>
-    <label><input type="radio" name="temp" value="iced" x-model="temp"> Iced</label>
+    <label x-show="rule.allowsExtraHot"><input type="radio" name="temp" value="extra_hot" x-model="temp"> Extra hot</label>
+    <label x-show="rule.allowsIced"><input type="radio" name="temp" value="iced" x-model="temp"> Iced</label>
   </div>
 </fieldset>
 
@@ -65,6 +78,12 @@
   </select>
 </label>
 
+{% if not without_notes %}
+<label class="check-label">
+  <input type="checkbox" name="own_cup" value="1" {% if initial.own_cup %}checked{% endif %}>
+  Own cup
+</label>
+
 <label>
   Notes
   <input
@@ -79,3 +98,4 @@
 <p x-show="rule.servedNote" x-cloak class="muted">
   <small x-text="rule.servedNote"></small>
 </p>
+{% endif %}

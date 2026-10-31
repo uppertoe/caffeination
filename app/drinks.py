@@ -50,11 +50,12 @@ def normalize(base_id: str, form: dict) -> Optional[dict]:
         return v if v in valid else fallback
 
     out: dict = {"base_id": drink.id}
-    out["temp"] = (
-        _pick("temp", VALID_TEMPS, Temp.HOT.value)
-        if drink.allows_iced
-        else Temp.HOT.value
-    )
+    temps = {Temp.HOT.value}
+    if drink.allows_extra_hot:
+        temps.add(Temp.EXTRA_HOT.value)
+    if drink.allows_iced:
+        temps.add(Temp.ICED.value)
+    out["temp"] = _pick("temp", temps, Temp.HOT.value)
     out["size"] = (
         _pick(
             "size",
@@ -80,6 +81,14 @@ def normalize(base_id: str, form: dict) -> Optional[dict]:
         if drink.has_length
         else None
     )
+    out["shots"] = None
+    if drink.shot_choices:
+        try:
+            shots = int(form.get("shots", ""))
+        except ValueError:
+            shots = None
+        out["shots"] = shots if shots in drink.shot_choices else drink.shot_choices[0]
+    out["own_cup"] = form.get("own_cup") in ("1", "on", "true")
     notes = (form.get("notes") or "").strip()
     out["notes"] = notes[:80] or None
     return out
@@ -112,9 +121,13 @@ def get_saved_drink(session: Session, user_id: str) -> Optional[SavedDrink]:
 # Field order shared by format_line and the column-only roster queries in
 # app.orders / app.users, so a row can be formatted without building a
 # SavedDrink object. Keep in sync with the SavedDrink model.
-LINE_FIELDS = ("base_id", "length", "size", "temp", "strength", "milk", "sweetener", "notes")
+LINE_FIELDS = (
+    "base_id", "length", "size", "temp", "strength", "milk", "sweetener", "notes",
+    "shots", "own_cup",
+)
 
 _ICED = Temp.ICED.value
+_EXTRA_HOT = Temp.EXTRA_HOT.value
 _REGULAR = Strength.REGULAR.value
 _FULL_CREAM = Milk.FULL_CREAM.value
 _NO_SWEETENER = Sweetener.NONE.value
@@ -123,7 +136,8 @@ _NO_SWEETENER = Sweetener.NONE.value
 def format_drink(drink: Drink, sd: SavedDrink) -> str:
     """Render one till-summary line for a saved drink."""
     return format_line(
-        drink.id, sd.length, sd.size, sd.temp, sd.strength, sd.milk, sd.sweetener, sd.notes
+        drink.id, sd.length, sd.size, sd.temp, sd.strength, sd.milk, sd.sweetener, sd.notes,
+        sd.shots, sd.own_cup,
     )
 
 
@@ -137,6 +151,8 @@ def format_line(
     milk: Optional[str],
     sweetener: str,
     notes: Optional[str],
+    shots: Optional[int] = None,
+    own_cup: bool = False,
 ) -> str:
     """Render one till-summary line — lowercase, ordered like a barista call.
 
@@ -162,6 +178,8 @@ def format_line(
 
     if drink.allows_iced and temp == _ICED:
         parts.append("iced")
+    elif drink.allows_extra_hot and temp == _EXTRA_HOT:
+        parts.append("extra hot")
 
     if drink.allows_strength and strength != _REGULAR:
         parts.append(STRENGTH_LABELS[strength].lower())
@@ -169,12 +187,18 @@ def format_line(
     if drink.milk_policy == MilkPolicy.REQUIRED and milk and milk != _FULL_CREAM:
         parts.append(MILK_LABELS[milk].lower())
 
+    # "double espresso": the shot count is part of the drink's name.
+    if drink.shot_choices and shots == 2:
+        parts.append("double")
+
     parts.append(drink.display.lower())
     line = " ".join(parts)
 
     extras: list[str] = []
     if sweetener and sweetener != _NO_SWEETENER:
         extras.append(SWEETENER_LABELS[sweetener].lower())
+    if own_cup:
+        extras.append("own cup")
     if notes:
         # Notes are free text; lowercase at display time so the till line
         # stays uniformly lowercase (the stored note keeps the user's typing).

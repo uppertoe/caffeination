@@ -37,6 +37,8 @@ class SavedDrink(SQLModel, table=True):
     strength: str = "regular"
     sweetener: str = "none"
     length: Optional[str] = None  # macchiato-only "short" | "long"
+    shots: Optional[int] = None  # only for drinks with shot choices (espresso)
+    own_cup: bool = False
     notes: Optional[str] = None
     updated_at: datetime = Field(default_factory=utcnow)
 
@@ -51,3 +53,38 @@ class OrderItem(SQLModel, table=True):
     owner_id: str = Field(primary_key=True, foreign_key="user.id")
     target_user_id: str = Field(primary_key=True, foreign_key="user.id")
     added_at: datetime = Field(default_factory=utcnow)
+
+
+# ---------------------------------------------------------------------------
+# The anonymised round log behind the statistics page. A round is recorded
+# when an order closes (cleared, or expired after ORDER_TTL), stamped with the
+# time its last person was added. Nothing in Round or RoundDrink refers to a
+# person: no user ids, no names, no note text, drinks stored in a fixed sort
+# order rather than the order people were added, and the time rounded so a
+# round can't be lined up against the access logs.
+# ---------------------------------------------------------------------------
+
+
+class Round(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    placed_at: datetime  # UTC, floored to app.rounds.PLACED_AT_RESOLUTION
+    drink_count: int
+
+
+class RoundDrink(SQLModel, table=True):
+    """One drink in a round, as it was ordered. Same option fields as
+    SavedDrink; notes are reduced to whether there were any."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    round_id: int = Field(foreign_key="round.id", index=True)
+    base_id: str
+    temp: str
+    size: Optional[str] = None
+    milk: Optional[str] = None
+    strength: str
+    sweetener: str
+    length: Optional[str] = None
+    shots: Optional[int] = None
+    has_notes: bool = False
+    guest: bool = False
+

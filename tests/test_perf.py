@@ -73,7 +73,8 @@ def test_remove_and_clear_are_set_based():
         removed = me.post(f"/order/remove/{_user_id_by_name('Colleague 0')}")
         cleared = me.post("/order/clear")
     assert _queries(removed) <= 8, _queries(removed)
-    assert _queries(cleared) <= 8, _queries(cleared)
+    # Clear also logs the round (app.rounds): two selects and two inserts.
+    assert _queries(cleared) <= 12, _queries(cleared)
     assert "Guest" not in cleared.text
 
 

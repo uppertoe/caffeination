@@ -17,10 +17,11 @@ that apply depend on the base. The axes are:
 
 | Axis        | Values                                                    |
 | ----------- | --------------------------------------------------------- |
-| `temp`      | `hot`, `iced`                                              |
+| `temp`      | `hot`, `extra_hot` (drinks made with milk only), `iced`   |
 | `size`      | `small` (~240 ml), `regular` (~350 ml), `large` (~450 ml)  |
 | `milk`      | `full_cream`, `skinny`, `oat`, `soy`, `almond`, `lactose_free` |
-| `shots`     | `1`, `2`, `3` (rare)                                      |
+| `shots`     | `1`, `2` — **espresso only** (single or double); stored, not a note |
+| `own_cup`   | yes/no; adds "(own cup)" to the line                     |
 | `sweetener` | `none`, `one_sugar`, `two_sugar`, `honey`                  |
 | `strength`  | `regular`, `weak`, `extra_shot`, `decaf`, `half_caf`       |
 | `length`    | `short`, `long` — **macchiato only**; determines milk volume, not shot count |
@@ -34,6 +35,8 @@ that apply depend on the base. The axes are:
 | `macchiato`     | Macchiato         | espresso  | dash      | no     | 1 only           | Has a `length` axis unique to this drink — `short` (1 shot, dash of milk in a 90 ml glass) or `long` (1 shot, more milk in a ~200 ml glass, sometimes topped with hot water). **Length = milk volume, not shot count.** Render the option as a segmented `short ⇄ long` control; never expose shots, size, or strength. Naming: `short macchiato` / `long macchiato`. |
 | `piccolo`       | Piccolo (latte)   | espresso  | yes       | no     | 1 only           | Ristretto + steamed milk in a 90 ml glass. No size; no shot adjust. |
 | `long_black`    | Long black        | black     | no        | yes    | yes              | Hot water + 2 shots. No milk. Sized. |
+| `filter`        | Filter            | black     | no        | yes    | no               | Batch brew, served black. Added 2026-10 from RCH notes ("Filter - or long black if out"). |
+| `cold_brew`     | Cold brew         | black     | no        | no     | no               | Served cold and black; not offered iced or extra hot. Added 2026-10 from an RCH note. |
 | `latte`         | Latte             | milk      | yes       | yes    | yes              | The default group-order workhorse. |
 | `flat_white`    | Flat white        | milk      | yes       | yes    | yes              | Less foam than latte; same axes. |
 | `cappuccino`    | Cappuccino        | milk      | yes       | yes    | yes              | Choc dust on top. |
@@ -85,7 +88,7 @@ When the user picks a base in the form:
 
 Two saved drinks merge into a single line in the till summary iff every
 **ordered** option matches: base, size, milk, shots, strength, temp,
-sweetener. Free-text notes never merge — each noted drink is its own line.
+sweetener, length and own cup. Free-text notes never merge — each noted drink is its own line.
 
 Format the line as: `<count>x <size?> <strength?> <temp?> <milk?> <drink>` with
 notes appended in brackets. Examples:
@@ -107,8 +110,11 @@ out loud.
 - **Display strings** are sentence case in the UI ("Flat white") and
   lower case in the till summary ("flat white"), matching how a barista
   writes them on a cup.
-- Avoid US terms (`drip`, `cold brew`, `frappuccino`) — they don't belong
-  on a Melbourne menu.
+- Avoid US terms (`drip`, `frappuccino`) — they don't belong on a
+  Melbourne menu. Cold brew is the exception: Melbourne cafés now serve it
+  and RCH colleagues asked for it, so it is on the menu.
+- Extra hot is a milk request: offer it on drinks made with milk, and write
+  it in the temperature slot ("extra hot oat latte").
 
 ## When extending
 

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     warm_on_startup: bool = True
     cookie_max_age: int = 60 * 60 * 24 * 365  # 1 year
 
+    # Local time for the statistics page (rounds are stored in UTC).
+    timezone: str = "Australia/Melbourne"
+
     base_dir: Path = Path(__file__).resolve().parent
 
 

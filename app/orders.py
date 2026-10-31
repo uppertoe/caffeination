@@ -12,6 +12,7 @@ from sqlmodel import Session, delete, select
 
 from app.drinks import LINE_FIELDS, format_line
 from app.models import OrderItem, SavedDrink, User
+from app.rounds import record_round
 from app.users import ROSTER_FILTER, _as_naive_utc, can_edit_person, touch_last_active
 
 # An open order goes stale this long after its FIRST item was added; the
@@ -124,7 +125,7 @@ def _one_offs_of(owner_id: str):
     return select(User.id).where(User.one_off == True, User.created_by == owner_id)  # noqa: E712
 
 
-def clear_order(session: Session, owner_id: str) -> None:
+def clear_order(session: Session, owner_id: str, *, record: bool = True) -> None:
     """Empty the owner's open order, cleaning up one-off people with it.
 
     Also resets any self opt-out marker: a cleared order is back to the
@@ -132,7 +133,12 @@ def clear_order(session: Session, owner_id: str) -> None:
     commit, however many people are in the order. One-offs can only ever sit
     in their creator's order (add_to_order refuses anyone else), so "every
     one-off this owner created" is exactly the set to remove.
+
+    A cleared or expired order is the end of a round, so it is logged first
+    (app.rounds) unless record is False, as when a user deletes themselves.
     """
+    if record:
+        record_round(session, owner_id)
     session.exec(delete(SavedDrink).where(SavedDrink.user_id.in_(_one_offs_of(owner_id))))
     session.exec(delete(OrderItem).where(OrderItem.owner_id == owner_id))
     session.exec(delete(User).where(User.one_off == True, User.created_by == owner_id))  # noqa: E712
@@ -159,6 +165,24 @@ def purge_expired_order(
         return False
     clear_order(session, owner_id)
     return True
+
+
+def purge_all_expired_orders(session: Session, now: Optional[datetime] = None) -> int:
+    """Clear (and so log) every owner's expired order, not just the viewer's.
+
+    Expiry is otherwise lazy, on the owner's next render, so an order built,
+    read off at the café and left alone would stay out of the statistics
+    until its owner came back. Returns how many orders were cleared."""
+    # Compared in Python, like the rest of the expiry code: SQLite reads
+    # datetimes back naive, and SQLModel refuses to bind a naive one.
+    cutoff = _as_naive_utc(now or datetime.now(timezone.utc)) - ORDER_TTL
+    firsts = session.exec(
+        select(OrderItem.owner_id, func.min(OrderItem.added_at)).group_by(OrderItem.owner_id)
+    ).all()
+    owners = [owner for owner, first in firsts if _as_naive_utc(first) <= cutoff]
+    for owner_id in owners:
+        clear_order(session, owner_id)
+    return len(owners)
 
 
 def _line_for(saved: Optional[SavedDrink]) -> str:
@@ -245,7 +269,8 @@ def till_summary(rows: list[OrderRow]) -> list[str]:
 
     Drinks with free-text notes never merge — each is its own line. Drinks
     without notes group by every ordered option (base, size, milk,
-    strength, temp, sweetener, length) per the coffee-taxonomy skill.
+    strength, temp, sweetener, length, shots, own cup) per the
+    coffee-taxonomy skill.
     """
     groups: "OrderedDict[tuple, dict]" = OrderedDict()
     standalone: list[str] = []
@@ -265,6 +290,8 @@ def till_summary(rows: list[OrderRow]) -> list[str]:
             sd.temp,
             sd.sweetener,
             sd.length,
+            sd.shots,
+            sd.own_cup,
         )
         if key not in groups:
             groups[key] = {"count": 0, "line": row.line}

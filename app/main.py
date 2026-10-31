@@ -37,6 +37,7 @@ from app.orders import (
     remove_from_order,
     till_summary,
 )
+from app.stats_view import build_unusual, chosen_from_form, load_usuals, stats_context
 from app.timing import ServerTimingMiddleware
 from app.users import (
     can_edit_person,
@@ -176,6 +177,8 @@ def _drink_form_ctx(saved: SavedDrink | None) -> dict:
         "strength": saved.strength if saved else "regular",
         "sweetener": saved.sweetener if saved else "none",
         "length": saved.length if saved and saved.length else "short",
+        "shots": saved.shots if saved else None,
+        "own_cup": saved.own_cup if saved else False,
         "notes": saved.notes if saved else "",
     }
     return {
@@ -227,6 +230,18 @@ def _dashboard_ctx(session: Session, user: User) -> dict:
         **_order_section_ctx(session, user),
         **_new_person_ctx(session),
     }
+
+
+def _stats_who(who: str) -> str:
+    return "all" if who == "all" else "active"
+
+
+def _unusual_form_ctx(chosen: dict) -> dict:
+    """The drink controls of "How unusual is a drink", set to the drink being
+    scored. Options that do not apply keep the form's usual defaults."""
+    ctx = _drink_form_ctx(None)
+    ctx["initial"].update({k: v for k, v in chosen.items() if v is not None})
+    return ctx
 
 
 def _render(name: str, ctx: dict) -> str:
@@ -617,6 +632,38 @@ def create_app() -> FastAPI:
         remove_from_order(session, user.id, target_id)
         return templates.TemplateResponse(
             request, "_order_section.html", _order_section_ctx(session, user)
+        )
+
+    @app.get("/stats", response_class=HTMLResponse)
+    def stats_page(
+        request: Request,
+        who: str = "active",
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        """The statistics page. The colleagues filter re-requests it with
+        htmx targeting #stats, which gets the body alone."""
+        ctx = stats_context(session, user, _stats_who(who))
+        ctx.update(_unusual_form_ctx(ctx["chosen"]))
+        if request.headers.get("HX-Target") == "stats":
+            return templates.TemplateResponse(request, "_stats_body.html", ctx)
+        ctx.update(app_name=settings.app_name, tagline=settings.tagline, user=user)
+        return templates.TemplateResponse(request, "stats.html", ctx)
+
+    @app.get("/stats/unusual", response_class=HTMLResponse)
+    def stats_unusual(
+        request: Request,
+        who: str = "active",
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        """Re-score the drink picked in "How unusual is a drink"."""
+        usuals = load_usuals(session, _stats_who(who))
+        chosen = chosen_from_form(dict(request.query_params))
+        if not usuals or chosen is None:
+            return HTMLResponse("")
+        return templates.TemplateResponse(
+            request, "_stats_unusual.html", {"unusual": build_unusual(usuals, chosen, user.id)}
         )
 
     return app

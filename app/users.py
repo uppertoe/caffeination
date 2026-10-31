@@ -170,7 +170,7 @@ def delete_user(session: Session, user_id: str) -> None:
     user = session.get(User, user_id)
     if user is None:
         return
-    clear_order(session, user_id)
+    clear_order(session, user_id, record=False)
     session.exec(delete(OrderItem).where(OrderItem.target_user_id == user_id))
     session.exec(
         update(User).where(User.created_by == user_id).values(created_by=None)

@@ -1,0 +1,73 @@
+{# Shared pieces of the statistics page. One bean is one colleague's usual
+   throughout; the bean glyph is defined once per page by bean_defs(). #}
+
+{% macro bean_defs() %}
+<svg width="0" height="0" class="visually-hidden" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="bean" viewBox="0 0 15 10">
+      <ellipse cx="7.5" cy="5" rx="7.2" ry="4.7" />
+      <path d="M1.8 6.4 C5 2.4 9.6 7.9 13.2 3.6" fill="none" style="stroke: var(--card-bg)" stroke-width="1.1" stroke-linecap="round" />
+    </symbol>
+  </defs>
+</svg>
+{% endmacro %}
+
+{# Line icons for the fact cells: 24-unit grid, drawn in currentColor. #}
+{% macro icon(name) %}
+<svg class="fact-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  {% if name == "cup" %}
+    <path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" /><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16" /><path d="M8 3.5c0 1.5 1.5 1.5 1.5 3M11.5 3.5c0 1.5 1.5 1.5 1.5 3" />
+  {% elif name == "layers" %}
+    <path d="M12 4 3 8.5l9 4.5 9-4.5z" /><path d="m3 12.5 9 4.5 9-4.5" /><path d="m3 16.5 9 4.5 9-4.5" />
+  {% elif name == "star" %}
+    <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z" />
+  {% elif name == "bolt" %}
+    <path d="M13 3 5 13.5h6L10 21l8-10.5h-6z" />
+  {% elif name == "bean" %}
+    <ellipse cx="12" cy="12" rx="6" ry="8.5" transform="rotate(35 12 12)" /><path d="M8.2 17.2c1.6-3.4 6-6.6 7.6-10.4" />
+  {% elif name == "moon" %}
+    <path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z" />
+  {% elif name == "clock" %}
+    <circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" />
+  {% elif name == "calendar" %}
+    <rect x="4" y="5.5" width="16" height="14.5" rx="2" /><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
+  {% elif name == "people" %}
+    <circle cx="9" cy="9" r="3.2" /><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" /><path d="M15.5 6.2a3 3 0 0 1 0 5.6M17.5 14.4c1.6.7 2.7 2.3 3 4.6" />
+  {% endif %}
+</svg>
+{% endmacro %}
+
+{# One cell of a fact grid: icon, a label ending in a colon, the value. A
+   missing value shows as an em dash rather than collapsing the cell. #}
+{% macro fact(name, label, value) %}
+<div class="fact">
+  {{ icon(name) }}
+  <span class="fact-label">{{ label }}</span>
+  <span class="fact-value">{{ value if value not in (none, "") else "—" }}</span>
+</div>
+{% endmacro %}
+
+{# A stacked bean chart from app.stats_view.BeanChart. The SVG holds only
+   marks: text drawn in its viewBox would shrink with the chart on a phone,
+   so ticks are HTML placed by percentage underneath. `top` reserves room
+   above the beans for a marker. #}
+{% macro bean_chart(chart, chart_w, bean_w, bean_h, label, top=0) %}
+<div class="chart">
+  {{ caller("above") if caller }}
+  <svg class="bean-chart" viewBox="0 {{ -top }} {{ chart_w }} {{ chart.height + top + 2 }}" role="img" aria-label="{{ label }}">
+    {% for b in chart.beans %}
+    <use href="#bean" class="bean{% if b.mine %} bean-mine{% endif %}" x="{{ '%.1f' % b.x }}" y="{{ '%.1f' % b.y }}" width="{{ bean_w }}" height="{{ bean_h }}" data-tip="{{ b.tip }}" />
+    {% endfor %}
+    {{ caller("svg") if caller }}
+    <line class="baseline" x1="0" x2="{{ chart_w }}" y1="{{ chart.height + 1 }}" y2="{{ chart.height + 1 }}" />
+  </svg>
+  {% if chart.ticks %}
+  <div class="chart-ticks" aria-hidden="true">
+    {% for x, text in chart.ticks %}<span style="left: {{ '%.2f' % (x / chart_w * 100) }}%">{{ text }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  {{ caller("below") if caller }}
+</div>
+{% endmacro %}
+
+{% macro plural(n, one, many) %}{{ one if n == 1 else many }}{% endmacro %}

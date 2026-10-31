@@ -55,30 +55,33 @@ def init_db() -> None:
         db_path = Path(settings.database_url.removeprefix("sqlite:///"))
         db_path.parent.mkdir(parents=True, exist_ok=True)
     SQLModel.metadata.create_all(get_engine())
-    _ensure_last_active_column()
+    _ensure_columns()
     _ensure_indexes()
     _purge_unnamed_users()
 
 
-def _ensure_last_active_column() -> None:
-    """One-off in-place migration: create_all never alters existing tables,
-    so DBs created before User.last_active_at need the column added. Fresh
-    DBs get it from the model and this is a no-op. (Still no Alembic — one
-    guarded ADD COLUMN doesn't justify it; revisit if these accumulate.)"""
+# One-off in-place migrations: create_all never alters existing tables, so
+# DBs created before a column existed need it added. Fresh DBs get every
+# column from the models and these are no-ops. Each entry is (table, column,
+# column DDL, optional backfill statement). Still no Alembic: a handful of
+# guarded ADD COLUMNs doesn't justify it; revisit if these accumulate.
+_COLUMNS = (
+    ('"user"', "last_active_at", "TIMESTAMP", 'UPDATE "user" SET last_active_at = created_at'),
+    ("saveddrink", "shots", "INTEGER", None),
+    ("saveddrink", "own_cup", "BOOLEAN NOT NULL DEFAULT 0", None),
+)
+
+
+def _ensure_columns() -> None:
     engine = get_engine()
     with engine.connect() as conn:
-        cols = [
-            row[1]
-            for row in conn.exec_driver_sql('PRAGMA table_info("user")').fetchall()
-        ]
-        if "last_active_at" not in cols:
-            conn.exec_driver_sql(
-                'ALTER TABLE "user" ADD COLUMN last_active_at TIMESTAMP'
-            )
-            conn.exec_driver_sql(
-                'UPDATE "user" SET last_active_at = created_at'
-            )
-            conn.commit()
+        for table, column, ddl, backfill in _COLUMNS:
+            cols = [row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()]
+            if column not in cols:
+                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+                if backfill:
+                    conn.exec_driver_sql(backfill)
+        conn.commit()
 
 
 # Secondary indexes for the lookups that aren't served by a primary key:

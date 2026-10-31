@@ -654,6 +654,10 @@ dialog article footer button {
 .form-error { color: var(--danger); margin: 0.2rem 0 0.4rem; }
 [role="alert"].form-error { font-weight: 500; }
 
+/* A single tick box laid out like the other drink options. */
+.check-label { display: flex; align-items: center; gap: 0.5rem; }
+.check-label input { margin: 0; }
+
 /* Buttons that submit a whole form (Save / Save & add) stay roomy; the
    paired Cancel sits beside it via Pico's .grid. */
 form .grid button { width: 100%; }
@@ -677,4 +681,342 @@ article form legend {
      button to its own line rather than squeezing the text to shreds. */
   .order-list li, .roster-list li, .onboard-list li { flex-wrap: wrap; }
   .row-action { margin-left: auto; }
+}
+
+/* ---- Statistics page ---------------------------------------------------- *
+   One bean is one colleague's usual. Beans and bars wear the caramel accent;
+   the viewer's own bean and the chart markers wear the strong ink, the one
+   emphasis on the page. All chart text is HTML (see _stats_macros.html), so
+   it stays legible however narrow the chart is drawn. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.stats-head { padding-top: 0.6rem; }
+.stats-head h1 { margin: 0.15rem 0 0.9rem; }
+.back-link {
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+.back-link::before { content: "‹ "; }
+.back-link:hover { color: var(--link-hover); text-decoration: underline; }
+
+.stats-filter fieldset { margin: 0; border: 0; padding: 0; }
+.stats-filter legend {
+  padding: 0;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+}
+.stats-filter .pill-row label { font-size: 0.9rem; padding: 0.3rem 0.8rem; }
+.filter-note { margin: 0.4rem 0 0; font-size: 0.8rem; color: var(--ink-muted); }
+.stats-body.htmx-request,
+#stats.htmx-swapping { opacity: 0.55; transition: opacity 0.15s ease; }
+.stats-head:has(.htmx-request) + .stats-body { opacity: 0.55; }
+
+.panel-intro, .facet-basis { color: var(--ink-muted); margin-bottom: 0.9rem; }
+.panel-lead { font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 1rem; }
+.chart-note {
+  margin: 0.8rem 0 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+.stats-body h3 { font-size: 1.1rem; margin: 1.6rem 0 0.6rem; }
+
+/* Fact grid: the same cells in the same order every time; a missing fact
+   shows as a dash rather than disappearing. */
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(10.5rem, 40%), 1fr));
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+.fact {
+  display: grid;
+  grid-template-columns: 1.4rem 1fr;
+  column-gap: 0.55rem;
+  align-items: start;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--pico-card-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--row-tint);
+}
+.fact-icon {
+  grid-row: span 2;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-top: 0.1rem;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fact-label { font-size: 0.8rem; color: var(--ink-muted); }
+.fact-value { font-weight: 600; color: var(--ink-strong); line-height: 1.3; }
+
+/* Tabs above the menu board; they wrap to a second row on a phone. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 1.1rem 0 0.8rem;
+}
+.tab {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.88rem;
+  border-radius: 2rem;
+  border: 1px solid var(--soft-line);
+  background: transparent;
+  color: var(--ink-muted);
+}
+.tab:hover { border-color: var(--accent); color: var(--ink); background: rgba(192, 133, 82, 0.1); }
+.tab[aria-selected="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* Menu board: label, share bar with its 95% interval, share. */
+.share-list { list-style: none; margin: 0; padding: 0; }
+.share-row {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 9rem) 1fr 2.8rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.32rem 0.4rem;
+  margin: 0 -0.4rem;
+  border-radius: 0.4rem;
+  list-style: none;
+}
+.share-row.is-hot { background: var(--row-tint); }
+.share-label { color: var(--ink-strong); }
+.share-track {
+  position: relative;
+  height: 0.85rem;
+  border-radius: 4px;
+  background: var(--row-tint);
+}
+.share-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 4px;
+  background: var(--accent);
+}
+.share-value { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-strong); }
+.share-row.is-zero .share-label,
+.share-row.is-zero .share-value { color: var(--ink-muted); opacity: 0.8; }
+
+.table-view { margin: 0.7rem 0 0; }
+.table-view summary { font-size: 0.86rem; color: var(--link); }
+.table-view table { margin: 0.5rem 0 0; font-size: 0.88rem; }
+.table-view th, .table-view td { background: transparent; padding: 0.3rem 0.5rem; }
+
+/* How unusual a drink is: controls beside the result where there is room. */
+.unusual-layout { display: grid; gap: 1.2rem; }
+@media (min-width: 720px) {
+  .unusual-layout { grid-template-columns: 14.5rem 1fr; align-items: start; }
+}
+.unusual-controls label,
+.unusual-controls fieldset { margin-bottom: 0.6rem; font-size: 0.92rem; }
+.unusual-controls fieldset { border: 0; padding: 0; }
+.unusual-controls legend { padding: 0; margin-bottom: 0.25rem; font-weight: 600; color: var(--ink-strong); }
+.unusual-controls select { margin-bottom: 0; padding-block: 0.45rem; }
+.unusual-controls .pill-row label { padding: 0.25rem 0.7rem; }
+.unusual-result.htmx-swapping, .unusual-controls.htmx-request + .unusual-result { opacity: 0.6; }
+.unusual-line {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.45rem;
+  line-height: 1.2;
+  color: var(--ink-strong);
+  margin-bottom: 0.3rem;
+}
+.unusual-verdict { margin-bottom: 0.35rem; }
+.unusual-reason { font-size: 0.9rem; color: var(--ink-muted); margin-bottom: 1rem; }
+.unusual-verdict strong { font-size: 1.15em; color: var(--ink-strong); }
+/* On a phone the controls pair up two to a row, so the result stays close
+   to the option being changed. */
+@media (max-width: 719px) {
+  /* The result comes first and stays pinned while the controls below it
+     are changed, so every change is visible. */
+  .unusual-result {
+    order: -1;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin-inline: -0.5rem;
+    padding: 0.6rem 0.5rem 0.4rem;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--soft-line);
+  }
+  .unusual-line { font-size: 1.2rem; }
+  .unusual-reason { margin-bottom: 0.6rem; }
+  .unusual-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 0.75rem;
+  }
+  .unusual-controls > label:first-of-type { grid-column: 1 / -1; }
+  .unusual-controls > fieldset { grid-column: 1 / -1; }
+}
+
+/* Charts: marks in SVG, text in HTML around it. */
+.chart { position: relative; }
+.bean-chart, .bar-chart { display: block; width: 100%; height: auto; overflow: visible; }
+.bean { fill: var(--accent); transition: fill 0.12s ease; }
+.bean.is-hot { fill: var(--accent-hover-bg); }
+.bean-mine, .bean-mine.is-hot { fill: var(--ink-strong); }
+/* In the SVG strip the viewer's bean is ringed as well, matching the
+   caffeine rows, so "the ringed bean is yours" holds on both charts. */
+.bean-chart .bean-mine { stroke: var(--ink-strong); stroke-width: 2.5; paint-order: stroke; }
+.baseline { stroke: var(--soft-line); stroke-width: 1; }
+.marker { stroke: var(--ink-strong); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.bar { fill: var(--accent); }
+.bar.is-hot { fill: var(--accent-hover-bg); }
+.time-band { fill: var(--accent); opacity: 0.24; }
+
+.chart-ticks { position: relative; height: 1.3rem; margin-top: 0.2rem; }
+.chart-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.chart-ticks span:first-child { transform: none; }
+.chart-ticks span:last-child:not(:first-child) { transform: translateX(-100%); }
+.chart-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+.chart-marker-label {
+  position: relative;
+  width: max-content;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-strong);
+  transform: translateX(-50%);
+  margin-bottom: 0.1rem;
+}
+.chart-marker-label[data-edge="start"] { transform: translateX(-0.6rem); }
+.chart-marker-label[data-edge="end"] { transform: translateX(calc(-100% + 0.6rem)); }
+
+
+.stats-wait { margin-bottom: 0.2rem; }
+
+/* Day of the week: HTML columns, so the count and the day stay legible. */
+.day-chart {
+  display: grid;
+  gap: 0.5rem;
+  height: 9rem;
+  align-items: end;
+}
+.day-col {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+  text-align: center;
+}
+.day-count { font-size: 0.85rem; font-weight: 600; color: var(--ink-strong); font-variant-numeric: tabular-nums; }
+.day-bar {
+  align-self: end;
+  justify-self: center;
+  width: min(3.2rem, 70%);
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent);
+}
+.day-col.is-hot .day-bar { background: var(--accent-hover-bg); }
+.day-name {
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--soft-line);
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+/* Options that go together: one plain sentence per finding. */
+.finding-list { margin: 0; padding-left: 1.1rem; }
+.finding-list li { margin-bottom: 0.4rem; }
+.fact-grid-4 { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+
+/* Caffeine: a row of beans per band, one bean per colleague. HTML beans
+   wrap on a narrow screen instead of shrinking. */
+.bean-rows { list-style: none; margin: 1.1rem 0 0; padding: 0; display: grid; gap: 0.45rem; }
+.bean-row {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  list-style: none;
+}
+.bean-row-label { font-size: 0.88rem; color: var(--ink-strong); }
+.bean-row.is-empty .bean-row-label { color: var(--ink-muted); }
+.bean-row-beans {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  min-height: 1.4rem;
+  padding: 0.2rem 0;
+  border-left: 1px solid var(--soft-line);
+  padding-left: 0.5rem;
+}
+.bean-row-beans svg.bean { width: 1.15rem; height: auto; }
+/* The viewer's own bean is ringed as well as inked, so "the ringed bean"
+   describes it in either theme. */
+.bean-row-beans svg.bean-mine {
+  outline: 2px solid var(--ink-strong);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+.bean-row-count {
+  margin-left: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 480px) {
+  .bean-row { grid-template-columns: 6.6rem 1fr; gap: 0.5rem; }
+  .fact-grid, .fact-grid-4 { grid-template-columns: 1fr; }
+}
+
+/* The one shared tooltip (static/stats.js). Value-first, plain text. */
+.chart-tip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  max-width: 16rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.5rem;
+  background: var(--pill-bg);
+  color: var(--pill-ink);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  pointer-events: none;
+  box-shadow: var(--card-shadow);
+}
+
+/* The statistics link under the order summary: present, not prominent. */
+.stats-note { margin: 0.75rem 0 0; font-size: 0.8rem; color: var(--ink-muted); }
+.stats-note a { color: var(--ink-muted); }
+.stats-note a:hover { color: var(--link-hover); }
+
+@media (max-width: 480px) {
+  .share-row { grid-template-columns: 6.2rem 1fr 2.6rem; gap: 0.5rem; font-size: 0.92rem; }
 }
