@@ -1239,8 +1239,8 @@ article form legend {
   z-index: 5;
   display: grid;
   gap: 0.35rem;
-  margin: 0.4rem calc(-1 * var(--pico-spacing)) 1rem;
-  padding: 0.55rem var(--pico-spacing);
+  margin: 0.4rem 0 1rem;
+  padding: 0.55rem 0;
   background: color-mix(in srgb, var(--page-bg) 88%, transparent);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--soft-line);
@@ -1293,8 +1293,11 @@ article form legend {
   --c-ink: #ffffff; --c4-ink: #1a1208;
 }
 
-main.container:has(.stats-page) { max-width: 74rem; }
-.stats-head, .stats-nav, .part-head { max-width: 74rem; }
+/* Wider than the order page so text and figure can sit side by side, but
+   always inside a gutter: Pico drops the container's side padding above
+   576px and scales the root font up at wide breakpoints, so a bare rem cap
+   alone would run edge to edge on a laptop. */
+main.container:has(.stats-page) { max-width: min(56rem, calc(100% - 2.5rem)); }
 
 .part-head { margin: 3.2rem 0 1.4rem; text-align: left; }
 .part-title { font-size: clamp(1.7rem, 3.4vw, 2.4rem); }
