@@ -269,6 +269,9 @@
 
 /* ---- Base canvas -------------------------------------------------------- */
 html {
+  /* The header band reaches 50vw either side, which includes the width of
+     a classic scrollbar; clipping stops that adding a sideways scroll. */
+  overflow-x: clip;
   background:
     radial-gradient(1200px 600px at 50% -10%, var(--page-glow) 0%, var(--page-bg) 60%);
   min-height: 100%;
@@ -1779,6 +1782,22 @@ html.save-failed .failed-note { color: var(--ink-strong); }
     z-index: 30;
     margin-bottom: 0.8rem;
     padding-top: calc(var(--pico-block-spacing-vertical) + 0.8rem);
-    background: var(--page-bg);
+    border-bottom-color: transparent;
+  }
+  /* The header's band spans the whole window, frosted rather than opaque,
+     so the fixed pattern carries on behind it instead of stopping at the
+     edges of a solid box the width of the content. */
+  .brand::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: 0;
+    bottom: 0;
+    left: calc(50% - 50vw);
+    right: calc(50% - 50vw);
+    background: color-mix(in srgb, var(--page-bg) 92%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--soft-line);
   }
 }
