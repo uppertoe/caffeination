@@ -319,7 +319,7 @@ h3 { font-size: 1.3rem; }
 @media (min-width: 576px) {
   main.container { max-width: min(60rem, calc(100% - 2.5rem)); }
 }
-.onboard-card { max-width: 46rem; }
+.onboard-card { max-width: 46rem; margin-inline: auto; }
 
 /* ---- Buttons: make hover states unmistakable ----------------------------- */
 button, [role="button"] {
