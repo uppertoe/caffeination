@@ -48,6 +48,12 @@
     <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}" />
     <link rel="manifest" href="/site.webmanifest" />
 
+    <!-- Stylesheets before the font preloads, so the browser requests them
+         first. Over a slow link the fonts otherwise take the bandwidth, and
+         Firefox paints the page unstyled while the stylesheets wait. -->
+    <link rel="stylesheet" href="{{ asset('vendor/pico.min.css') }}" />
+    <link rel="stylesheet" href="{{ css_asset('coffee.css') }}" />
+
     <!-- Display type (self-hosted; every latin face is preloaded so it is
          ready at first paint: the faces use font-display: block, so the page
          waits for them rather than falling back). The preloads use asset(),
@@ -72,8 +78,6 @@
          deferred scripts run in document order, and htmx/Alpine both do
          their DOM pass once the document is parsed. coffee.js registers
          Alpine directives on alpine:init, so it must precede Alpine. -->
-    <link rel="stylesheet" href="{{ asset('vendor/pico.min.css') }}" />
-    <link rel="stylesheet" href="{{ css_asset('coffee.css') }}" />
     <script defer src="{{ asset('vendor/htmx.min.js') }}"></script>
     <script defer src="{{ asset('coffee.js') }}"></script>
     <script defer src="{{ asset('vendor/alpine.min.js') }}"></script>
