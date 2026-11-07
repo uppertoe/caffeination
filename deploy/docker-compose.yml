@@ -2,7 +2,7 @@ services:
   caffeine:
     # Built + pushed by this repo's CI to GHCR. In the server repo, pin to a
     # released tag by digest -- Renovate's pinDigests does this automatically.
-    image: ghcr.io/uppertoe/caffeination:latest@sha256:bd1f5143db032c3e5549ecf0e4e8e90fde3693d5473214e277ee85e3e2342173
+    image: ghcr.io/uppertoe/caffeination:latest@sha256:20640c6919faf307ca5675c09ce51bc015cacc8b9af041ae89bd0ea1de9a439b
     restart: unless-stopped
     # CIS Docker §5 runtime hardening. The app needs no extra capabilities and
     # binds only an internal port behind Caddy. The image already runs as the
