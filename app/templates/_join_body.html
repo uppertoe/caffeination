@@ -101,6 +101,10 @@
   hx-trigger="every 5s [document.visibilityState === 'visible'], visibilitychange[document.visibilityState === 'visible'] from:document"
   hx-target="#join-body" hx-swap="outerHTML"></div>
 {% endif %}
+{% if state in ("entry", "unknown", "limited") %}
+{# /join is reached by typing the address, so it offers the way home. #}
+<p class="join-back"><a href="/" class="back-link">Back to the home page</a></p>
+{% endif %}
 <article>
 {% if state in ("entry", "unknown", "limited") %}
   <header><h2>Join an order</h2></header>
@@ -108,14 +112,7 @@
     <p class="share-note is-alert" role="alert">This device has tried too many codes. You can try again in a minute.</p>
   {% else %}
   <form action="/join" method="get" class="join-code-form" x-data='{ code: {{ typed | tojson }} }'>
-    <label for="join-code">Enter the code from the person buying:</label>
-    <input id="join-code" name="code" class="join-code-input" type="text" inputmode="text"
-      autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="7"
-      x-model="code" @input="code = code.toUpperCase().replace(/[^A-Z ]/g, '')"
-      value="{{ typed }}" placeholder="BKT WQR" autofocus>
-    {% if state == "unknown" %}
-    <p class="share-note is-alert" role="alert">No open order uses the code {{ typed | upper }}. Please double-check the code with the person buying.</p>
-    {% endif %}
+    {% include "_join_code_fields.html" %}
     <button type="submit">Join</button>
   </form>
   {% endif %}

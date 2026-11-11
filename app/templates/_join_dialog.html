@@ -1,0 +1,29 @@
+{#
+  "Join an order with a code" on the home page, in a dialog over the page
+  like "Share this order". Fetched into #join-dialog; a code that matches no
+  order comes back here with its error, and one that matches goes to the
+  order's page (HX-Redirect). /join is the same form as a page, for someone
+  who types the address.
+#}
+<dialog open class="new-person-dialog join-dialog"
+  x-data='{ open: true, code: {{ typed | tojson }} }'
+  :open="open" @click.self="open = false" @keydown.escape.window="open = false">
+  <article>
+    <header><h2>Join an order</h2></header>
+    {% if state == "limited" %}
+    <p class="share-note is-alert" role="alert">This device has tried too many codes. You can try again in a minute.</p>
+    <div class="grid dialog-actions">
+      <button type="button" class="secondary outline" @click="open = false">Cancel</button>
+    </div>
+    {% else %}
+    <form hx-get="/join" hx-target="#join-dialog" hx-swap="innerHTML" class="join-code-form">
+      <input type="hidden" name="dialog" value="1">
+      {% include "_join_code_fields.html" %}
+      <div class="grid dialog-actions">
+        <button type="submit">Join</button>
+        <button type="button" class="secondary outline" @click="open = false">Cancel</button>
+      </div>
+    </form>
+    {% endif %}
+  </article>
+</dialog>

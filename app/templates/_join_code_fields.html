@@ -1,0 +1,10 @@
+{# The code field and its error, shared by /join (J0, J1) and the join
+   dialog on the home page. #}
+<label for="join-code">Enter the code from the person buying:</label>
+<input id="join-code" name="code" class="join-code-input" type="text" inputmode="text"
+  autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="7"
+  x-model="code" @input="code = code.toUpperCase().replace(/[^A-Z ]/g, '')"
+  value="{{ typed }}" placeholder="BKT WQR" autofocus>
+{% if state == "unknown" %}
+<p class="share-note is-alert" role="alert">No open order uses the code {{ typed | upper }}. Please double-check the code with the person buying.</p>
+{% endif %}

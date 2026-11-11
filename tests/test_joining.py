@@ -56,6 +56,7 @@ def test_the_join_page_asks_for_a_code():
         r = c.get("/join")
     assert r.status_code == 200
     assert "Enter the code from the person buying:" in T(r)
+    assert '<a href="/" class="back-link">Back to the home page</a>' in r.text
 
 
 def test_a_typed_code_in_any_case_goes_to_the_order():
@@ -71,6 +72,42 @@ def test_an_unknown_code_says_so():
         r = c.get("/join?code=bktwqv")
     assert r.status_code == 404
     assert "No open order uses the code BKT WQV. Please double-check the code with the person buying." in T(r)
+
+
+HX = {"HX-Request": "true"}
+
+
+def test_the_home_page_opens_the_join_form_in_a_dialog():
+    with _client() as sarah:
+        _onboard(sarah, "Sarah", base_id="latte")
+        home = sarah.get("/")
+        r = sarah.get("/join?dialog=1", headers=HX)
+    assert 'hx-get="/join?dialog=1" hx-target="#join-dialog"' in home.text
+    assert '<div id="join-dialog"></div>' in home.text
+    assert "<dialog open" in r.text
+    assert "Enter the code from the person buying:" in T(r) and 'name="dialog" value="1"' in r.text
+    assert "<html" not in r.text
+
+
+def test_a_code_typed_in_the_dialog_goes_to_the_order():
+    with _client() as sarah, _client() as c:
+        _onboard(sarah, "Sarah", base_id="latte")
+        code = _share(sarah)
+        r = c.get(f"/join?dialog=1&code={code.lower()}", headers=HX)
+    assert r.status_code == 200 and r.headers["HX-Redirect"] == f"/j/{code}"
+
+
+def test_an_unknown_code_in_the_dialog_says_so_in_the_dialog():
+    with _client() as c:
+        r = c.get("/join?dialog=1&code=bktwqv", headers=HX)
+    assert r.status_code == 404 and "<dialog open" in r.text
+    assert "No open order uses the code BKT WQV. Please double-check the code with the person buying." in T(r)
+
+
+def test_the_dialog_flag_without_htmx_still_gives_the_page():
+    with _client() as c:
+        r = c.get("/join?dialog=1")
+    assert "<html" in r.text and "<dialog" not in r.text
 
 
 def test_too_many_unknown_codes_are_refused_for_a_minute():
