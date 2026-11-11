@@ -10,11 +10,11 @@
   <span class="row-actions">
     {% if p.in_order %}
     <button type="button" class="secondary outline row-action"
-      hx-post="/order/remove/{{ p.id }}" hx-target="closest li" hx-swap="outerHTML"
+      hx-post="{{ ob }}/remove/{{ p.id }}" hx-target="closest li" hx-swap="outerHTML"
       aria-label="Remove {{ p.display_name }} from the order">Remove</button>
     {% else %}
     <button type="button" class="row-action"
-      hx-post="/order/add/{{ p.id }}" hx-target="closest li" hx-swap="outerHTML"
+      hx-post="{{ ob }}/add/{{ p.id }}" hx-target="closest li" hx-swap="outerHTML"
       aria-label="Add {{ p.display_name }} to the order">Add</button>
     {% endif %}
   </span>

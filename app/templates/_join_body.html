@@ -1,0 +1,286 @@
+{#
+  The joiner's page body (app.join_page). Every form here posts back and
+  gets this element in return. States, from the join-by-code plan:
+    entry / unknown / limited   J0, J1, J2   typing a code
+    landing                     J3, J3b, J3c, J4, J4b   adding a drink
+    closed / full / finished    J5, J6, J7
+    joined                      J8, J9, J10, J16, and J11, J12 once the
+                                buyer has sent Ordered or On the way
+    ready                       J13   the order is complete
+    removed / cancelled         J14, J15
+  A form that fails to reach the server shows J18 above its button.
+#}
+{% from "_icons.html" import icon %}
+{% macro builder_data(extra="") -%}
+  rules: {{ rules | tojson }},
+  baseId: {{ initial.base_id | tojson }},
+  temp: {{ (initial.temp or "hot") | tojson }},
+  size: {{ (initial.size or "small") | tojson }},
+  milk: {{ (initial.milk or "full_cream") | tojson }},
+  strength: {{ (initial.strength or "regular") | tojson }},
+  sweetener: {{ (initial.sweetener or "none") | tojson }},
+  length: {{ (initial.length or "short") | tojson }},
+  notes: {{ (initial.notes or "") | tojson }},
+  offline: false,
+  get rule() { return this.rules[this.baseId]; },
+  onBaseChange() {
+    const r = this.rule;
+    if (r.sized && r.defaultSize && ["small","regular","large"].indexOf(this.size) === -1) {
+      this.size = r.defaultSize;
+    }
+    if ((this.temp === "iced" && !r.allowsIced) || (this.temp === "extra_hot" && !r.allowsExtraHot)) this.temp = "hot";
+    if (!r.allowsStrength) this.strength = "regular";
+  }{{ extra }}
+{%- endmacro %}
+{% macro offline_note() -%}
+<p class="share-note is-alert" role="alert" x-show="offline" x-cloak>
+  {%- if mode == "change" -%}
+  Your drink has not been changed, because the server could not be reached. Please try again.
+  {%- else -%}
+  Your drink has not been added, because the server could not be reached. Please try again.
+  {%- endif -%}
+</p>
+{%- endmacro %}
+{% macro location_field(id) -%}
+{% if order_location %}
+<ul class="share-cells join-cells-one"><li>{{ icon("pin") }}<span>{{ order_location }}</span></li></ul>
+{% else %}
+<label for="{{ id }}">Location:</label>
+<input id="{{ id }}" type="text" name="location" maxlength="60" autocomplete="off"
+  value="{{ form.location if form.location is defined else last_location }}"
+  placeholder="Theatre 3, tearoom, office" x-ref="loc" aria-describedby="{{ id }}-help">
+{% if suggestions %}
+<p class="join-suggest">
+  {% for place in suggestions %}<button type="button" class="link-button" @click="$refs.loc.value = {{ place | tojson }}">{{ place }}</button>{% endfor %}
+</p>
+{% endif %}
+<small id="{{ id }}-help">
+  {%- if mode == "colleague" -%}
+  If you leave the location blank, your colleague can collect the drink from {{ owner_name }}.
+  {%- else -%}
+  If you leave the location blank, you can collect your drink from {{ owner_name }}.
+  {%- endif -%}
+</small>
+{% endif %}
+{%- endmacro %}
+{% macro status_message_block() -%}
+{% if status_message %}
+<div class="share-message">
+  <span class="share-message-label">Message from {{ owner_name }}:</span>
+  <p>{{ status_message }}</p>
+</div>
+{% endif %}
+{%- endmacro %}
+{% macro line_cells(line) -%}
+<ul class="share-cells">
+  {% if not line.is_self %}<li class="join-who">{{ icon("guest") }}<span>{{ line.name }}{% if line.guest %} (guest){% endif %}</span></li>{% endif %}
+  <li>{{ icon("cup") }}<span>{% if line.one_off_drink %}One-off: {% endif %}{{ line.drink }}</span></li>
+  <li{% if not line.location %} class="is-missing"{% endif %}>{{ icon("pin") }}<span>{{ line.location or "Collected from " ~ owner_name }}</span></li>
+</ul>
+{%- endmacro %}
+{% macro error_note() -%}
+{% if error %}<p role="alert" class="share-note is-alert">{{ error }}</p>{% endif %}
+{%- endmacro %}
+{# After an action, the page shows from the top, where the confirmation is. #}
+{% set hx = 'hx-target="#join-body" hx-swap="outerHTML show:window:top"' %}
+{# htmx takes a top-level <title> in a swapped response as the page's new
+   title, so the tab shows the status as it changes. #}
+{% if is_partial and page_title %}<title>{{ page_title }}</title>{% endif %}
+{# Buttons outside a form (remove, change, the poll) have no offline note of
+   their own, so the page shows one for them. Forms show their own. #}
+<section id="join-body" class="join-body" x-data="{ offline: false }"
+  @htmx:send-error="if (!$event.target.closest('form')) offline = true"
+  @htmx:after-request="if ($event.detail.successful) offline = false">
+<p class="share-note is-alert" role="alert" x-show="offline" x-cloak>Nothing has changed, because the server could not be reached. Please try again.</p>
+{% if live %}
+{# The poll: refetches this body every 5 seconds while the page is in view,
+   and at once when it comes back into view. A 204 (nothing new) swaps
+   nothing. #}
+<div hidden
+  hx-get="{{ join_path }}?v={{ live_version }}"
+  hx-trigger="every 5s [document.visibilityState === 'visible'], visibilitychange[document.visibilityState === 'visible'] from:document"
+  hx-target="#join-body" hx-swap="outerHTML"></div>
+{% endif %}
+<article>
+{% if state in ("entry", "unknown", "limited") %}
+  <header><h2>Join an order</h2></header>
+  {% if state == "limited" %}
+    <p class="share-note is-alert" role="alert">This device has tried too many codes. You can try again in a minute.</p>
+  {% else %}
+  <form action="/join" method="get" class="join-code-form" x-data='{ code: {{ typed | tojson }} }'>
+    <label for="join-code">Enter the code from the person buying:</label>
+    <input id="join-code" name="code" class="join-code-input" type="text" inputmode="text"
+      autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="7"
+      x-model="code" @input="code = code.toUpperCase().replace(/[^A-Z ]/g, '')"
+      value="{{ typed }}" placeholder="BKT WQR" autofocus>
+    {% if state == "unknown" %}
+    <p class="share-note is-alert" role="alert">No open order uses the code {{ typed | upper }}. Please double-check the code with the person buying.</p>
+    {% endif %}
+    <button type="submit">Join</button>
+  </form>
+  {% endif %}
+
+{% else %}
+  <header><h2>{{ owner_possessive }} order</h2></header>
+  {% if order_name %}<p class="join-order-name"><strong>{{ order_name }}</strong></p>{% endif %}
+
+  {% if state == "landing" %}
+    {% if removed_note %}<p class="share-note is-ok" role="status">Your drink has been removed from {{ owner_possessive }} order.</p>{% endif %}
+    <p>{{ owner_name }} is taking orders until {{ until }}.</p>
+    {% if order_location %}
+    <ul class="share-cells">
+      <li>{{ icon("pin") }}<span>{{ order_location }}</span></li>
+      <li>{{ icon("cup") }}<span>{{ count }} of {{ max_drinks }} {{ "drink" if max_drinks == 1 else "drinks" }}</span></li>
+    </ul>
+    {% endif %}
+
+    {% if mode == "usual" %}
+      {# J3 / J3c: one tap for a usual drink. #}
+      <form hx-post="{{ join_path }}/usual" {{ hx | safe }} class="join-form"
+        x-data="{ offline: false }" @htmx:send-error="offline = true" @htmx:before-request="offline = false">
+        {{ error_note() }}
+        {% if not order_location %}<div class="join-field">{{ location_field("loc-usual") }}</div>{% endif %}
+        {{ offline_note() }}
+        <button type="submit" class="join-big">Add my usual drink<small>{{ usual_line }}</small></button>
+      </form>
+      <button type="button" class="secondary outline" hx-get="{{ join_path }}?mode=oneoff" {{ hx | safe }}>Order a one-off drink</button>
+
+    {% elif mode in ("oneoff", "new_usual") %}
+      {# J3b: a one-off drink; J4b: no usual yet, so it is offered as one. #}
+      <form hx-post="{{ join_path }}/one-off" {{ hx | safe }} class="join-form"
+        x-data='{ {{ builder_data() }} }' x-init='$watch("baseId", () => onBaseChange())'
+        @htmx:send-error="offline = true" @htmx:before-request="offline = false">
+        <input type="hidden" name="mode" value="{{ mode }}">
+        {{ error_note() }}
+        {% include "_drink_fields.html" %}
+        <label class="join-check"><input type="checkbox" name="save_usual" value="1"{% if mode == "new_usual" %} checked{% endif %}> Save this as my usual drink</label>
+        <div class="join-field">{{ location_field("loc-oneoff") }}</div>
+        {{ offline_note() }}
+        <button type="submit">{{ "Add my drink" if mode == "new_usual" else "Add this drink" }}</button>
+      </form>
+      {% if mode == "oneoff" %}
+      <button type="button" class="link-button join-alt" hx-get="{{ join_path }}?mode=usual" {{ hx | safe }}>Add my usual drink instead</button>
+      {% endif %}
+
+    {% elif mode == "guest" %}
+      {# J4: no identity, so a guest who lives only in this order. #}
+      {% include "_join_guest_form.html" %}
+    {% endif %}
+
+  {% elif state == "closed" %}
+    <p class="share-note">{{ owner_possessive }} order is closed to new drinks. If you still need a coffee, you can start your own order.</p>
+    <a href="/" role="button" class="secondary outline">Start my own order</a>
+
+  {% elif state == "full" %}
+    <p class="share-note">
+      {%- if default_cap -%}
+      {{ owner_possessive }} order already has {{ number_word(count) }} drinks, which is about as many as one person can carry. If you still need a coffee, you can start your own order.
+      {%- else -%}
+      {{ owner_possessive }} order has reached its limit of {{ number_word(max_drinks) }} {{ "drink" if max_drinks == 1 else "drinks" }}. If you still need a coffee, you can start your own order.
+      {%- endif -%}
+    </p>
+    <a href="/" role="button" class="secondary outline">Start my own order</a>
+
+  {% elif state == "finished" %}
+    <p class="share-note">{{ owner_possessive }} order has finished.</p>
+    <a href="/" role="button" class="secondary outline">Start my own order</a>
+
+  {% elif state == "ready" %}
+    {# J13: shown for an hour after the buyer sends Ready; nothing polls. #}
+    <p class="share-note is-ok">{{ "Your drinks are ready." if lines | length > 1 else "Your drink is ready." }}</p>
+    {{ status_message_block() }}
+    {% for line in lines %}<div class="join-line">{{ line_cells(line) }}</div>{% endfor %}
+
+  {% elif state == "cancelled" %}
+    <p class="share-note is-alert">{{ owner_name }} has cancelled the order. Your drink has not been ordered.</p>
+    <a href="/" role="button" class="secondary outline">Start my own order</a>
+
+  {% elif state == "removed" %}
+    <p class="share-note is-alert">{{ owner_name }} has removed your drink from the order. If you still need a coffee, you can speak to {{ owner_name }} or start your own order.</p>
+    <a href="/" role="button" class="secondary outline">Start my own order</a>
+
+  {% elif state == "joined" %}
+    {% set self_line = lines | selectattr("is_self") | first %}
+    {% if mode == "colleague" and accepting and not joiner_max_reached %}
+      {# J9 on its way: a drink for a colleague, as a guest. #}
+      {% include "_join_guest_form.html" %}
+      <button type="button" class="link-button join-alt" hx-get="{{ join_path }}" {{ hx | safe }}>Cancel</button>
+    {% elif mode == "change" and editable and self_line %}
+      <form hx-post="{{ join_path }}/one-off" {{ hx | safe }} class="join-form"
+        x-data='{ {{ builder_data() }} }' x-init='$watch("baseId", () => onBaseChange())'
+        @htmx:send-error="offline = true" @htmx:before-request="offline = false">
+        <input type="hidden" name="mode" value="change">
+        {{ error_note() }}
+        {% include "_drink_fields.html" %}
+        {{ offline_note() }}
+        <button type="submit">Change to this drink</button>
+      </form>
+      <button type="button" class="link-button join-alt" hx-get="{{ join_path }}" {{ hx | safe }}>Cancel</button>
+    {% else %}
+      {% if status == "ordered" %}
+      <p class="share-note is-ok">{{ owner_name }} has ordered {{ "your drinks" if lines | length > 1 else "your drink" }}.</p>
+      {% elif status == "on_the_way" %}
+      <p class="share-note is-ok">{{ owner_name }} is bringing the drinks back.</p>
+      {% elif full %}
+      <p class="share-note">{{ owner_possessive }} order has reached its limit of drinks. {{ "Your drinks are" if lines | length > 1 else "Your drink is" }} still in the order.</p>
+      {% elif not accepting %}
+      <p class="share-note">{{ owner_possessive }} order is closed to new drinks. {{ "Your drinks are" if lines | length > 1 else "Your drink is" }} still in the order.</p>
+      {% elif self_line and self_line.added_by_buyer and not self_line.one_off_drink %}
+      <p class="share-note is-ok">{{ owner_name }} has already added your usual drink to the order.</p>
+      {% elif not self_line and lines | length == 1 %}
+      <p class="share-note is-ok">{{ lines[0].name }}'s drink is in {{ owner_possessive }} order.</p>
+      {% else %}
+      <p class="share-note is-ok">{{ "Your drinks are" if lines | length > 1 else "Your drink is" }} in {{ owner_possessive }} order.</p>
+      {% endif %}
+      {% if not editable %}{{ status_message_block() }}{% endif %}
+      {{ error_note() }}
+
+      {% for line in lines %}
+      <div class="join-line">
+        {{ line_cells(line) }}
+        {% if editable %}
+          {% if mode == "location" and not order_location and request.query_params.get("line") == line.target_id %}
+          <form hx-post="{{ join_path }}/line/{{ line.target_id }}/location" {{ hx | safe }} class="join-form">
+            <div class="join-field">{{ location_field("loc-" ~ loop.index) }}</div>
+            <button type="submit">Save location</button>
+          </form>
+          {% else %}
+          <div class="join-line-actions">
+            {% if not order_location %}
+            <button type="button" class="secondary outline" hx-get="{{ join_path }}?mode=location&amp;line={{ line.target_id }}" {{ hx | safe }}>{{ "Change location" if line.location else "Add a location" }}</button>
+            {% endif %}
+            {% if line.is_self %}
+              {% if line.one_off_drink %}
+              <button type="button" class="link-button" hx-post="{{ join_path }}/line/{{ line.target_id }}/usual" {{ hx | safe }}>Change to my usual drink</button>
+              {% else %}
+              <button type="button" class="link-button" hx-get="{{ join_path }}?mode=change" {{ hx | safe }}>Change to a one-off drink</button>
+              {% endif %}
+            {% endif %}
+            <button type="button" class="link-button" hx-post="{{ join_path }}/line/{{ line.target_id }}/remove" {{ hx | safe }}>
+              {{- "Remove my drink" if line.is_self else "Remove " ~ line.name ~ "'s drink" -}}
+            </button>
+          </div>
+          {% endif %}
+        {% endif %}
+      </div>
+      {% endfor %}
+
+      {% if editable %}
+      <ul class="share-cells">
+        {% set taking = accepting or full %}
+        <li>{{ icon("clock" if taking else "lock") }}<span>{% if taking %}Taking orders until {{ until_short }}{% else %}Closed to new drinks{% endif %}</span></li>
+        <li{% if full %} class="is-alert"{% endif %}>{{ icon("cup") }}<span>{{ count }} of {{ max_drinks }} {{ "drink" if max_drinks == 1 else "drinks" }}</span></li>
+      </ul>
+      {% endif %}
+      {% if accepting and editable %}
+        {% if joiner_max_reached %}
+        <p class="join-help">Each person can add up to two drinks.</p>
+        {% else %}
+        <button type="button" class="secondary outline" hx-get="{{ join_path }}?mode=colleague" {{ hx | safe }}>Add a drink for a colleague</button>
+        {% endif %}
+      {% endif %}
+    {% endif %}
+  {% endif %}
+{% endif %}
+</article>
+</section>

@@ -1,0 +1,28 @@
+{# The order's left-hand column: your order and the till summary.
+   Refetches itself when a drink save / rename / new-person POST fires the
+   order-refresh event (HX-Trigger header). The inline person-edit form that
+   swaps in over this section carries NO such listener, so those events can't
+   clobber an edit in progress.
+
+   Buttons in here replace the whole section by default, so hx-target/hx-swap
+   are set once on the section and inherited. The one exception is the
+   roster's Add button: it deletes just its own row and the server sends the
+   two changed articles back out of band (_roster_toggle.html), so the picker
+   keeps its scroll position, filter text and inactive toggle. Remove and
+   Clear still re-render everything — the person has to reappear in the
+   roster. #}
+<section
+  id="order-section"
+  hx-get="{{ ob }}"
+  hx-trigger="order-refresh from:body"
+  hx-target="#order-section"
+  hx-swap="outerHTML"
+>
+  {# Your order and the till summary, grouped so that on a wide screen they
+     stay in view beside the roster as the page scrolls. #}
+  <div class="order-main">
+    {% include "_order_list.html" %}
+
+    {% include "_till_summary.html" %}
+  </div>
+</section>

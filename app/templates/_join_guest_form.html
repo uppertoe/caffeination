@@ -1,0 +1,17 @@
+{# A named drink from the builder: a guest joining (J4), or a joiner adding a
+   drink for a colleague (J9). Included from _join_body.html, which provides
+   builder_data, location_field, error_note and offline_note. #}
+<form hx-post="{{ join_path }}/guest" hx-target="#join-body" hx-swap="outerHTML show:window:top" class="join-form"
+  x-data='{ {{ builder_data() }} }' x-init='$watch("baseId", () => onBaseChange())'
+  @htmx:send-error="offline = true" @htmx:before-request="offline = false">
+  <input type="hidden" name="mode" value="{{ 'colleague' if state == 'joined' else 'guest' }}">
+  {% if joiner_token %}<input type="hidden" name="joiner" value="{{ joiner_token }}">{% endif %}
+  {{ error_note() }}
+  <label for="guest-name">{{ "Your colleague's name:" if state == "joined" else "Your name:" }}</label>
+  <input id="guest-name" type="text" name="display_name" maxlength="40" autocomplete="off"
+    value="{{ form.display_name or '' }}" required>
+  {% include "_drink_fields.html" %}
+  <div class="join-field">{{ location_field("loc-guest") }}</div>
+  {{ offline_note() }}
+  <button type="submit">{{ "Add your colleague's drink" if state == "joined" else "Add my drink" }}</button>
+</form>

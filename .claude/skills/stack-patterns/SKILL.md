@@ -262,5 +262,4 @@ Each `TestClient(create_app())` has its own cookie jar — that's how you simula
 
 - **WAL / `busy_timeout` SQLite pragmas.** Two browser tabs hitting the dev server don't conflict. If you see "readonly database" mid-build, the first move is `rm -rf data/ && restart uvicorn` — `--reload` watchers can hold stale connections. Only reach for WAL if you actually observe a collision in test.
 - **Alembic migrations.** `SQLModel.metadata.create_all` in lifespan is enough for a demo.
-- **A separate `Order` table.** `OrderItem` keyed on `(owner_id, target_user_id)` is sufficient — the set of items for an owner *is* their open order.
 - **CSS.** Pico's defaults are fine. Don't add a stylesheet unless the audience specifically asks.

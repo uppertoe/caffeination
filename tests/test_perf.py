@@ -74,7 +74,9 @@ def test_remove_and_clear_are_set_based():
         cleared = me.post("/order/clear")
     assert _queries(removed) <= 8, _queries(removed)
     # Clear also logs the round (app.rounds): two selects and two inserts.
-    assert _queries(cleared) <= 12, _queries(cleared)
+    # It also finds the order and marks it closed, rather than deleting rows
+    # by owner, which accounts for the two over the old budget of 12.
+    assert _queries(cleared) <= 14, _queries(cleared)
     assert "Guest" not in cleared.text
 
 

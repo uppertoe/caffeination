@@ -313,7 +313,10 @@ def test_add_without_row_target_returns_full_section():
         r = bob.post(f"/order/add/{alice_id}")
         assert 'id="order-section"' in r.text
         assert 'id="roster-picker"' in r.text
-        assert 'hx-swap-oob' not in r.text
+        # The right-hand column is its own element, so it comes back out of
+        # band with the section; nothing else does.
+        assert r.text.count('hx-swap-oob') == 1
+        assert 'id="order-side" class="order-side" hx-swap-oob="true"' in r.text
 
 
 def test_remove_from_your_order_swaps_only_what_changed():
@@ -334,3 +337,127 @@ def test_remove_from_your_order_swaps_only_what_changed():
         roster_row = r.text.split(f'id="roster-{alice_id}"')[1]
         assert "is-selected" not in roster_row.split("</li>")[0]
         assert "large oat flat white" not in r.text.split('id="till-summary"')[1].split("</article>")[0]
+
+
+def test_owner_keyed_order_lines_move_onto_orders():
+    """A database from before the Order table keyed lines by owner, with a
+    self-targeting row as the opt-out marker. init_db turns each owner's lines
+    into one open everyday order, the marker into owner_excluded_at, and
+    leaves the app working on the result."""
+    import sqlite3
+
+    from app.config import get_settings
+    from app.db import init_db
+    from app.orders import is_self_excluded, load_order_view
+
+    path = get_settings().database_url.removeprefix("sqlite:///")
+    con = sqlite3.connect(path)
+    con.executescript(
+        'CREATE TABLE "user" (id VARCHAR PRIMARY KEY, display_name VARCHAR, created_at TIMESTAMP,'
+        " created_by VARCHAR, one_off BOOLEAN, last_active_at TIMESTAMP);"
+        "CREATE TABLE orderitem (owner_id VARCHAR, target_user_id VARCHAR, added_at TIMESTAMP,"
+        " PRIMARY KEY (owner_id, target_user_id));"
+        "CREATE INDEX ix_orderitem_target ON orderitem (target_user_id);"
+        "INSERT INTO \"user\" VALUES ('me', 'Me', '2026-01-05 08:00:00', NULL, 0, '2026-01-05 08:00:00');"
+        "INSERT INTO \"user\" VALUES ('ann', 'Ann', '2026-01-05 08:00:00', NULL, 0, '2026-01-05 08:00:00');"
+        "INSERT INTO \"user\" VALUES ('bob', 'Bob', '2026-01-05 08:00:00', NULL, 0, '2026-01-05 08:00:00');"
+        # Me has Ann in their order and has opted out; Bob has Ann too.
+        "INSERT INTO orderitem VALUES ('me', 'ann', '2026-01-05 09:00:00');"
+        "INSERT INTO orderitem VALUES ('me', 'me', '2026-01-05 09:05:00');"
+        "INSERT INTO orderitem VALUES ('bob', 'ann', '2026-01-05 09:10:00');"
+    )
+    con.commit()
+    con.close()
+
+    init_db()
+    init_db()  # a second run is a no-op
+
+    con = sqlite3.connect(path)
+    orders = con.execute(
+        "SELECT owner_id, kind, status, owner_excluded_at, created_at FROM grouporder ORDER BY owner_id"
+    ).fetchall()
+    lines = con.execute(
+        "SELECT g.owner_id, o.target_user_id, o.added_at FROM orderitem o"
+        " JOIN grouporder g ON g.id = o.order_id ORDER BY g.owner_id"
+    ).fetchall()
+    tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    con.close()
+    assert orders == [
+        ("bob", "everyday", "open", None, "2026-01-05 09:10:00"),
+        ("me", "everyday", "open", "2026-01-05 09:05:00", "2026-01-05 09:00:00"),
+    ]
+    assert lines == [("bob", "ann", "2026-01-05 09:10:00"), ("me", "ann", "2026-01-05 09:00:00")]
+    assert "orderitem_by_owner" not in tables
+
+    from sqlmodel import Session
+
+    from app.db import get_engine
+    from app.models import User
+
+    with Session(get_engine()) as s:
+        assert is_self_excluded(s, "me")
+        me = s.get(User, "me")
+        from app.orders import open_everyday_order
+
+        order = open_everyday_order(s, "me")
+        assert order is not None
+        # Being months old, the order is closed as expired on the first render.
+        assert load_order_view(s, me).rows == []
+        s.refresh(order)
+        assert order.status == "expired"
+
+
+def test_two_first_adds_at_once_share_one_everyday_order(monkeypatch):
+    """Two Add taps on an empty order, handled side by side: each looked for
+    the everyday order before the other made it. Simulated by hiding the
+    order from the second tap's lookup."""
+    from sqlmodel import Session, select
+
+    from app import orders
+    from app.db import get_engine
+    from app.models import Order, OrderItem
+
+    with _client() as alice, _client() as bob, _client() as carol:
+        _onboard(alice, "Alice", base_id="latte")
+        _onboard(carol, "Carol", base_id="latte")
+        _onboard(bob, "Bob", base_id="espresso")
+        bob.post(f"/order/add/{_user_id_by_name('Alice')}")
+        real = orders.live_order
+        calls = []
+
+        def stale_once(session, owner_id, order_id=None):
+            calls.append(1)
+            return None if len(calls) == 1 else real(session, owner_id, order_id)
+
+        monkeypatch.setattr(orders, "live_order", stale_once)
+        r = bob.post(f"/order/add/{_user_id_by_name('Carol')}")
+    assert r.status_code == 200
+    with Session(get_engine()) as s:
+        assert len(s.exec(select(Order)).all()) == 1
+        assert len(s.exec(select(OrderItem)).all()) == 2
+
+
+def test_the_same_add_twice_at_once_adds_one_line(monkeypatch):
+    from sqlmodel import Session, select
+
+    from app.db import get_engine
+    from app.models import OrderItem
+
+    with _client() as alice, _client() as bob:
+        _onboard(alice, "Alice", base_id="latte")
+        _onboard(bob, "Bob", base_id="espresso")
+        alice_id = _user_id_by_name("Alice")
+        bob.post(f"/order/add/{alice_id}")
+        # The second tap checked for the line before the first had added it.
+        real_get = Session.get
+
+        def blind_get(self, model, ident, *a, **k):
+            if model is OrderItem:
+                return None
+            return real_get(self, model, ident, *a, **k)
+
+        monkeypatch.setattr(Session, "get", blind_get)
+        r = bob.post(f"/order/add/{alice_id}")
+    assert r.status_code == 200
+    with Session(get_engine()) as s:
+        assert len(s.exec(select(OrderItem)).all()) == 1

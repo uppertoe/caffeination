@@ -298,3 +298,133 @@ document.addEventListener("click", (e) => {
   wide.addEventListener("change", measure);
   if ("ResizeObserver" in window) new ResizeObserver(measure).observe(header);
 })();
+
+/* Two columns of different lengths on a wide screen (the order pages): the
+   longer column scrolls with the page, and the shorter one scrolls with it
+   until an end comes into view, then holds there. Scrolling down, it holds
+   once its bottom is in view; scrolling back up, it moves straight away and
+   holds once its top is in view. Neither column needs a scroll box.
+
+   The holding is done by the browser with position: sticky (see .dash-left
+   and .order-side in coffee.css), so a held column never lags the scroll.
+   This script only acts when the scroll direction changes: it places the
+   column where it is now, so that nothing moves, and sets the sticky edge
+   for the new direction. On the way down the column is placed from the top
+   of its grid area with a top margin, and a negative top catches its bottom.
+   On the way up it is placed from the bottom of the area with a bottom
+   margin, and a negative bottom catches its top. (A sticky element may not
+   move its margin outside its grid area, so the margin always sits on the
+   side the column is moving away from.) */
+(() => {
+  const wide = window.matchMedia("(min-width: 1000px)");
+  const GAP = 16; // px kept between a column held by its bottom and the window edge
+  let lastY = window.scrollY;
+  let held = null; // the column being held
+  let mode = "top"; // which end it is held by: "top" or "bottom"
+  let frame = 0;
+  let lastOffset = null; // the held column's offset at the previous update
+
+  const columns = () => {
+    const layout = document.querySelector(".dash-layout");
+    const left = layout && layout.querySelector(":scope > .dash-left");
+    const right = layout && layout.querySelector(":scope > .order-side");
+    return left && right ? { layout, left, right } : null;
+  };
+  const tall = (el) => el.getBoundingClientRect().height;
+  const reset = (el) => {
+    el.style.top = el.style.bottom = el.style.marginTop = el.style.marginBottom = el.style.alignSelf = "";
+  };
+  // Where a column held by its top sits: just as far below the header as
+  // the columns start at the top of the page (the header's own bottom
+  // margin), so that nothing shifts when a held column meets the top again.
+  const topEdge = () => {
+    const brand = document.querySelector("header.brand");
+    if (!brand) return GAP;
+    return brand.getBoundingClientRect().bottom + parseFloat(getComputedStyle(brand).marginBottom);
+  };
+
+  // How far a column sits below the top of its grid row.
+  const offsetOf = (el) => el.getBoundingClientRect().top - el.parentElement.getBoundingClientRect().top;
+
+  // Hold `el` for the given direction, from the offset `from` (where it is
+  // now, if not given). On a turn, `from` is where the column was at the
+  // previous update: the browser has already drawn this frame's scroll with
+  // the old sticky edge, so a column held by that edge has not moved with it,
+  // and starting from where it is now would lose the first step of the turn.
+  const hold = (el, longHeight, nextMode, from) => {
+    const view = window.innerHeight;
+    const top = topEdge();
+    const height = el.getBoundingClientRect().height; // unrounded, like the grid row
+    const room = Math.max(0, longHeight - height);
+    const offset = Math.min(Math.max(0, from ?? offsetOf(el)), room);
+    reset(el);
+    if (height <= view - top - GAP) {
+      // Short enough to fit: simply held at the top.
+      el.style.top = `${top}px`;
+    } else if (nextMode === "bottom") {
+      el.style.marginTop = `${offset}px`;
+      el.style.top = `${view - GAP - height}px`;
+    } else {
+      el.style.alignSelf = "end";
+      el.style.marginBottom = `${room - offset}px`;
+      el.style.bottom = `${view - height - top}px`;
+    }
+    mode = nextMode;
+  };
+
+  const update = (force) => {
+    frame = 0;
+    const cols = columns();
+    const y = window.scrollY;
+    const down = y > lastY;
+    const turned = y !== lastY && down !== (mode === "bottom");
+    lastY = y;
+    if (!cols) return;
+    if (!wide.matches) {
+      reset(cols.left);
+      reset(cols.right);
+      held = null;
+      lastOffset = null;
+      return;
+    }
+    const short = tall(cols.left) <= tall(cols.right) ? cols.left : cols.right;
+    const long = short === cols.left ? cols.right : cols.left;
+    if (held !== short) {
+      reset(long);
+      reset(short);
+      held = short;
+      lastOffset = null;
+      force = true;
+    }
+    if (y <= 0) {
+      // Back at the top: line the columns up again, ready to scroll down.
+      reset(short);
+      hold(short, tall(long), "bottom", 0);
+    } else if (turned) hold(short, tall(long), down ? "bottom" : "top", lastOffset ?? undefined);
+    else if (force) hold(short, tall(long), mode);
+    lastOffset = offsetOf(short);
+  };
+  const schedule = () => {
+    if (!frame) frame = requestAnimationFrame(() => update(false));
+  };
+  const refresh = () => requestAnimationFrame(() => update(true));
+
+  window.addEventListener("scroll", schedule, { passive: true });
+  window.addEventListener("resize", refresh);
+  wide.addEventListener("change", refresh);
+  // A column's height changes when htmx swaps part of it, or Alpine shows or
+  // hides something; the right-hand column is replaced by some swaps.
+  if ("ResizeObserver" in window) {
+    const watcher = new ResizeObserver(refresh);
+    const watch = () => {
+      watcher.disconnect();
+      held = null;
+      const cols = columns();
+      if (cols) [cols.left, cols.right].forEach((el) => watcher.observe(el));
+      refresh();
+    };
+    document.addEventListener("htmx:afterSettle", watch);
+    watch();
+  }
+  refresh();
+})();

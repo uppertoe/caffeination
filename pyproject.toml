@@ -16,6 +16,7 @@ dependencies = [
     "python-multipart>=0.0.12",
     "pydantic-settings>=2.5",
     "tzdata>=2024.1",  # zoneinfo data; the slim image ships none
+    "segno>=1.6",  # QR codes for joining an order; pure Python, no dependencies
 ]
 
 [project.optional-dependencies]

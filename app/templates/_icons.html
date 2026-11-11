@@ -1,0 +1,18 @@
+{# Line icons for the sharing panel and the join page, stroked in the accent by .share-icon. #}
+{% macro icon(name) -%}
+<svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  {%- if name == "clock" %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+  {%- elif name == "cup" %}<path d="M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8zm13 2h1.5a2.5 2.5 0 0 1 0 5H17"/>
+  {%- elif name == "code" %}<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2z"/>
+  {%- elif name == "pin" %}<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>
+  {%- elif name == "lock" %}<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+  {%- elif name == "guest" %}<circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke-dasharray="2 3"/>
+  {%- elif name == "people" %}<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5a3 3 0 0 1 0 6M18 14.5c1.8.8 3 2.8 3 5.5"/>
+  {%- elif name == "send" %}<path d="M21 3 10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5z"/>
+  {%- elif name == "message" %}<path d="M4 5h16v11H9l-5 4z"/>
+  {%- elif name == "minus" %}<path d="M6 12h12"/>
+  {%- elif name == "plus" %}<path d="M12 6v12M6 12h12"/>
+  {%- elif name == "refresh" %}<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>
+  {%- endif -%}
+</svg>
+{%- endmacro %}

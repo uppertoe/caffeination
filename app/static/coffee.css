@@ -690,7 +690,7 @@ article form legend {
 
 /* ---- Mobile ------------------------------------------------------------- */
 @media (max-width: 480px) {
-  main.container { padding-inline: 0.9rem; }
+  main.container { padding-inline: 16px; } /* the phone gutter */
   .brand-title { font-size: 1.35rem; }
   /* The drink text wraps beside the action button rather than dropping the
      button to its own line, which doubled the height of most rows. */
@@ -1558,42 +1558,43 @@ article form legend {
 }
 
 /* ---- The order page on a wide screen ------------------------------------- *
-   One side static, the other scrolling. On the left, your card, then the
-   till summary and your order, which stay in view as the page scrolls. On the right, the roster from
-   the top at its full length, scrolling with the page rather than in a box
-   of its own. The order section stays one element for htmx (display:
+   On the left, your card, then the till summary and your order. On the
+   right, sharing, the advance orders and the roster. Both run at their full
+   length with the page; the shorter is held in view by coffee.js. The order section stays one element for htmx (display:
    contents); its two parts are placed by class and id. */
 @media (min-width: 1000px) {
   .dash-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
-    column-gap: 1.5rem;
+    column-gap: 1.1rem; /* the same as the space between cards */
     align-items: start;
   }
-  .dash-layout > .dash-top { grid-column: 1; grid-row: 1; margin-top: 0; }
-  .dash-layout > #order-section { display: contents; }
-  .dash-layout .order-main {
-    grid-column: 1;
-    grid-row: 2;
-    position: sticky;
-    top: calc(var(--brand-h, 0px) + 1rem);
-    max-height: calc(100dvh - var(--brand-h, 0px) - 2rem);
-    overflow-y: auto;
-    scrollbar-width: thin;
-  }
-  .dash-layout #roster-picker { grid-column: 2; grid-row: 1 / span 2; margin-top: 0; }
+  /* Each column is one element, held in view by coffee.js with sticky
+     positioning while the other, longer column scrolls on. */
+  .dash-layout > .dash-left { grid-column: 1; grid-row: 1; position: sticky; }
+  .dash-layout > .order-side { grid-column: 2; grid-row: 1; position: sticky; }
+  .dash-left > .dash-top { margin-top: 0; }
   .dash-layout #roster-picker .roster-list { max-height: none; overflow-y: auto; }
   .dash-layout #roster-picker .scroll-shadow::before,
   .dash-layout #roster-picker .scroll-shadow::after,
   .dash-layout #roster-picker .scroll-more { display: none; }
-  .dash-layout > #new-person-slot { grid-column: 1 / -1; grid-row: 3; }
+  /* The slot only holds the dialog, so it takes no room: its margin would
+     let the held column run past the end of the other at the foot of the page. */
+  .dash-layout > #new-person-slot { grid-column: 1 / -1; grid-row: 2; margin: 0; }
+  /* Spaced by each card's bottom margin, so whichever card comes first
+     (some are absent or empty) lines up with the left column. */
+  .dash-layout .order-side > * { margin-top: 0; }
 
   /* The till summary leads the pinned column, so what is read out at the
      café is in view however many people are added. */
   .dash-layout .order-main { display: flex; flex-direction: column; }
   .dash-layout .order-main > #till-summary { order: -1; margin-top: 0; }
   .dash-layout .order-main > #order-list { margin-top: var(--pico-block-spacing-vertical); }
+  .dash-layout .order-main > #order-list { order: 1; }
+  /* Neither column ends in a margin, so a column held by its bottom sits
+     the same 16px from the window edge as a column held by its top. */
+  .dash-layout > :is(.dash-left, .order-side) > :last-child,
+  .dash-layout .order-main > #order-list { margin-bottom: 0; }
 }
 
 /* ---- Statistics on a phone ----------------------------------------------- *
@@ -1801,3 +1802,290 @@ html.save-failed .failed-note { color: var(--ink-strong); }
     border-bottom: 1px solid var(--soft-line);
   }
 }
+
+/* ---- Sharing an order (_share_panel.html) -------------------------------- *
+   Not shared: a single button under "Your order". Shared: the code and QR
+   code, a fixed grid of four facts (closing time, drinks, joined by code,
+   location; a missing location is shown as such), then the controls. */
+/* Spaced like the cards around it, rather than with extra room of its own. */
+.share-start { margin: 0 0 1.1rem; }
+.share-start .share-actions button { width: auto; }
+.share-start > button { width: 100%; margin: 0; }
+.share-panel form fieldset { margin-bottom: 0.9rem; }
+:is(.share-panel, .share-dialog) .pill-row ~ input[type="datetime-local"] { margin-top: 0.6rem; }
+.share-error {
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.6rem;
+  background: var(--danger-tint);
+  color: var(--ink);
+}
+.share-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.share-actions button { flex: 1 1 12rem; margin: 0; }
+.share-code { display: grid; justify-items: center; gap: 0.5rem; text-align: center; margin-bottom: 1rem; }
+.share-code p { margin: 0; }
+.share-code-label { color: var(--ink-muted); font-size: 0.92rem; }
+.share-qr {
+  width: min(11rem, 60vw);
+  aspect-ratio: 1;
+  max-width: 100%;
+  padding: 0.4rem;
+  border-radius: 0.6rem;
+  background: #fff; /* scanners read dark-on-light in either theme */
+}
+.share-qr svg { display: block; width: 100%; height: 100%; }
+.share-code-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--ink-strong);
+  user-select: all;
+}
+.share-cells {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+.share-cells li {
+  display: grid;
+  grid-template-columns: 1.1rem 1fr;
+  gap: 0.45rem;
+  align-items: start;
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.6rem;
+  background: var(--row-tint);
+  font-size: 0.88rem;
+  line-height: 1.3;
+  list-style: none;
+}
+.share-cells li.is-missing { color: var(--ink-muted); font-style: italic; }
+.share-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.share-cells li.is-alert { background: var(--danger-tint); }
+.share-cells li.is-alert .share-icon { stroke: var(--danger); }
+.share-note {
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.6rem;
+  background: var(--row-tint);
+  font-size: 0.92rem;
+}
+.share-note.is-alert { background: var(--danger-tint); }
+.share-stepper {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.9rem 0 1rem;
+}
+/* The − and + are round icon buttons, like "Replace the code". Pico styles
+   the buttons of any role="group" as one joined bar, which this undoes. */
+.share-stepper[role="group"] {
+  width: auto;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+.share-stepper[role="group"] > .icon-circle {
+  flex: none;
+  width: 2.3rem;
+  height: 2.3rem;
+  margin: 0;
+  border-radius: 50%;
+}
+.share-stepper-value { min-width: 5.5rem; text-align: center; }
+.share-replace {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  color: var(--ink-muted);
+  font-size: 0.88rem;
+}
+.icon-circle {
+  display: inline-grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+}
+.icon-circle .share-icon { stroke: currentColor; }
+
+/* ---- Joining an order (_join_body.html) ---------------------------------- */
+.join-body { max-width: 34rem; margin-inline: auto; }
+.join-body article > header + p { margin-top: 0.4rem; }
+.join-order-name { margin-bottom: 0.4rem; }
+.join-form { display: grid; gap: 0.2rem; margin-bottom: 0.75rem; }
+.join-form > button[type="submit"] { margin-top: 0.4rem; }
+/* A label set before its input (not wrapping it) sits as close to it as a
+   wrapping label does, not a field's spacing away. */
+.join-body form > label:has(+ :is(input, select, textarea)) { margin-bottom: 0; }
+.join-field { display: grid; gap: 0.25rem; margin-block: 0.4rem; }
+.join-field input { margin-bottom: 0; }
+.join-big { display: grid; gap: 0.15rem; width: 100%; padding-block: 0.9rem; font-size: 1.1rem; }
+.join-big small { font-weight: 400; font-size: 0.88rem; opacity: 0.9; }
+.join-body article > button.secondary,
+.join-body article > a[role="button"] { width: 100%; }
+.join-check { display: flex; gap: 0.5rem; align-items: center; margin-block: 0.5rem; }
+.join-check input { margin: 0; }
+.join-suggest { display: flex; flex-wrap: wrap; gap: 0.25rem 0.8rem; margin: 0; font-size: 0.86rem; }
+.link-button {
+  width: auto;
+  margin: 0;
+  padding: 0.1rem 0;
+  border: 0;
+  background: none;
+  color: var(--link);
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.link-button:hover, .link-button:focus-visible { color: var(--link-hover); background: none; }
+.join-alt { display: block; margin: 0.6rem auto 0; }
+/* Each of the joiner's lines is a card of its own, so the lines stand apart
+   from the order's facts below them. A colleague's name takes the first row,
+   so the drink and location cells line up on every line. */
+.join-line {
+  margin-bottom: 0.75rem;
+  padding: 0.6rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 0.75rem;
+}
+.join-line .share-cells { margin-bottom: 0; }
+.join-line .share-cells li.join-who { grid-column: 1 / -1; }
+.join-line > :is(.join-line-actions, form) { margin-top: 0.6rem; }
+.join-line > form { margin-bottom: 0; }
+.join-line + .share-cells { margin-top: 1rem; }
+.join-line-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+.join-line-actions button.secondary { width: auto; margin: 0; padding: 0.35rem 0.9rem; font-size: 0.9rem; }
+.join-help { color: var(--ink-muted); font-size: 0.9rem; }
+.join-cells-one { grid-template-columns: 1fr; }
+.join-code-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.6rem;
+  letter-spacing: 0.15em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.share-note.is-ok { background: var(--row-tint); }
+
+/* The buyer's list: location headings, and the code mark on joined lines. */
+.order-list li.order-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem 0 0.2rem;
+  border: 0;
+  background: none;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+/* The one-off tag and the code mark wrap together, never the mark alone. */
+.row-marks { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; vertical-align: middle; }
+.row-marks .tag { margin-left: 0; }
+.via-code { display: inline-flex; }
+.via-code .share-icon { width: 0.95rem; height: 0.95rem; }
+
+/* Clearing an order people joined by code asks first (O6). */
+.clear-confirm { display: grid; gap: 0.6rem; }
+.clear-confirm p { margin: 0; }
+.clear-confirm button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-ink);
+}
+.clear-confirm button.danger:hover { background: var(--danger-hover); border-color: var(--danger-hover); }
+
+/* The buyer's update to everyone who joined (O5), and its message as the
+   buyer and the joiners see it. */
+.share-update {
+  margin-top: 1.1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+.share-update label:has(> input[type="text"]) { margin-bottom: 0.4rem; }
+.share-update input[type="text"] { margin-bottom: 0.4rem; }
+.share-help { margin: 0 0 0.6rem; color: var(--ink-muted); font-size: 0.88rem; }
+.share-update > button[type="submit"] { width: 100%; margin: 0.2rem 0 0; }
+.share-message {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 0.6rem 0.6rem 0;
+  background: var(--row-tint);
+}
+.share-message-label { display: block; color: var(--ink-muted); font-size: 0.82rem; }
+.share-message p { margin: 0.1rem 0 0; }
+.share-panel.is-complete .share-note { margin-bottom: 0.8rem; }
+
+/* ---- Advance orders (_advance_orders.html, order_page.html) -------------- *
+   Listed under the everyday order, each a link to its own page with the
+   same two facts. The reminder (O0b) leads the home page. */
+.advance-list { list-style: none; margin: 0 0 0.8rem; padding: 0; display: grid; gap: 0.6rem; }
+.advance-list > li { list-style: none; margin: 0; }
+.advance-link {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "name chev" "cells cells";
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 0.75rem;
+  color: inherit;
+  text-decoration: none;
+}
+.advance-link:hover { border-color: var(--accent); }
+.advance-link:hover .teaser-chevron { stroke: var(--accent); }
+.advance-name { grid-area: name; font-weight: 600; color: var(--ink-strong); }
+.advance-link .share-cells { grid-area: cells; margin: 0; color: var(--ink); }
+#advance-orders .share-start { margin-block: 0; }
+#advance-orders:not(article) { margin: 0 0 1.1rem; }
+#advance-orders:empty { display: none; }
+.dash-layout > #share-dialog { display: contents; }
+
+.reminder {
+  display: grid;
+  gap: 0.7rem;
+  border-left: 4px solid var(--accent);
+}
+.reminder p { margin: 0; }
+.reminder a[role="button"] { justify-self: start; }
+/* With room, the sentence and its button share a row. */
+@media (min-width: 720px) {
+  .reminder { grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 1.5rem; }
+}
+
+.order-page-top h1 { margin: 0.5rem 0 0; font-size: 1.6rem; }
+.share-closing { margin-top: 0.8rem; }
+/* The buttons above the form are all hidden while it is open, so the form
+   takes their place rather than adding its own space below them. */
+.share-actions + .share-closing { margin-top: 0; }
+.share-closing input { margin-bottom: 0.6rem; }
+
+@media (min-width: 1000px) {
+  /* Advance orders follow the everyday order in the pinned column. */
+}
+
+/* The order's other ways in: the code typed at /join, and the link to it. */
+.share-code-help { color: var(--ink-muted); font-size: 0.82rem; }
+.join-teaser { grid-template-areas: "title chev"; margin-bottom: 0; border-radius: 0; }
+.join-teaser + .stats-teaser { margin-top: 0; }
+@media (min-width: 1000px) { .dash-layout #advance-orders { margin-top: 0; } }

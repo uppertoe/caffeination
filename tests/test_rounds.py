@@ -41,12 +41,12 @@ def _rounds():
 
 def _age_order(owner_id: str, by: timedelta):
     from app.db import get_engine
-    from app.models import OrderItem
+    from app.models import Order, OrderItem
 
     with Session(get_engine()) as s:
         s.exec(
             update(OrderItem)
-            .where(OrderItem.owner_id == owner_id)
+            .where(OrderItem.order_id.in_(select(Order.id).where(Order.owner_id == owner_id)))
             .values(added_at=datetime.now(timezone.utc) - by)
         )
         s.commit()
@@ -137,7 +137,7 @@ def test_an_order_left_to_expire_is_logged_when_its_owner_returns():
 
 def test_sweep_logs_every_expired_order_but_leaves_fresh_ones():
     from app.db import get_engine
-    from app.models import OrderItem
+    from app.models import Order, OrderItem
     from app.orders import purge_all_expired_orders
 
     with _client() as me, _client() as bob, _client() as alice:
@@ -150,7 +150,9 @@ def test_sweep_logs_every_expired_order_but_leaves_fresh_ones():
 
     with Session(get_engine()) as s:
         assert purge_all_expired_orders(s) == 1
-        owners = {i.owner_id for i in s.exec(select(OrderItem)).all()}
+        owners = set(
+            s.exec(select(Order.owner_id).join(OrderItem, OrderItem.order_id == Order.id)).all()
+        )
     assert owners == {_user_id_by_name("Bob")}
     assert len(_rounds()[0]) == 1
 
