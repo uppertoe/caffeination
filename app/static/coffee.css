@@ -1936,6 +1936,9 @@ html.save-failed .failed-note { color: var(--ink-strong); }
 .join-body form > label:has(+ :is(input, select, textarea)) { margin-bottom: 0; }
 .join-field { display: grid; gap: 0.25rem; margin-block: 0.4rem; }
 .join-field input { margin-bottom: 0; }
+/* Pico pulls an input's helper text up into the input's bottom margin,
+   which the field has dropped; the grid gap spaces it instead. */
+.join-field input + small { margin-top: 0; }
 .join-big { display: grid; gap: 0.15rem; width: 100%; padding-block: 0.9rem; font-size: 1.1rem; }
 .join-big small { font-weight: 400; font-size: 0.88rem; opacity: 0.9; }
 .join-body article > button.secondary,
