@@ -720,6 +720,7 @@ article form legend {
 }
 .back-link::before { content: "‹ "; }
 .back-link:hover { color: var(--link-hover); text-decoration: underline; }
+.join-back { margin: 0 0 0.6rem; }
 
 .stats-filter fieldset { margin: 0; border: 0; padding: 0; }
 .stats-filter legend {
@@ -2059,7 +2060,7 @@ html.save-failed .failed-note { color: var(--ink-strong); }
 #advance-orders .share-start { margin-block: 0; }
 #advance-orders:not(article) { margin: 0 0 1.1rem; }
 #advance-orders:empty { display: none; }
-.dash-layout > #share-dialog { display: contents; }
+.dash-layout > :is(#share-dialog, #join-dialog) { display: contents; }
 
 .reminder {
   display: grid;

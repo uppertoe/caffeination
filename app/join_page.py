@@ -69,15 +69,21 @@ def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[
 
     # ---- /join: typing a code (J0 to J2) ------------------------------------
 
-    def _entry(request: Request, state: str = "entry", typed: str = "", status: int = 200):
+    def _entry(request: Request, state: str = "entry", typed: str = "", status: int = 200, dialog: bool = False):
         ctx = {**_base_ctx(), "state": state, "typed": typed, "page_title": "Join an order"}
-        name = "join.html" if request.headers.get("HX-Request") != "true" else "_join_body.html"
+        if dialog:
+            name = "_join_dialog.html"
+        else:
+            name = "join.html" if request.headers.get("HX-Request") != "true" else "_join_body.html"
         return templates.TemplateResponse(request, name, ctx, status_code=status)
 
     @app.get("/join", response_class=HTMLResponse)
-    def join_entry(request: Request, code: str = "", session: Session = Depends(get_session)):
+    def join_entry(request: Request, code: str = "", dialog: str = "", session: Session = Depends(get_session)):
+        # dialog=1: the home page's join dialog, which wants the dialog back
+        # and, for a code that matches, an HX-Redirect rather than a 303.
+        in_dialog = dialog == "1" and request.headers.get("HX-Request") == "true"
         if not code:
-            return _entry(request)
+            return _entry(request, dialog=in_dialog)
         key = _client_key(request)
         normal = sharing.normalise_code(code)
         shown = sharing.format_code(normal) if normal else code
@@ -85,10 +91,12 @@ def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[
         order = joining.find_order_by_code(session, normal, known=known) if normal else None
         # As in _load: a device that joined this order is never refused.
         if attempts.blocked(key) and (order is None or joining.order_key(order) not in known):
-            return _entry(request, "limited", shown, 429)
+            return _entry(request, "limited", shown, 429, in_dialog)
         if order is None:
             attempts.miss(key)
-            return _entry(request, "unknown", shown, 404)
+            return _entry(request, "unknown", shown, 404, in_dialog)
+        if in_dialog:
+            return HTMLResponse("", headers={"HX-Redirect": sharing.join_path(normal)})
         return RedirectResponse(sharing.join_path(normal), status_code=303)
 
     # ---- /j/<code>: the order ---------------------------------------------
