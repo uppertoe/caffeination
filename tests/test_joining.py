@@ -989,3 +989,50 @@ def test_a_joiner_who_retypes_the_code_is_never_blocked():
         assert tom.get(f"/j/{code}").status_code == 200
         r = tom.get(f"/join?code={code}", follow_redirects=False)
     assert r.status_code == 303
+
+
+# ---- Stopping sharing --------------------------------------------------------
+
+
+def test_stopping_sharing_before_anyone_joins_takes_the_order_back_to_private():
+    with _client() as sarah, _client() as c:
+        _onboard(sarah, "Sarah", base_id="latte")
+        code = _share(sarah, name="Morning run", location="Tearoom", max_drinks="5")
+        assert "Stop sharing" in sarah.get("/").text
+        r = sarah.post("/order/share/stop", headers=HX)
+        assert r.status_code == 200
+        assert "Share this order" in r.text and "Stop sharing" not in r.text
+        assert 'id="share-panel"' in r.text and 'id="advance-orders"' in r.text
+        # The code no longer finds the order.
+        assert c.get(f"/join?code={code}").status_code == 404
+        # Sharing again starts afresh, with a new code and default settings.
+        again = _share(sarah)
+    assert again != code
+    from app.db import get_engine
+    from app.models import Order
+    with Session(get_engine()) as s:
+        order = s.exec(select(Order)).one()
+    assert order.name is None and order.location is None and order.max_drinks == 8
+
+
+def test_once_someone_joins_by_code_the_buyer_closes_joins_instead():
+    with _client() as sarah, _client() as tom:
+        _onboard(sarah, "Sarah", base_id="latte")
+        code = _share(sarah)
+        tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
+        home = sarah.get("/")
+        assert "Stop sharing" not in home.text and "Close to new drinks" in home.text
+        # A page shown before Tom joined still offers it; the server refuses.
+        r = sarah.post("/order/share/stop", headers=HX)
+        assert "A colleague has joined the order, so the order is still shared. You can close the order to new drinks instead." in T(r)
+        assert tom.get(f"/j/{code}").status_code == 200
+    assert len(_items()) == 1
+
+
+def test_stop_sharing_is_offered_after_closing_while_nobody_has_joined():
+    with _client() as sarah:
+        _onboard(sarah, "Sarah", base_id="latte")
+        _share(sarah)
+        closed = sarah.post("/order/joins/close")
+        assert "Reopen for 15 minutes" in closed.text and "Stop sharing" in closed.text
+

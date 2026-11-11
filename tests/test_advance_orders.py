@@ -308,3 +308,11 @@ def test_a_finished_advance_order_sends_its_page_home_from_every_control():
             sarah.get(f"/people/{priya_id}/edit?order={oid}", headers=hx),
         ):
             assert r.headers.get("HX-Redirect") == "/", r.request.url
+
+
+def test_an_advance_order_is_never_offered_stop_sharing():
+    with _client() as sarah:
+        _onboard(sarah, "Sarah", base_id="latte")
+        oid = _plan(sarah)
+        page = sarah.get(f"/orders/{oid}")
+    assert page.status_code == 200 and "Stop sharing" not in page.text

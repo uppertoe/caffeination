@@ -326,6 +326,32 @@ def join_state(order: Order, count: int, now: Optional[datetime] = None) -> str:
     return ACCEPTING
 
 
+def stop_sharing(session: Session, order: Order) -> bool:
+    """Take an open everyday order back to private: no code, no closing time,
+    and the sharing settings forgotten, so Share starts afresh. Refused
+    (False) once anyone has added a drink by code, because their page finds
+    the order by its code; the buyer closes joins or clears the order
+    instead. Under the join lock, so a join can't land in between."""
+    with _join_lock:
+        session.refresh(order)
+        joined = session.exec(
+            select(func.count())
+            .select_from(OrderItem)
+            .where(OrderItem.order_id == order.id, OrderItem.joined_by.is_not(None))
+        ).one()
+        if joined or order.status != "open" or order.kind != "everyday":
+            return False
+        order.code = None
+        order.previous_code = None
+        order.joins_close_at = None
+        order.name = None
+        order.location = None
+        order.max_drinks = Order.model_fields["max_drinks"].default
+        session.add(order)
+        session.commit()
+        return True
+
+
 def lines_editable(order: Order) -> bool:
     """Joiners can change or remove their lines until the buyer sends Ordered."""
     return order.status == "open"
