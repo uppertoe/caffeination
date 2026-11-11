@@ -64,6 +64,10 @@
 >
   {# An advance order's page already leads with its name. #}
   <header><h2>{{ share.name if share.name and order_id is none else "Shared order" }}</h2></header>
+  {# Stop sharing (everyday orders only) while nobody has joined by code;
+     after that, their page depends on the code. #}
+  {% set stoppable = share.kind != "advance" and not share.by_code and not share.placed %}
+  {% if stop_refused is defined and stop_refused %}<p class="share-error" role="alert">A colleague has joined the order, so the order is still shared. You can close the order to new drinks instead.</p>{% endif %}
   {% if share.placed %}
   {# Ordered or on the way: joins are over, so only the update remains. #}
   <ul class="share-cells">
@@ -99,6 +103,9 @@
     <p class="share-note">This order is closed to new drinks.</p>
     <div class="share-actions">
       <button type="button" class="secondary outline" hx-post="{{ ob }}/joins/extend" x-show="!changing">Reopen for 15 minutes</button>
+      {% if stoppable %}
+      <button type="button" class="secondary outline" hx-post="/order/share/stop" hx-target="#share-dialog" hx-swap="innerHTML">Stop sharing</button>
+      {% endif %}
       {% if share.kind == "advance" %}
       <button type="button" class="secondary outline" @click="changing = true" x-show="!changing">Change closing time</button>
       {% endif %}
@@ -120,7 +127,11 @@
       {% else %}
       <button type="button" class="secondary outline" hx-post="{{ ob }}/joins/extend">Allow 15 more minutes</button>
       {% endif %}
+      {% if stoppable %}
+      <button type="button" class="secondary outline" hx-post="/order/share/stop" hx-target="#share-dialog" hx-swap="innerHTML">Stop sharing</button>
+      {% else %}
       <button type="button" class="secondary outline" hx-post="{{ ob }}/joins/close" x-show="!changing">Close to new drinks</button>
+      {% endif %}
     </div>
     {% if share.kind == "advance" %}{{ closing_form(share) }}{% endif %}
   {% endif %}

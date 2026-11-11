@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
 
-from app import sharing
+from app import joining, sharing
 from app.db import get_session
 from app.models import Order, User
 from app.orders import (
@@ -393,6 +393,26 @@ def register(app: FastAPI, templates: Jinja2Templates, page_ctx) -> None:
         # Into the dialog's slot, which this empties; the sharing panel and
         # the advance orders (where planning now sits) swap in out of band.
         ctx = {**order_section_ctx(session, user, None), "oob": True}
+        return templates.TemplateResponse(request, "_share_done.html", ctx)
+
+    @app.post("/order/share/stop", response_class=HTMLResponse)
+    def share_stop(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        """Stop sharing the everyday order while nobody has joined it by code.
+        Answers into the dialog slot like sharing does, with the panel and
+        the advance orders out of band; refused, the panel says why."""
+        order = live_order(session, user.id, None)
+        stopped = order is not None and order.code is not None and joining.stop_sharing(session, order)
+        ctx = {**order_section_ctx(session, user, None), "oob": True}
+        if is_gone(ctx):
+            return gone(request)
+        # Otherwise refused because the page was stale (placed, or already
+        # stopped); the fresh panel says enough.
+        share = ctx.get("share")
+        ctx["stop_refused"] = not stopped and share is not None and share.by_code > 0
         return templates.TemplateResponse(request, "_share_done.html", ctx)
 
     def shared_order_action(suffix: str, action):
