@@ -1,0 +1,36 @@
+{# The buyer's advance orders (O0), listed under the everyday order, each
+   with the same two facts and a link to its own page. Rendered with the
+   everyday order's section only. #}
+{% from "_icons.html" import icon %}
+{% if advance %}
+<article id="advance-orders"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <header><h2>Advance orders</h2></header>
+  <ul class="advance-list">
+    {% for oid, a in advance %}
+    <li>
+      <a href="/orders/{{ oid }}" class="advance-link">
+        <span class="advance-name">{{ a.name }}</span>
+        <svg class="teaser-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 5 7 7-7 7" /></svg>
+        <ul class="share-cells">
+          {% if a.placed %}
+          <li>{{ icon("send") }}<span>{{ a.status_label }}</span></li>
+          {% elif a.closed %}
+          <li class="is-alert">{{ icon("lock") }}<span>Closed at {{ a.closes_label }}</span></li>
+          {% else %}
+          <li>{{ icon("clock") }}<span>Joins close at {{ a.closes_label }}</span></li>
+          {% endif %}
+          <li{% if a.full %} class="is-alert"{% endif %}>{{ icon("cup") }}<span>{{ a.drink_count }} of {{ a.max_drinks }} {{ "drink" if a.max_drinks == 1 else "drinks" }}</span></li>
+        </ul>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% include "_advance_plan.html" %}
+</article>
+{% elif share %}
+{# The everyday order is shared, so planning moves here from beside it. #}
+<div id="advance-orders"{% if oob %} hx-swap-oob="true"{% endif %}>{% include "_advance_plan.html" %}</div>
+{% else %}
+{# Empty, but present, so that sharing can swap the button in. #}
+<div id="advance-orders"{% if oob %} hx-swap-oob="true"{% endif %}></div>
+{% endif %}

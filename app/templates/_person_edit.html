@@ -8,7 +8,7 @@
     <header><h2>Editing {{ person.display_name }}&rsquo;s order</h2></header>
     {% if error %}<p role="alert" class="form-error"><small>{{ error }}</small></p>{% endif %}
     <form
-      hx-post="/people/{{ person.id }}/drink"
+      hx-post="/people/{{ person.id }}/drink{{ oq }}"
       hx-target="#order-section"
       hx-swap="outerHTML"
       x-data='{
@@ -40,7 +40,7 @@
         <button
           type="button"
           class="secondary outline"
-          hx-get="/order"
+          hx-get="{{ ob }}"
           hx-target="#order-section"
           hx-swap="outerHTML"
         >

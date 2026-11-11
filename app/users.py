@@ -9,7 +9,7 @@ from sqlmodel import Session, delete, select, update
 from app.db import get_session
 from app.drinks import LINE_FIELDS, format_line
 from app.identity import mint_identity, read_identity, set_identity
-from app.models import DrinkChange, OrderItem, Round, RoundDrink, SavedDrink, User
+from app.models import LIVE_STATUSES, DrinkChange, Order, OrderItem, Round, RoundDrink, SavedDrink, User
 
 # How long after creating a roster person you may still edit their usual.
 EDIT_WINDOW = timedelta(hours=2)
@@ -166,12 +166,25 @@ def delete_user(session: Session, user_id: str) -> None:
     and their rounds stay in the statistics with the link to them removed. Set-based
     statements, one commit.
     """
-    from app.orders import clear_order  # function-local: orders imports us
+    # Function-local: orders imports us.
+    from app.orders import CANCELLED, close_order, delete_lines
 
     user = session.get(User, user_id)
     if user is None:
         return
-    clear_order(session, user_id, record=False)
+    cancelled = []
+    for order in session.exec(
+        select(Order).where(Order.owner_id == user_id, Order.status.in_(LIVE_STATUSES))
+    ).all():
+        close_order(session, order, CANCELLED, record=False)
+        cancelled.append(order.id)
+    # The orders just cancelled stay until the daily prune, so that anyone
+    # who joined them is told the order was cancelled (J15) rather than that
+    # the code is unknown. Their earlier closed orders go now, with any
+    # lines a Ready order kept.
+    theirs = select(Order.id).where(Order.owner_id == user_id, Order.id.not_in(cancelled))
+    delete_lines(session, theirs)
+    session.exec(delete(Order).where(Order.owner_id == user_id, Order.id.not_in(cancelled)))
     session.exec(delete(OrderItem).where(OrderItem.target_user_id == user_id))
     session.exec(
         update(User).where(User.created_by == user_id).values(created_by=None)

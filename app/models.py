@@ -43,16 +43,103 @@ class SavedDrink(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
 
 
-class OrderItem(SQLModel, table=True):
-    """An open order is just the set of OrderItems for a given owner.
+# Orders that are still under way: open (taking drinks), or placed at the
+# café and not yet back. A buyer has at most one live everyday order.
+LIVE_STATUSES = ("open", "ordered", "on_the_way")
 
-    No separate Order row yet — when we add a notion of closed/till-confirmed
-    orders we'll introduce one.
+
+class Order(SQLModel, table=True):
+    """A group order: one buyer, the people in it (OrderItem), and where it
+    stands. A buyer has at most one live everyday order (enforced by a
+    partial unique index in app.db) and any number of advance orders.
+
+    The row outlives its lines: closing an order deletes the OrderItems but
+    keeps the Order with its closing status, so that people who joined can
+    still be told how it ended. A Ready order keeps its lines too, so a
+    joiner's page can still show their drink. Closed rows, and any lines
+    they kept, are pruned after a day.
     """
 
-    owner_id: str = Field(primary_key=True, foreign_key="user.id")
+    __tablename__ = "grouporder"  # "order" is an SQL keyword
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    owner_id: str = Field(foreign_key="user.id")
+    kind: str = "everyday"  # everyday | advance
+    # open | ordered | on_the_way | ready | cancelled | expired
+    status: str = "open"
+    # Set while the owner has taken themselves out of their own order
+    # ("buying for others, not me"). The owner is otherwise included
+    # implicitly, with no OrderItem of their own. A timestamp rather than a
+    # flag because it counts towards the order's age, as the opt-out marker
+    # row it replaces did.
+    owner_excluded_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=utcnow)
+    closed_at: Optional[datetime] = None
+
+    # Sharing (app.sharing). An order is shared once it has a code; the code
+    # is unique among live orders (a partial unique index in app.db) and
+    # released when the order closes. Joins are accepted until
+    # joins_close_at and while the order has fewer than max_drinks drinks.
+    code: Optional[str] = None
+    # The code before the buyer last replaced it, so that devices which
+    # joined with the old code keep their status page (app.joining).
+    previous_code: Optional[str] = None
+    joins_close_at: Optional[datetime] = None
+    max_drinks: int = 8
+    name: Optional[str] = None  # e.g. "Tuesday education meeting"
+    location: Optional[str] = None  # one delivery location for every drink
+
+    # The buyer's latest update to everyone who joined (app.sharing.send_update):
+    # its optional message and when it was sent. The status itself is above.
+    status_message: Optional[str] = None
+    status_at: Optional[datetime] = None
+
+
+class OrderItem(SQLModel, table=True):
+    """One person in an order (never the owner, who is included implicitly).
+
+    The line uses the person's usual drink unless base_id is set, in which
+    case the drink options here are a one-off for this order only. Same
+    option fields as SavedDrink.
+    """
+
+    order_id: int = Field(primary_key=True, foreign_key="grouporder.id")
     target_user_id: str = Field(primary_key=True, foreign_key="user.id")
     added_at: datetime = Field(default_factory=utcnow)
+    # Where to bring the drink; None means it is collected from the buyer.
+    location: Optional[str] = None
+    # Who added this line by code (app.joining): a user id, or a guest
+    # device's joiner id. None for lines the buyer added from the roster.
+    joined_by: Optional[str] = None
+
+    # A one-off drink for this order (None: the person's usual drink).
+    base_id: Optional[str] = None
+    temp: Optional[str] = None
+    size: Optional[str] = None
+    milk: Optional[str] = None
+    strength: Optional[str] = None
+    sweetener: Optional[str] = None
+    length: Optional[str] = None
+    shots: Optional[int] = None
+    own_cup: Optional[bool] = None
+    notes: Optional[str] = None
+    # Set when the buyer sent Ordered and this line's usual drink was copied
+    # into the fields above, so a later change to the usual can't change
+    # what was ordered. Such a line is still shown as the person's usual.
+    drink_fixed: bool = False
+
+
+class PlaceName(SQLModel, table=True):
+    """A delivery location someone typed, for suggesting it next time.
+
+    Deliberately holds no link to any person or order: only the name, how
+    often it has been used and when it was last used.
+    """
+
+    key: str = Field(primary_key=True)  # the name, case-folded
+    name: str  # as most recently typed
+    uses: int = 0
+    last_used_at: datetime = Field(default_factory=utcnow)
 
 
 # ---------------------------------------------------------------------------

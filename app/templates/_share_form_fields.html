@@ -1,0 +1,42 @@
+{# The sharing form's fields (O1b), shared by "Share this order" and
+   "Plan an advance order". An advance order always has a chosen closing
+   time and a name, so neither is optional there. The surrounding form
+   provides x-data with `when`. The closing time is disabled while it is
+   hidden, so that a stale value (earlier than `min` after an error) cannot
+   block the browser from submitting "In 30 minutes". #}
+    {% if share_form.error %}<p class="share-error" role="alert">{{ share_form.error }}</p>{% endif %}
+    <fieldset>
+      <legend>Joins close:</legend>
+      {% if share_form.advance %}
+      <input type="hidden" name="when" value="chosen">
+      {% else %}
+      <div class="pill-row">
+        <label><input type="radio" name="when" value="soon" x-model="when"{% if share_form.when == "soon" %} checked{% endif %}> In 30 minutes</label>
+        <label><input type="radio" name="when" value="chosen" x-model="when"{% if share_form.when == "chosen" %} checked{% endif %}> At a time I choose</label>
+      </div>
+      {% endif %}
+      <input
+        type="datetime-local"
+        name="closes_at"
+        aria-label="Closing time"
+        value="{{ share_form.closes_at }}"
+        min="{{ share_form.min }}"
+        max="{{ share_form.max }}"
+        x-show="when === 'chosen'"
+        :disabled="when !== 'chosen'"
+        {% if share_form.when != "chosen" %}x-cloak disabled{% endif %}
+      >
+    </fieldset>
+    <label>
+      {{ "Order name:" if share_form.advance else "Order name (optional):" }}
+      <input type="text" name="name" maxlength="60" autocomplete="off" value="{{ share_form.name }}"{% if share_form.advance %} required{% endif %}>
+    </label>
+    <label>
+      Deliver every drink to (optional):
+      <input type="text" name="location" maxlength="60" autocomplete="off" value="{{ share_form.location }}" aria-describedby="share-location-help">
+      <small id="share-location-help">If you set a location here, joiners are not asked for one.</small>
+    </label>
+    <label>
+      Drinks allowed:
+      <input type="number" name="max_drinks" min="1" max="40" inputmode="numeric" value="{{ share_form.max_drinks }}">
+    </label>

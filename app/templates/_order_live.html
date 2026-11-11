@@ -1,0 +1,8 @@
+{#
+  Response to the buyer's poll (GET /order/live) when the shared order has
+  changed: the parts that drinks added by code change, all out of band.
+  The roster is left alone so its filter and scroll position survive.
+#}
+{% include "_order_list.html" %}
+{% include "_till_summary.html" %}
+{% include "_share_panel.html" %}

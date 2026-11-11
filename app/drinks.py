@@ -21,7 +21,7 @@ from app.menu import (
     Temp,
     get_drink,
 )
-from app.models import DrinkChange, SavedDrink, User, utcnow
+from app.models import DrinkChange, OrderItem, SavedDrink, User, utcnow
 
 
 def _enum_values(enum_cls) -> set[str]:
@@ -227,3 +227,27 @@ def format_line(
     if extras:
         line += " (" + ", ".join(extras) + ")"
     return line
+
+
+# ---------------------------------------------------------------------------
+# One-off drinks on an order line
+# ---------------------------------------------------------------------------
+
+# The drink options an OrderItem can carry as a one-off (the SavedDrink fields).
+DRINK_OPTION_FIELDS = (
+    "base_id", "temp", "size", "milk", "strength", "sweetener", "length", "shots",
+    "own_cup", "notes",
+)
+
+
+def line_drink(item: OrderItem, usual: Optional[SavedDrink]) -> Optional[SavedDrink]:
+    """The drink an order line stands for: its own one-off drink when it has
+    one, otherwise the person's usual. A one-off comes back as an unsaved
+    SavedDrink so the till summary and the round log treat both alike."""
+    if item.base_id is None:
+        return usual
+    return SavedDrink(
+        user_id=item.target_user_id,
+        **{f: getattr(item, f) for f in DRINK_OPTION_FIELDS if f != "own_cup"},
+        own_cup=bool(item.own_cup),
+    )

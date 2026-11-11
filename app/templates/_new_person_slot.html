@@ -60,6 +60,7 @@
     hx-swap="innerHTML"
   >
     {% if error %}<p role="alert" class="form-error"><small>{{ error }}</small></p>{% endif %}
+    {% if order_id %}<input type="hidden" name="order_id" value="{{ order_id }}">{% endif %}
 
     <label>
       Their name

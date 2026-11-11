@@ -8,4 +8,7 @@
 #}
 {% include "_order_list.html" %}
 {% include "_till_summary.html" %}
+{# Only once shared: its drink count changes. Unshared, it is a button that
+   doesn't, and leaving it alone keeps an open sharing form intact. #}
+{% if share %}{% include "_share_panel.html" %}{% endif %}
 {% if entry %}{% with p = entry, inactive = entry_inactive, row_oob = true %}{% include "_roster_row.html" %}{% endwith %}{% endif %}

@@ -3,6 +3,7 @@ import re
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -13,6 +14,7 @@ from sqlmodel import Session
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Receive, Scope, Send
 
+from app import join_page, order_routes, sharing
 from app.config import DEV_SECRET_KEY, get_settings
 from app.db import get_engine, get_session, init_db
 from app.drinks import (
@@ -31,14 +33,8 @@ from app.menu import (
     rules_for_template,
 )
 from app.models import SavedDrink, User
-from app.orders import (
-    RosterEntry,
-    add_to_order,
-    clear_order,
-    load_order_view,
-    remove_from_order,
-    till_summary,
-)
+from app.order_routes import ORDER_REFRESH, order_section_ctx, parse_order_id
+from app.orders import RosterEntry, add_to_order, live_order
 from app.stats_page import stats_context, usuals_for
 from app.stats_panels import build_randomisation
 from app.stats_view import build_unusual, chosen_from_form, department_headline, load_usuals
@@ -91,6 +87,8 @@ def asset(path: str) -> str:
 
 
 templates.env.globals["asset"] = asset
+templates.env.globals["qr_svg"] = sharing.qr_svg
+templates.env.globals["number_word"] = sharing.number_word
 
 
 # Stylesheets whose url() references are fingerprinted on the way out. The
@@ -150,7 +148,7 @@ def warm_up() -> None:
         visitor.display_name = "warm-up"
         _render("index.html", {**base, "user": visitor, **_dashboard_ctx(session, visitor)})
         _render("_roster_toggle.html", {
-            **_order_section_ctx(session, visitor), "oob": True,
+            **order_section_ctx(session, visitor), "oob": True,
             "entry": RosterEntry("warm-up", "warm-up", "latte"), "entry_inactive": False,
         })
         _render("_drink_form.html", _drink_form_ctx(None))
@@ -226,50 +224,6 @@ def _drink_form_ctx(saved: SavedDrink | None) -> dict:
     }
 
 
-def _order_section_ctx(session: Session, user: User) -> dict:
-    view = load_order_view(session, user)
-    return {
-        "rows": view.rows,
-        "user": user,
-        # The "you're not in this order" row only makes sense once there is
-        # a drink to opt back in with.
-        "self_excluded": view.self_excluded and view.owner_drink is not None,
-        "roster": view.roster,
-        "roster_inactive": view.roster_inactive,
-        "till_lines": till_summary(view.rows),
-        # For the order bar pinned to the foot of the screen on a phone.
-        "drink_count": sum(1 for row in view.rows if row.saved is not None),
-    }
-
-
-def _order_change_response(request: Request, session: Session, user: User, target_id: str):
-    """After an add or remove: from a roster row, that row in its new state
-    plus the order list and till summary out of band; from "Your order"
-    (?from=list), the order list, till summary and the person's roster row,
-    all out of band; otherwise, the whole order section."""
-    ctx = _order_section_ctx(session, user)
-    entry, inactive = None, False
-    for entries, is_inactive in ((ctx["roster"], False), (ctx["roster_inactive"], True)):
-        found = next((p for p in entries if p.id == target_id), None)
-        if found is not None:
-            entry, inactive = found, is_inactive
-    oob = {**ctx, "oob": True, "entry": entry, "entry_inactive": inactive}
-    if request.query_params.get("from") == "list":
-        return templates.TemplateResponse(request, "_order_list_change.html", oob)
-    if entry is not None and request.headers.get("HX-Target", "") == f"roster-{target_id}":
-        return templates.TemplateResponse(request, "_roster_toggle.html", oob)
-    return templates.TemplateResponse(request, "_order_section.html", ctx)
-
-
-# Responses that change order data outside the order section carry this
-# HX-Trigger header. The order section listens for the event and refetches
-# itself — EXCEPT while an inline person-edit form has replaced it (the form
-# deliberately carries no listener), so a drink save or rename can't clobber
-# a half-finished edit. The section re-renders fresh on the edit's own
-# save/cancel anyway.
-ORDER_REFRESH = {"HX-Trigger": "order-refresh"}
-
-
 def _new_person_ctx(session: Session) -> dict:
     """Context for the 'order for someone else' slot: a blank drink-builder
     plus the set of names already taken (for the client-side dup check)."""
@@ -283,7 +237,7 @@ def _dashboard_ctx(session: Session, user: User) -> dict:
     return {
         "user": user,
         **_drink_card_ctx(session, user),
-        **_order_section_ctx(session, user),
+        **order_section_ctx(session, user),
         **_new_person_ctx(session),
         "headline": department_headline(session),
     }
@@ -567,10 +521,16 @@ def create_app() -> FastAPI:
         form = await request.form()
         name = (form.get("display_name") or "").strip()
         one_off = bool(form.get("one_off"))
+        # Set when the slot is on an advance order's page.
+        order_id = parse_order_id(form.get("order_id"))
+        if order_id is not None and live_order(session, user.id, order_id) is None:
+            # The advance order has finished (or isn't theirs): make no one.
+            return Response(status_code=204, headers={"HX-Redirect": "/"})
 
         def _err(message: str, status: int):
             ctx = {
                 **_new_person_ctx(session),
+                "order_id": order_id,
                 "error": message,
                 "open": True,
                 "submitted_name": name,
@@ -593,54 +553,61 @@ def create_app() -> FastAPI:
             session, name, created_by=user.id, one_off=one_off
         )
         upsert_saved_drink(session, new_user.id, normalized, changed_by=user.id)
-        add_to_order(session, user.id, new_user.id)
+        add_to_order(session, user.id, new_user.id, order_id)
 
-        slot_html = _render("_new_person_slot.html", _new_person_ctx(session))
+        slot_html = _render(
+            "_new_person_slot.html", {**_new_person_ctx(session), "order_id": order_id}
+        )
         return HTMLResponse(slot_html, headers=ORDER_REFRESH)
 
-    @app.get("/order", response_class=HTMLResponse)
-    def order_section(
-        request: Request,
-        user: User = Depends(get_current_user),
-        session: Session = Depends(get_session),
-    ):
-        """Re-render the order section in-band (used to cancel an inline edit)."""
-        return templates.TemplateResponse(
-            request, "_order_section.html", _order_section_ctx(session, user)
-        )
+    # The person editor replaces the order section it was opened from;
+    # ?order=<id> says which order that was (none: the everyday order).
+
+    def _section(request: Request, session: Session, user: User, order_id, status: int = 200):
+        """The order section the editor was opened from, or home if that
+        advance order has finished meanwhile."""
+        ctx = order_section_ctx(session, user, order_id)
+        if order_routes.is_gone(ctx):
+            return order_routes.gone(request)
+        return templates.TemplateResponse(request, "_order_section.html", ctx, status_code=status)
+
+    def _edit_ctx(order_id: Optional[int]) -> dict:
+        return {
+            "ob": order_routes.order_base(order_id),
+            "oq": order_routes.order_query(order_id),
+        }
 
     @app.get("/people/{person_id}/edit", response_class=HTMLResponse)
     def edit_person_form(
         person_id: str,
         request: Request,
+        order: str = "",
         user: User = Depends(get_current_user),
         session: Session = Depends(get_session),
     ):
+        order_id = parse_order_id(order)
         target = session.get(User, person_id)
         if not can_edit_person(user.id, target):
-            return templates.TemplateResponse(
-                request, "_order_section.html", _order_section_ctx(session, user)
-            )
+            return _section(request, session, user, order_id)
         saved = get_saved_drink(session, person_id)
         return templates.TemplateResponse(
-            request, "_person_edit.html", {**_drink_form_ctx(saved), "person": target}
+            request,
+            "_person_edit.html",
+            {**_drink_form_ctx(saved), **_edit_ctx(order_id), "person": target},
         )
 
     @app.post("/people/{person_id}/drink", response_class=HTMLResponse)
     async def edit_person_drink(
         person_id: str,
         request: Request,
+        order: str = "",
         user: User = Depends(get_current_user),
         session: Session = Depends(get_session),
     ):
+        order_id = parse_order_id(order)
         target = session.get(User, person_id)
         if not can_edit_person(user.id, target):
-            return templates.TemplateResponse(
-                request,
-                "_order_section.html",
-                _order_section_ctx(session, user),
-                status_code=403,
-            )
+            return _section(request, session, user, order_id, status=403)
         form = await request.form()
         normalized = normalize(form.get("base_id", ""), dict(form))
         if normalized is None:
@@ -648,51 +615,18 @@ def create_app() -> FastAPI:
             return templates.TemplateResponse(
                 request,
                 "_person_edit.html",
-                {**_drink_form_ctx(saved), "person": target, "error": "Unknown drink."},
+                {**_drink_form_ctx(saved), **_edit_ctx(order_id), "person": target,
+                 "error": "Unknown drink."},
                 status_code=422,
             )
         upsert_saved_drink(session, person_id, normalized, changed_by=user.id)
-        return templates.TemplateResponse(
-            request, "_order_section.html", _order_section_ctx(session, user)
-        )
+        return _section(request, session, user, order_id)
 
-    @app.post("/order/add/{target_id}", response_class=HTMLResponse)
-    def order_add(
-        target_id: str,
-        request: Request,
-        user: User = Depends(get_current_user),
-        session: Session = Depends(get_session),
-    ):
-        """Add a person to the order.
-
-        From a roster row (htmx reports the row's id as HX-Target) the row
-        comes back selected, with the two articles that changed out of band.
-        Every other caller — the "Add me" opt-in, tests, curl — gets the
-        whole section.
-        """
-        add_to_order(session, user.id, target_id)
-        return _order_change_response(request, session, user, target_id)
-
-    @app.post("/order/clear", response_class=HTMLResponse)
-    def order_clear(
-        request: Request,
-        user: User = Depends(get_current_user),
-        session: Session = Depends(get_session),
-    ):
-        clear_order(session, user.id)
-        return templates.TemplateResponse(
-            request, "_order_section.html", _order_section_ctx(session, user)
-        )
-
-    @app.post("/order/remove/{target_id}", response_class=HTMLResponse)
-    def order_remove(
-        target_id: str,
-        request: Request,
-        user: User = Depends(get_current_user),
-        session: Session = Depends(get_session),
-    ):
-        remove_from_order(session, user.id, target_id)
-        return _order_change_response(request, session, user, target_id)
+    join_page.register(app, templates, _drink_form_ctx)
+    order_routes.register(app, templates, lambda session, user: {
+        "app_name": settings.app_name, "tagline": settings.tagline, "user": user,
+        **_new_person_ctx(session),
+    })
 
     @app.get("/stats", response_class=HTMLResponse)
     def stats_page(

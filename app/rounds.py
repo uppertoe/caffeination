@@ -9,48 +9,57 @@ from typing import Optional
 from sqlalchemy import insert
 from sqlmodel import Session, select
 
-from app.models import OrderItem, Round, RoundDrink, SavedDrink, User
+from app.drinks import line_drink
+from app.models import Order, OrderItem, Round, RoundDrink, SavedDrink, User
 from app.users import _as_naive_utc
 
 DRINK_FIELDS = ("base_id", "temp", "size", "milk", "strength", "sweetener", "length", "shots", "own_cup")
 
 
-def record_round(session: Session, owner_id: str) -> Optional[Round]:
-    """Log the owner's open order as a round, ahead of clear_order deleting it.
+def record_round(session: Session, order: Order) -> Optional[Round]:
+    """Log an open order as a round, ahead of its lines being deleted.
 
     Only an order someone else was added to counts as a round: an owner on
     their own has not placed a group order. Adds to the session without
-    committing, so the log and the clear land in clear_order's one commit.
-    Two selects (the items with their people, then the drinks) and two
-    inserts, however big the order.
+    committing, so the log and the close land in the caller's one commit.
+    Two selects (the lines with their people and drinks, then the owner's
+    drink) and two inserts, however big the order. A line's one-off drink
+    is logged in place of the person's usual.
     """
-    items = session.exec(
-        select(OrderItem.target_user_id, OrderItem.added_at, User.one_off)
+    owner_id = order.owner_id
+    lines = session.exec(
+        select(OrderItem, User.one_off, SavedDrink)
         .join(User, User.id == OrderItem.target_user_id, isouter=True)
-        .where(OrderItem.owner_id == owner_id)
+        .join(SavedDrink, SavedDrink.user_id == OrderItem.target_user_id, isouter=True)
+        .where(OrderItem.order_id == order.id)
     ).all()
-    # The owner's own row is the self opt-out marker, not an order line.
-    others = {uid: bool(one_off) for uid, _, one_off in items if uid != owner_id}
-    if not others:
+    lines = [(item, bool(one_off), sd) for item, one_off, sd in lines if item.target_user_id != owner_id]
+    if not lines:
         return None
-    wanted = set(others)
-    if len(others) == len(items):
-        wanted.add(owner_id)
-    saved = session.exec(select(SavedDrink).where(SavedDrink.user_id.in_(wanted))).all()
-    if not saved:
+    entries = [(item.target_user_id, guest, line_drink(item, sd)) for item, guest, sd in lines]
+    if order.owner_excluded_at is None:
+        own = session.get(SavedDrink, owner_id)
+        entries.append((owner_id, False, own))
+    entries = [(uid, guest, sd) for uid, guest, sd in entries if sd is not None]
+    if not entries:
         return None
 
     drinks = [
         {
             **{f: getattr(sd, f) for f in DRINK_FIELDS},
             "has_notes": bool(sd.notes and sd.notes.strip()),
-            "guest": others.get(sd.user_id, False),
+            "guest": guest,
             # A guest is deleted with the order, so their id would dangle.
-            "user_id": None if others.get(sd.user_id, False) else sd.user_id,
+            "user_id": None if guest else uid,
         }
-        for sd in saved
+        for uid, guest, sd in entries
     ]
-    last_added = max(_as_naive_utc(added_at) for _, added_at, _ in items)
+    # Stamped with the last change to who is in it, which includes the owner
+    # taking themselves out.
+    times = [item.added_at for item, _, _ in lines]
+    if order.owner_excluded_at is not None:
+        times.append(order.owner_excluded_at)
+    last_added = max(_as_naive_utc(t) for t in times)
     rnd = Round(
         placed_at=last_added.replace(tzinfo=timezone.utc),  # SQLModel refuses naive
         drink_count=len(drinks),

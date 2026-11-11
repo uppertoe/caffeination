@@ -1,0 +1,22 @@
+{#
+  "Share this order" and "Plan an advance order" (O1b), in a dialog over
+  the page like "Add someone to the order". Fetched into #share-dialog when
+  either button is pressed. A form that can't be accepted comes back here
+  with its error; sharing swaps the sharing panel in out of band and empties
+  this slot; planning goes to the new order's page.
+#}
+{% set advance = share_form.advance %}
+<dialog open class="new-person-dialog share-dialog"
+  x-data='{ open: true, when: {{ share_form.when | tojson }} }'
+  :open="open" @click.self="open = false" @keydown.escape.window="open = false">
+  <article>
+    <header><h2>{{ "Plan an advance order" if advance else "Share this order" }}</h2></header>
+    <form hx-post="{{ '/orders' if advance else '/order/share' }}" hx-target="#share-dialog" hx-swap="innerHTML">
+      {% include "_share_form_fields.html" %}
+      <div class="grid dialog-actions">
+        <button type="submit">{{ "Plan this order" if advance else "Share this order" }}</button>
+        <button type="button" class="secondary outline" @click="open = false">Cancel</button>
+      </div>
+    </form>
+  </article>
+</dialog>
