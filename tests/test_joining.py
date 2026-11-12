@@ -236,7 +236,10 @@ def test_closed_full_and_finished_orders_turn_joiners_away_politely():
         assert "Sarah's order is closed to new drinks. If you still need a coffee, you can start your own order." in T(closed)
         sarah.post("/order/clear")
         finished = priya.get(f"/j/{code}")
-    assert "Sarah's order has finished." in T(finished)
+    # Priya never joined, and join links are public: a finished order
+    # answers only devices that joined it.
+    assert finished.status_code == 404
+    assert f"No open order uses the code {code[:3]} {code[3:]}." in T(finished)
 
 
 def test_a_full_order_at_the_default_cap_mentions_carrying():
@@ -1036,3 +1039,42 @@ def test_stop_sharing_is_offered_after_closing_while_nobody_has_joined():
         closed = sarah.post("/order/joins/close")
         assert "Reopen for 15 minutes" in closed.text and "Stop sharing" in closed.text
 
+
+
+# ---- Public join links ------------------------------------------------------
+
+
+def test_a_finished_order_answers_only_devices_that_joined_it():
+    with _client() as sarah, _client() as tom, _client() as stranger:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
+        sarah.post("/order/clear")
+        joined = tom.get(f"/j/{code}")
+        other = stranger.get(f"/j/{code}")
+    assert joined.status_code == 200 and "Sarah" in T(joined)
+    assert other.status_code == 404 and "Sarah" not in T(other)
+
+
+def test_a_join_link_never_gives_an_app_identity():
+    from app.config import get_settings
+
+    name = get_settings().cookie_name
+    with _client() as sarah, _client() as tom:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        page = tom.get(f"/j/{code}")
+        joined = tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
+        after = tom.get(f"/j/{code}")
+        for r in (page, joined, after):
+            assert name not in r.headers.get("set-cookie", "")
+        assert name not in tom.cookies
+
+
+def test_the_share_panel_offers_the_join_link_to_copy():
+    with _client() as sarah:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        home = sarah.get("/")
+    assert "Copy link" in home.text and "Share link" in home.text
+    assert f"http://testserver/j/{code}" in home.text

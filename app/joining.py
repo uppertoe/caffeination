@@ -185,10 +185,10 @@ class CodeAttempts:
 def find_order_by_code(
     session: Session, code: str, now: Optional[datetime] = None, known: frozenset = frozenset()
 ) -> Optional[Order]:
-    """The live order using this code or, failing that, one that finished
-    with it less than FINAL_SHOWN ago (so a joiner can be told how it ended).
-    A device that joined the order (its id is in known) can look it up for
-    FINISHED_KEPT, to be told that it has finished."""
+    """The live order using this code or, failing that, for a device that
+    joined it (its key is in known), one that finished with it less than
+    FINISHED_KEPT ago, so that the joiner can be told how it ended. Join
+    links are public, so a finished order answers no one else."""
     live = session.exec(
         select(Order).where(Order.code == code, Order.status.in_(LIVE_STATUSES))
     ).first()
@@ -218,7 +218,7 @@ def find_order_by_code(
     if recent is None:
         return None
     age = now - _aware(recent.closed_at)
-    if age < FINAL_SHOWN or (order_key(recent) in known and age < FINISHED_KEPT):
+    if order_key(recent) in known and age < FINISHED_KEPT:
         return recent
     return None
 
