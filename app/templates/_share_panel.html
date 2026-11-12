@@ -91,6 +91,16 @@
     <div class="share-qr">{{ qr_svg(join_url) }}</div>
     <p class="share-code-text" aria-label="Code {{ share.code | join(' ') }}">{{ share.code_display }}</p>
     {% if request is defined %}<p class="share-code-help">Colleagues can also enter the code at {{ request.base_url.netloc }}/join.</p>{% endif %}
+    {# For a group chat: on a phone, the phone's own share sheet; elsewhere,
+       the link copied. The link works without signing in. #}
+    <button type="button" class="secondary outline share-link"
+      x-data='{ copied: false, sheet: !!navigator.share && matchMedia("(pointer: coarse)").matches, url: {{ join_url | tojson }}, title: {{ (share.name or "") | tojson }} }'
+      @click="sheet ? navigator.share(title ? { title, url } : { url }).catch(() => {}) : navigator.clipboard.writeText(url).then(() => { copied = true; setTimeout(() => copied = false, 2000) })">
+      {{ icon("link") }}
+      <span x-show="sheet" x-cloak>Share link</span>
+      <span x-show="!sheet && !copied">Copy link</span>
+      <span x-show="!sheet && copied" x-cloak>Copied ✓</span>
+    </button>
   </div>
   {% endif %}
   <ul class="share-cells">

@@ -2090,6 +2090,8 @@ html.save-failed .failed-note { color: var(--ink-strong); }
 
 /* The order's other ways in: the code typed at /join, and the link to it. */
 .share-code-help { color: var(--ink-muted); font-size: 0.82rem; }
+.share-link { display: inline-flex; align-items: center; gap: 0.45rem; width: auto; margin: 0.2rem 0 0; padding: 0.4rem 1rem; }
+.share-link .share-icon { width: 1.1rem; height: 1.1rem; }
 .join-teaser { grid-template-areas: "title chev"; margin-bottom: 0; border-radius: 0; }
 .join-teaser + .stats-teaser { margin-top: 0; }
 @media (min-width: 1000px) { .dash-layout #advance-orders { margin-top: 0; } }
