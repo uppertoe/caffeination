@@ -202,11 +202,13 @@
       {# J9 on its way: a drink for a colleague, as a guest. #}
       {% include "_join_guest_form.html" %}
       <button type="button" class="link-button join-alt" hx-get="{{ join_path }}" {{ hx | safe }}>Cancel</button>
-    {% elif mode == "change" and editable and self_line %}
+    {% elif mode == "change" and editable and (self_line or change_line) %}
       <form hx-post="{{ join_path }}/one-off" {{ hx | safe }} class="join-form"
         x-data='{ {{ builder_data() }} }' x-init='$watch("baseId", () => onBaseChange())'
         @htmx:send-error="offline = true" @htmx:before-request="offline = false">
         <input type="hidden" name="mode" value="change">
+        {% if change_line %}<input type="hidden" name="line" value="{{ change_line.target_id }}">
+        <p class="join-change-who"><strong>{{ change_line.name }}'s drink</strong></p>{% endif %}
         {{ error_note() }}
         {% include "_drink_fields.html" %}
         {{ offline_note() }}
@@ -241,12 +243,18 @@
             <div class="join-field">{{ location_field("loc-" ~ loop.index) }}</div>
             <button type="submit">Save where to deliver</button>
           </form>
+          <button type="button" class="link-button join-alt" hx-get="{{ join_path }}" {{ hx | safe }}>Cancel</button>
           {% else %}
           <div class="join-line-actions">
             {% if not order_location %}
             <button type="button" class="link-button" hx-get="{{ join_path }}?mode=location&amp;line={{ line.target_id }}" {{ hx | safe }}>{{ "Change where to deliver" if line.location else "Add where to deliver" }}</button>
             {% endif %}
-            {% if line.is_self %}
+            {% if not line.is_self and line.guest %}
+              <button type="button" class="link-button" hx-get="{{ join_path }}?mode=change&amp;line={{ line.target_id }}" {{ hx | safe }}>Change {{ line.name }}'s drink</button>
+            {% elif line.is_self and line.guest %}
+              {# A guest has no usual drink: their drink itself changes. #}
+              <button type="button" class="link-button" hx-get="{{ join_path }}?mode=change" {{ hx | safe }}>Change my drink</button>
+            {% elif line.is_self %}
               {% if line.one_off_drink %}
               <button type="button" class="link-button" hx-post="{{ join_path }}/line/{{ line.target_id }}/usual" {{ hx | safe }}>Change to my usual drink</button>
               {% else %}

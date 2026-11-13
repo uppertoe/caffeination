@@ -536,6 +536,22 @@ def set_line_drink(
     return True
 
 
+def set_guest_drink(
+    session: Session, order: Order, joiner: Joiner, target_id: str, drink: dict
+) -> bool:
+    """Change a guest's drink. A guest has no usual drink to fall back on,
+    so their own drink is changed rather than swapped for a one-off."""
+    if not lines_editable(order):
+        return False
+    item = _owned_item(session, order, joiner, target_id)
+    guest = session.get(User, target_id) if item is not None else None
+    if guest is None or not guest.one_off:
+        return False
+    upsert_saved_drink(session, guest.id, drink)
+    session.commit()
+    return True
+
+
 def remove_line(session: Session, order: Order, joiner: Joiner, target_id: str) -> bool:
     """Remove one of the joiner's lines; a guest goes with their line."""
     if not lines_editable(order):

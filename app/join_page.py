@@ -205,7 +205,18 @@ def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[
         ]
         added_here = sum(1 for line in lines if line.item.joined_by is not None)
         builder_drink = usual
-        if mode == "change" and lines and lines[0].is_self:
+        # "Change Ben's drink": a guest this device added for a colleague.
+        change_line = None
+        if mode == "change":
+            wanted = request.query_params.get("line") or (form or {}).get("line")
+            change_line = next(
+                (line for line in lines
+                 if wanted and line.item.target_user_id == wanted and not line.is_self and line.person.one_off),
+                None,
+            )
+        if change_line is not None:
+            builder_drink = change_line.drink
+        elif mode == "change" and lines and lines[0].is_self:
             builder_drink = lines[0].drink
         # The tab title leads with the status, so a joiner with the page in a
         # background tab sees it change.
@@ -243,6 +254,10 @@ def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[
             "me": joiner.user,
             "usual_line": _line(usual) if usual else None,
             "lines": joined_lines,
+            "change_line": (
+                {"target_id": change_line.item.target_user_id, "name": change_line.person.display_name}
+                if change_line is not None else None
+            ),
             "editable": joining.lines_editable(order),
             "accepting": state == joining.ACCEPTING,
             "full": state == joining.FULL,
@@ -415,10 +430,23 @@ def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[
             return loaded
         order, joiner, cookie = loaded
         form = dict(await request.form())
-        if joiner.user is None:
-            return _page(request, session, order, joiner, cookie)
         drink = normalize(form.get("base_id", ""), form)
         mode = form.get("mode") or "oneoff"
+        colleague = form.get("line")
+        if mode == "change" and colleague:
+            # "Change Ben's drink": a guest this device added for a colleague.
+            if drink is None:
+                return _page(request, session, order, joiner, cookie, mode=mode, error="Please choose a drink.", status=422, form=form)
+            joining.set_guest_drink(session, order, joiner, colleague, drink)
+            return _after_change(request, session, order, joiner, cookie)
+        if joiner.user is None:
+            # A guest changing their own drink ("Change my drink").
+            if mode != "change" or joiner.self_id is None:
+                return _page(request, session, order, joiner, cookie)
+            if drink is None:
+                return _page(request, session, order, joiner, cookie, mode=mode, error="Please choose a drink.", status=422, form=form)
+            joining.set_guest_drink(session, order, joiner, joiner.self_id, drink)
+            return _after_change(request, session, order, joiner, cookie)
         if drink is None:
             return _page(request, session, order, joiner, cookie, mode=mode, error="Please choose a drink.", status=422, form=form)
         location = joining.clean_location(form.get("location"))
