@@ -131,7 +131,7 @@ def test_someone_with_a_usual_joins_in_one_tap():
         assert "<h2>Sarah's order</h2>" in T(landing)
         assert "Sarah is taking orders until" in T(landing)
         assert "Add my usual drink" in T(landing) and "oat latte" in T(landing)
-        assert "If you leave the location blank, you can collect your drink from Sarah." in T(landing)
+        assert "If you leave this blank, you can collect your drink from Sarah." in T(landing)
         joined = priya.post(f"/j/{code}/usual", data={"location": "Theatre 3"})
         assert "Your drink is in Sarah's order." in T(joined)
         assert "Theatre 3" in T(joined) and "2 of 8 drinks" in T(joined)
@@ -264,7 +264,7 @@ def test_a_joiner_can_add_one_drink_for_a_colleague_and_no_more():
         priya.post(f"/j/{code}/usual")
         form = priya.get(f"/j/{code}?mode=colleague")
         assert "Your colleague's name:" in T(form) and "Add your colleague's drink" in T(form)
-        assert "If you leave the location blank, your colleague can collect the drink from Sarah." in T(form)
+        assert "If you leave this blank, your colleague can collect the drink from Sarah." in T(form)
         r = priya.post(f"/j/{code}/guest", data={"display_name": "Ben", "base_id": "piccolo", "mode": "colleague"})
         assert "Your drinks are in Sarah's order." in T(r)
         assert "Ben (guest)" in T(r) and "Each person can add up to two drinks." in T(r)
@@ -281,7 +281,7 @@ def test_a_joiner_can_change_their_location_and_remove_their_drink():
         tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
         tom_id = _user_id_by_name("Tom")
         edit = tom.get(f"/j/{code}?mode=location&line={tom_id}")
-        assert "Save location" in T(edit)
+        assert "Save where to deliver" in T(edit)
         moved = tom.post(f"/j/{code}/line/{tom_id}/location", data={"location": "Tearoom"})
         assert "Tearoom" in T(moved)
         removed = tom.post(f"/j/{code}/line/{tom_id}/remove")
@@ -310,7 +310,7 @@ def test_someone_the_buyer_already_added_is_told_so():
         code = _share(sarah)
         r = priya.get(f"/j/{code}")
         assert "Sarah has already added your usual drink to the order." in T(r)
-        assert "Add a location" in T(r) and "Change to a one-off drink" in T(r)
+        assert "Add where to deliver" in T(r) and "Change to a one-off drink" in T(r)
         priya.post(f"/j/{code}/one-off", data={"base_id": "piccolo", "mode": "change"})
     assert _items()[0].base_id == "piccolo" and len(_items()) == 1
 
@@ -601,7 +601,7 @@ def test_ordered_closes_joins_locks_lines_and_reaches_the_joiner():
         assert "<title>Ordered · Sarah's order</title>" in polled
         assert "Sarah has ordered your drink." in polled
         assert "Message from Sarah:" in polled and "About ten minutes" in polled
-        assert "Remove my drink" not in polled and "Change location" not in polled
+        assert "Remove my drink" not in polled and "Change where to deliver" not in polled
         # Lines are locked, and newcomers are turned away.
         tom_id = _user_id_by_name("Tom")
         tom.post(f"/j/{code}/line/{tom_id}/remove")
@@ -862,7 +862,7 @@ def test_a_joiner_is_told_their_drink_was_removed_and_a_colleagues_line_is_named
         tom.post(f"/j/{code}/guest", data={"display_name": "Ben", "base_id": "piccolo", "mode": "colleague"})
         r = T(tom.post(f"/j/{code}/line/{_user_id_by_name('Tom')}/remove"))
         assert "Ben's drink is in Sarah's order." in r
-        assert "Collected from Sarah" in r  # no location given
+        assert "Collect from Sarah" in r  # no location given
         r = T(tom.post(f"/j/{code}/line/{_user_id_by_name('Ben')}/remove"))
     # Ben was a colleague's drink, so no "your drink" note.
     assert "Your drink has been removed" not in r
@@ -1091,7 +1091,7 @@ def test_a_guest_can_save_their_drink_as_their_usual():
         _onboard(sarah, "Sarah", base_id="flat_white")
         code = _share(sarah)
         page = tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "long_black"})
-        assert f'<a href="/join/save/{code}">Save this as my usual drink</a>' in page.text
+        assert f'<a class="stats-teaser join-save-usual" href="/join/save/{code}">' in page.text and "Save this as my usual drink" in page.text
         r = tom.get(f"/join/save/{code}", follow_redirects=False)
         assert r.status_code == 303 and r.headers["location"] == "/"
         home = T(tom.get("/"))
@@ -1224,3 +1224,16 @@ def test_adding_someone_whose_name_is_taken_offers_that_person():
     existing = json.loads(html.unescape(re.search(r"existing: (\{.*\}),\n", page).group(1)))
     assert existing["tom"] == {"id": _user_id_by_name("Tom"), "name": "Tom", "drink": "long black"}
     assert "' to the order'" in page and "/order/add/' + taken.id" in page
+
+
+def test_forms_leave_missing_fields_to_the_apps_own_messages():
+    """The browser's own "Please fill in this field" bubble can sit under the
+    sticky header, or not show at all on a phone, so a required field would
+    make Add my drink seem to do nothing. The server's message is used
+    instead (see test_a_guest_joins_with_a_name_and_a_drink)."""
+    import pathlib
+
+    templates = pathlib.Path(__file__).parent.parent / "app" / "templates"
+    for path in templates.glob("*.html"):
+        assert not re.search(r"<(input|select|textarea)\b[^>]*\srequired\b", path.read_text(), re.S), path.name
+

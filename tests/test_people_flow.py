@@ -58,7 +58,7 @@ def test_create_person_blank_name_rejected():
             data={"display_name": "   ", "base_id": "latte"},
         )
     assert r.status_code == 422
-    assert "Name must be" in r.text
+    assert "Please enter their name." in r.text
 
 
 def test_create_person_honours_drink_rules():

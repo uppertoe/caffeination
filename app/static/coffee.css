@@ -2103,7 +2103,8 @@ html.save-failed .failed-note { color: var(--ink-strong); }
 
 /* "Save this as my usual drink" under a guest's line, and the sharing
    panel's notification control under "Copy link". */
-.join-save-usual { margin: 0.6rem 0 0; font-size: 0.95rem; }
+/* The save row sits at the foot of the join card, after its buttons. */
+.join-body .join-save-usual { margin-top: 1.25rem; }
 .share-notify { margin-top: 0.5rem; font-size: 0.88rem; color: var(--ink-muted); }
 .share-notify p { margin: 0; }
 .share-notify .link-button { font-size: inherit; }
