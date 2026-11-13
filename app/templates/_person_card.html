@@ -1,0 +1,22 @@
+{#
+  A person at a glance, for a confirmation: their name and usual drink in
+  the sharing panel's cells. With `new_drink`, the drink they would have
+  instead: the old one struck through, an arrow, then the new one. Facts
+  in `extra` follow as (icon, text) cells.
+#}
+{% from "_icons.html" import icon %}
+{% macro person_card(name, drink=None, new_drink=None, extra=()) -%}
+<ul class="share-cells person-card">
+  <li>{{ icon("person") }}<span>{{ name }}</span></li>
+  {% if new_drink %}
+  <li>{{ icon("cup") }}<span>
+    {%- if drink and drink != new_drink %}<s class="person-card-old">{{ drink }}</s> <span aria-hidden="true">→</span> {% elif not drink %}<span aria-hidden="true">→</span> {% endif -%}
+    {{ new_drink }}</span></li>
+  {% elif drink %}
+  <li>{{ icon("cup") }}<span>{{ drink }}</span></li>
+  {% else %}
+  <li class="is-missing">{{ icon("cup") }}<span>No usual drink yet</span></li>
+  {% endif %}
+  {% for name, text in extra %}<li>{{ icon(name) }}<span>{{ text }}</span></li>{% endfor %}
+</ul>
+{%- endmacro %}

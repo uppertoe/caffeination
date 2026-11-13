@@ -2,9 +2,10 @@
   Inner content of <section id="new-person-slot">: the "create a person +
   their drink" form in a dialog, opened by the button in the roster card. Posts to /people, which
   re-renders this slot (in-band) plus the order section (OOB). Context:
-  rules, initial, drinks, *_options (from the drink-form ctx), existing_names,
+  rules, initial, drinks, *_options (from the drink-form ctx), existing_people,
   and on error: error, open, submitted_name.
 #}
+{% from "_icons.html" import icon %}
 <div
   class="new-person"
   @open-new-person.window="open = true"
@@ -13,7 +14,7 @@
     open: {{ (open or false) | tojson }},
     name: {{ (submitted_name or "") | tojson }},
     oneOff: {{ (submitted_one_off or false) | tojson }},
-    existing: {{ existing_names | tojson }},
+    existing: {{ existing_people | tojson }},
     rules: {{ rules | tojson }},
     baseId: {{ initial.base_id | tojson }},
     temp: {{ (initial.temp or "hot") | tojson }},
@@ -25,11 +26,11 @@
     notes: {{ (initial.notes or "") | tojson }},
     get rule() { return this.rules[this.baseId]; },
     get cleanName() { return this.name.trim(); },
-    get nameTaken() {
-      if (this.oneOff) return false;
+    get taken() {
       const n = this.cleanName.toLowerCase();
-      return !!n && this.existing.includes(n);
+      return (n && this.existing[n]) || null;
     },
+    get nameTaken() { return !this.oneOff && !!this.taken; },
     onBaseChange() {
       const r = this.rule;
       if (r.sized && r.defaultSize && ["small","regular","large"].indexOf(this.size) === -1) {
@@ -74,10 +75,18 @@
         :aria-invalid="nameTaken ? 'true' : null"
       />
     </label>
-    <p x-show="nameTaken" class="form-error" x-cloak>
-      <small>&ldquo;<span x-text="cleanName"></span>&rdquo; is already on the
-      list — pick a different name.</small>
-    </p>
+    {# A name already on the list: most likely that person was meant, so
+       they can be added as they are. Saving stays off until the name is
+       changed or the order made a one-off. #}
+    <div x-show="nameTaken" x-cloak class="taken-person">
+      <ul class="share-cells person-card">
+        <li>{{ icon("person") }}<span x-text="taken && taken.name"></span></li>
+        <li :class="{ 'is-missing': !(taken && taken.drink) }">{{ icon("cup") }}<span x-text="taken && (taken.drink || 'No usual drink yet')"></span></li>
+      </ul>
+      <button type="button" class="secondary"
+        @click="htmx.ajax('POST', '{{ '/orders/' ~ order_id if order_id else '/order' }}/add/' + taken.id, { target: '#order-section', swap: 'outerHTML' }); open = false; name = ''"
+        x-text="taken && 'Add ' + taken.name + ' to the order'"></button>
+    </div>
 
     <label class="oneoff-toggle">
       <input type="checkbox" name="one_off" value="1" x-model="oneOff" />

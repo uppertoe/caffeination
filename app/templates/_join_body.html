@@ -261,6 +261,11 @@
         {% endif %}
       </div>
       {% endfor %}
+      {# A guest who wants the app for themselves, through a signed-in page:
+         the join link itself never gives an app identity. #}
+      {% if me is none and self_line and self_line.guest %}
+      <p class="join-save-usual"><a href="/join/save/{{ code }}">Save this as my usual drink</a></p>
+      {% endif %}
 
       {% if editable %}
       <ul class="share-cells">

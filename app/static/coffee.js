@@ -428,3 +428,86 @@ document.addEventListener("click", (e) => {
   }
   refresh();
 })();
+
+/* The buyer's shared order: telling the buyer when colleagues add drinks
+   by code. The sharing panel carries the drinks added by code (in
+   data-joins) and comes back with every change the poll finds, so each new
+   panel is compared with the drinks this tab has already seen. While the
+   buyer is looking elsewhere, new drinks are counted in the tab title and,
+   with the browser's permission, shown as a system notification. Nothing
+   is announced for the drinks already there when the page loads. */
+(() => {
+  const seen = new Map(); // order (its "ob" path) -> Set of line ids
+  let unseen = 0;
+  let baseTitle = null;
+
+  const away = () => document.visibilityState !== "visible" || !document.hasFocus();
+  const showTitle = () => {
+    if (baseTitle === null) baseTitle = document.title.replace(/^\(\d+\) /, "");
+    document.title = unseen ? `(${unseen}) ${baseTitle}` : baseTitle;
+  };
+  const back = () => {
+    if (!unseen || away()) return;
+    unseen = 0;
+    showTitle();
+  };
+  document.addEventListener("visibilitychange", back);
+  window.addEventListener("focus", back);
+
+  const capitalise = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
+  const notify = (added) => {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const [title, body] = added.length === 1
+      ? [`${added[0].name} has added a drink`, capitalise(added[0].drink)]
+      : [`${added.length} colleagues have added drinks`, undefined];
+    const options = { body, tag: "caffeine-joins", icon: "/static/icon-192.png" };
+    /* Phones show notifications only through a service worker (/sw.js);
+       a desktop browser without one falls back to a plain notification. */
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.getRegistration("/").then((reg) => {
+        if (reg) return reg.showNotification(title, options);
+        new Notification(title, options);
+      }).catch(() => {});
+    } else {
+      try { new Notification(title, options); } catch (_) { /* the title still shows the count */ }
+    }
+  };
+
+  const check = () => {
+    const panel = document.querySelector("#share-panel[data-joins]");
+    if (!panel) return;
+    let joins;
+    try { joins = JSON.parse(panel.dataset.joins); } catch (_) { return; }
+    const key = panel.dataset.order || "";
+    const ids = new Set(joins.map((j) => j.id));
+    const before = seen.get(key);
+    seen.set(key, ids);
+    if (!before) return;
+    const added = joins.filter((j) => !before.has(j.id));
+    if (!added.length || !away()) return;
+    unseen += added.length;
+    showTitle();
+    notify(added);
+  };
+  document.addEventListener("htmx:afterSettle", check);
+  document.addEventListener("DOMContentLoaded", check);
+
+  /* The notify control in the sharing panel. */
+  window.caffeineNotify = () => ({
+    supported: "Notification" in window,
+    permission: "Notification" in window ? Notification.permission : "denied",
+    init() {
+      if (this.supported && this.permission === "granted") registerWorker();
+    },
+    ask() {
+      Promise.resolve(Notification.requestPermission()).then((p) => {
+        this.permission = p;
+        if (p === "granted") registerWorker();
+      });
+    },
+  });
+  const registerWorker = () => {
+    if (navigator.serviceWorker) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  };
+})();

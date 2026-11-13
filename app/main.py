@@ -6,11 +6,11 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import configure_mappers
-from sqlmodel import Session
+from sqlmodel import Session, func, select
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Receive, Scope, Send
 
@@ -32,7 +32,7 @@ from app.menu import (
     get_drink,
     rules_for_template,
 )
-from app.models import SavedDrink, User
+from app.models import LIVE_STATUSES, Order, OrderItem, SavedDrink, User
 from app.order_routes import ORDER_REFRESH, order_section_ctx, parse_order_id
 from app.orders import RosterEntry, add_to_order, live_order
 from app.stats_page import stats_context, usuals_for
@@ -44,7 +44,6 @@ from app.users import (
     claim_user,
     create_named_user,
     delete_user,
-    existing_names_lower,
     find_user_by_display_name,
     get_current_user,
     named_users_with_lines,
@@ -229,7 +228,12 @@ def _new_person_ctx(session: Session) -> dict:
     plus the set of names already taken (for the client-side dup check)."""
     return {
         **_drink_form_ctx(None),
-        "existing_names": existing_names_lower(session),
+        # Taken names (lowercased), each with its person and usual drink, so
+        # a taken name offers that person instead.
+        "existing_people": {
+            u["display_name"].lower(): {"id": u["id"], "name": u["display_name"], "drink": u["drink_line"]}
+            for u in named_users_with_lines(session)
+        },
     }
 
 
@@ -287,6 +291,16 @@ def create_app() -> FastAPI:
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/sw.js", include_in_schema=False)
+    def service_worker() -> FileResponse:
+        """The service worker (app/static/sw.js), served from the root so
+        that its scope covers every page. It only shows notifications."""
+        return FileResponse(
+            STATIC_DIR / "sw.js",
+            media_type="text/javascript",
+            headers={"Cache-Control": "no-cache"},
+        )
 
     @app.get("/site.webmanifest", include_in_schema=False)
     def site_webmanifest() -> JSONResponse:
@@ -380,13 +394,16 @@ def create_app() -> FastAPI:
             )
         existing = find_user_by_display_name(session, name)
         if existing is not None and existing.id != user.id:
+            # The name is on the list: the list opens on that person's card,
+            # to choose them or type another name.
+            onboard = _onboard_ctx(session)
             return templates.TemplateResponse(
                 request,
                 "_onboard.html",
                 {
-                    **_onboard_ctx(session),
-                    "error": f"That name's already taken. Pick '{existing.display_name}' from the list to claim it.",
+                    **onboard,
                     "submitted": name,
+                    "confirm": next((u for u in onboard["named_users"] if u["id"] == existing.id), None),
                 },
                 status_code=409,
             )
@@ -451,6 +468,30 @@ def create_app() -> FastAPI:
         # The owner's name also shows on their own order row.
         header_html = _render("_dash_header.html", {"user": user})
         return HTMLResponse(header_html, headers=ORDER_REFRESH)
+
+    @app.get("/me/delete", response_class=HTMLResponse)
+    def delete_confirm(
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        """The Delete dialog's card: the person, their drink, and how many
+        of other people's open orders they are in."""
+        open_orders = session.exec(
+            select(func.count(func.distinct(OrderItem.order_id)))
+            .join(Order, Order.id == OrderItem.order_id)
+            .where(
+                OrderItem.target_user_id == user.id,
+                Order.owner_id != user.id,
+                Order.status.in_(LIVE_STATUSES),
+            )
+        ).one()
+        return templates.TemplateResponse(request, "_delete_confirm.html", {
+            "user": user,
+            "drink": _drink_card_ctx(session, user)["till_line"],
+            "open_orders": open_orders,
+            "number_word": sharing.number_word,
+        })
 
     @app.post("/me/delete", response_class=HTMLResponse)
     def delete_me(

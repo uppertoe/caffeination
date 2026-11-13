@@ -44,7 +44,10 @@ def test_roster_excludes_users_without_saved_drinks():
         _onboard(alice, "Alice")  # no drink saved
         _onboard(bob, "Bob")
         r = bob.get("/")
-    assert "Alice" not in r.text  # alice is not in bob's roster
+    # alice is not in bob's roster (her name is still taken, so the add
+    # form knows of her)
+    assert f'id="roster-{_user_id_by_name("Alice")}"' not in r.text
+    assert "<strong>Alice</strong>" not in r.text
 
 
 def test_add_then_remove_target_from_order():
