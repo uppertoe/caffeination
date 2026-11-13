@@ -1,0 +1,5 @@
+{# After "Tell colleagues it is ready" on the everyday order: the sharing
+   panel in its complete state, and "Your order" frozen out of band as it
+   was. "Start a new order" reloads the page. #}
+{% include "_share_panel.html" %}
+{% with oob = true, frozen = true %}{% include "_order_list.html" %}{% endwith %}

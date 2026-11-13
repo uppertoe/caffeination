@@ -511,3 +511,123 @@ document.addEventListener("click", (e) => {
     if (navigator.serviceWorker) navigator.serviceWorker.register("/sw.js").catch(() => {});
   };
 })();
+
+/* The dashboard's way-finding.
+
+   On a phone or tablet (one column), the section bar (.dash-sections)
+   marks the section in view, the way the statistics page's contents bar
+   does, and carries the order's drink count and a dot while the shared
+   order is taking drinks.
+
+   On a wide screen, the panel last clicked or typed in wears a ring, so
+   it is clear which one is working. Swaps replace panels, so the ring is
+   put back on the new element after each one. */
+(() => {
+  const bar = () => document.querySelector(".dash-sections");
+
+  const mark = (id) => {
+    for (const a of bar()?.querySelectorAll("a") ?? []) {
+      const on = a.hash === "#" + id;
+      a.classList.toggle("is-current", on);
+      if (on) a.setAttribute("aria-current", "location");
+      else a.removeAttribute("aria-current");
+    }
+  };
+
+  const facts = () => {
+    const nav = bar();
+    if (!nav) return;
+    const list = document.getElementById("order-list");
+    const count = nav.querySelector("[data-drink-count]");
+    if (list && count) {
+      const n = Number(list.dataset.drinks || 0);
+      count.textContent = n;
+      count.hidden = !n;
+    }
+    const panel = document.getElementById("share-panel");
+    const live = nav.querySelector(".dash-live");
+    if (live) {
+      live.hidden = !(panel && panel.classList.contains("share-panel")
+        && !panel.matches(".is-closed, .is-placed, .is-complete"));
+    }
+  };
+
+  /* The section in view: the last one whose top has passed a line a
+     little below the bar, or the last section once the page can scroll
+     no further. A tapped label is marked at once and keeps its mark
+     until the reader scrolls by hand (a wheel, a touch or a key) or taps
+     something else, even when the page cannot scroll that section all
+     the way up. */
+  let pinned = false;
+  const current = () => {
+    const nav = bar();
+    if (!nav || pinned || getComputedStyle(nav).display === "none") return;
+    const ids = [...nav.querySelectorAll("a")].map((a) => a.hash.slice(1));
+    const line = nav.getBoundingClientRect().bottom + 80;
+    const atEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4;
+    let id = ids[0];
+    for (const candidate of ids) {
+      const el = document.getElementById(candidate);
+      if (el && el.getBoundingClientRect().top <= line) id = candidate;
+    }
+    if (atEnd) id = ids[ids.length - 1];
+    mark(id);
+  };
+  let ticking = false;
+  window.addEventListener("scroll", () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => { ticking = false; current(); });
+  }, { passive: true });
+  document.addEventListener("click", (event) => {
+    const a = event.target.closest?.(".dash-sections a");
+    // Any other tap is the reader moving on: the mark follows the page
+    // again, including a scroll that the tap's response makes.
+    if (!a) { pinned = false; return; }
+    mark(a.hash.slice(1));
+    pinned = true;
+  });
+  for (const type of ["wheel", "touchstart", "keydown"]) {
+    window.addEventListener(type, () => { pinned = false; }, { passive: true });
+  }
+  const arm = current;
+
+  const PANELS = "#dash-you, #order-list, #till-summary, #share-panel, #advance-orders, #roster-picker";
+  let active = null;
+  const ring = () => {
+    document.querySelectorAll(".dash-layout .is-active").forEach((el) => el.classList.remove("is-active"));
+    const el = active && document.getElementById(active);
+    if (el && el.tagName === "ARTICLE") el.classList.add("is-active");
+  };
+  const choose = (event) => {
+    const panel = event.target.closest?.(PANELS);
+    if (!panel || !panel.closest(".dash-layout")) return;
+    active = panel.id;
+    ring();
+  };
+  document.addEventListener("pointerdown", choose);
+  document.addEventListener("focusin", choose);
+
+  const refresh = () => { arm(); facts(); ring(); };
+  document.addEventListener("htmx:afterSettle", refresh);
+  document.addEventListener("DOMContentLoaded", refresh);
+})();
+
+/* An advance order's page: the slim strip takes the band's place at the top
+   once the band has scrolled out of view, and both carry the panel's
+   closing time as it changes. */
+(() => {
+  const band = document.getElementById("advance-band");
+  if (!band) return;
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver(([entry]) => {
+      document.documentElement.classList.toggle("band-gone", !entry.isIntersecting);
+    }).observe(band);
+  }
+  const closes = () => {
+    const text = document.getElementById("share-panel")?.dataset.closes;
+    if (!text) return;
+    document.querySelectorAll("[data-advance-closes]").forEach((el) => { el.textContent = text; });
+  };
+  document.addEventListener("htmx:afterSettle", closes);
+})();

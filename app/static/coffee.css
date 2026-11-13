@@ -2168,3 +2168,231 @@ html.save-failed .failed-note { color: var(--ink-strong); }
 .share-step .share-icon { stroke: currentColor; }
 .share-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem 1.2rem; margin: 0 0 1rem; font-size: 0.9rem; }
 .share-update .share-step { margin-top: 0.2rem; }
+
+/* ---- Finding your place on the dashboard -------------------------------- *
+   One column (a phone or tablet): a bar of the sections, held at the top,
+   marking the one in view (coffee.js). Two columns: no bar, but a ring on
+   the panel last clicked or typed in. */
+.dash-sections { display: none; }
+@media (max-width: 999px) {
+  .dash-sections {
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0 0 0.8rem;
+    background: color-mix(in srgb, var(--page-bg) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--soft-line);
+  }
+  .dash-sections a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 2.9rem;
+    border-bottom: 3px solid transparent;
+    color: var(--ink-muted);
+    font-size: 0.9rem;
+    text-decoration: none;
+  }
+  .dash-sections a.is-current { color: var(--ink-strong); font-weight: 700; border-bottom-color: var(--accent); }
+  .dash-count {
+    min-width: 1.15rem;
+    padding: 0 0.3rem;
+    border-radius: 1rem;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.15rem;
+    text-align: center;
+  }
+  .dash-live { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: #2f8a5b; }
+  .dash-count[hidden], .dash-live[hidden] { display: none; }
+  :is(#dash-you, #order-list, #share-panel, #roster-picker) { scroll-margin-top: 3.6rem; }
+}
+@media (prefers-reduced-motion: no-preference) { html:has(.dash-sections) { scroll-behavior: smooth; } }
+@media (min-width: 1000px) {
+  .dash-layout article { transition: box-shadow 0.2s ease; }
+  .dash-layout article.is-active { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--focus-ring), var(--card-shadow); }
+}
+
+/* What no longer applies (or not yet) in the shared order stays in place,
+   greyed out, so that locking or reopening never moves the page. */
+.share-panel .is-off { opacity: 0.6; }
+.share-update fieldset { margin: 0; padding: 0; border: 0; }
+.share-step:disabled { opacity: 0.6; cursor: default; }
+
+/* The code that replacing would retire, struck through in a warning cell. */
+.replace-old { grid-template-columns: 1fr; }
+.replace-old li { font-size: 1.15rem; font-weight: 700; letter-spacing: 0.12em; align-items: center; }
+.replace-old s { text-decoration-thickness: 2px; }
+a.share-step { display: inline-flex; text-decoration: none; }
+.share-links .share-links-note { display: inline-block; text-decoration: none; color: var(--ink-muted); cursor: default; }
+
+/* "Share this order" and "Plan an advance order", each with a line on what
+   it is for. */
+.share-option { flex: 1 1 12rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.share-option > button { flex: none; width: 100%; margin: 0; }
+.share-option > small { color: var(--ink-muted); font-size: 0.82rem; line-height: 1.35; text-align: center; }
+/* The closing-time form ends with its own space, as the links above it do,
+   before the order's facts. */
+.share-closing { margin-bottom: 1rem; }
+
+/* ---- An advance order: a separate session -------------------------------- *
+   Its own palette (slate rather than the everyday order's caramel, which
+   stays only on the Add buttons), a band in place of the site header with
+   the way back first, and a slim strip that overlays the top once the band
+   has scrolled away (html.band-gone, coffee.js). Set on the root so that
+   Pico's variables, which are resolved there, follow. */
+:root.is-advance:not([data-theme="dark"]) {
+  --adv-band: #34505f;
+  --adv-band-ink: #f4f7f9;
+  --adv-band-muted: #d5e1e8;
+  --page-bg: #f3f6f8;
+  --page-glow: #e6edf1;
+  --card-bg: #ffffff;
+  --card-line: #bccbd4;
+  --soft-line: rgba(52, 80, 95, 0.25);
+  --ink: #2f3b44;
+  --ink-strong: #2f3b44;
+  --ink-muted: #4f6472;
+  --heading: #34505f;
+  --row-tint: #f1f5f7;
+  --card-band: #d6e2e9;
+  --till-bg: #dde7ed;
+  --link: #34505f;
+  --link-hover: #1f2e36;
+  --sec-ink: #34505f;
+  --sec-bg: #34505f;
+  --sec-bg-ink: #f4f7f9;
+  --sec-hover-bg: #2a414d;
+  --field-line: #a9bac5;
+  --line-strong: #4f6472;
+  --edge-fade: rgba(255, 255, 255, 0.97);
+}
+:root.is-advance[data-theme="dark"] {
+  --adv-band: #2c4452;
+  --adv-band-ink: #e6eef2;
+  --adv-band-muted: #b3c6d1;
+  --page-bg: #0b1013;
+  --page-glow: #131c22;
+  --card-bg: #141c21;
+  --card-line: #2a3a44;
+  --soft-line: rgba(42, 58, 68, 0.85);
+  --ink: #dfe6ea;
+  --ink-strong: #dfe6ea;
+  --ink-muted: #98aab5;
+  --heading: #9fb9c8;
+  --row-tint: rgba(42, 58, 68, 0.35);
+  --card-band: #24343e;
+  --link: #9fb9c8;
+  --link-hover: #dfe6ea;
+  --sec-ink: #c3d1d9;
+  --sec-bg: #2a3a44;
+  --sec-bg-ink: #dfe6ea;
+  --sec-hover-bg: #34505f;
+  --field-bg: #0e1418;
+  --field-line: #2a3a44;
+  --line-strong: #3b5261;
+  --edge-fade: rgba(20, 28, 33, 0.95);
+}
+.is-advance { --strip-h: 3.3rem; --brand-h: var(--strip-h); }
+.advance-band {
+  margin: 0 calc(50% - 50vw) 1rem;
+  padding: 0.9rem max(1rem, calc(50vw - 30rem)) 1.1rem;
+  background: var(--adv-band);
+  color: var(--adv-band-ink);
+}
+.advance-band-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.advance-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  color: var(--adv-band-ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+.advance-back:hover { color: var(--adv-band-ink); text-decoration: underline; }
+.advance-back .share-icon { width: 1.25rem; height: 1.25rem; stroke: currentColor; }
+.advance-label {
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.4rem;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.advance-band h1 { margin: 0.5rem 0 0.25rem; color: var(--adv-band-ink); font-family: var(--font-heading); font-size: 1.9rem; line-height: 1.1; }
+.advance-closes { display: flex; align-items: center; gap: 0.4rem; margin: 0; color: var(--adv-band-muted); font-size: 0.92rem; }
+.advance-closes .share-icon { stroke: currentColor; }
+.advance-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  height: var(--strip-h);
+  padding: 0 max(0.75rem, calc(50vw - 30rem));
+  background: var(--adv-band);
+  color: var(--adv-band-ink);
+  transform: translateY(-100%);
+  visibility: hidden;
+  transition: transform 0.18s ease, visibility 0.18s;
+}
+html.band-gone .advance-strip { transform: none; visibility: visible; }
+.advance-strip .advance-back { min-width: 2.75rem; justify-content: center; }
+.advance-strip-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.advance-strip-name .advance-label { padding: 0; background: none; color: var(--adv-band-muted); font-size: 0.68rem; }
+.advance-strip-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-heading); font-size: 1.05rem; }
+.advance-strip-closes { margin-left: auto; color: var(--adv-band-muted); font-size: 0.8rem; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .advance-strip { transition: none; } }
+/* The section bar sits under the strip, in three columns. */
+.is-advance .dash-sections { top: var(--strip-h); }
+.dash-sections-three { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+.is-advance :is(#order-list, #share-panel, #roster-picker) { scroll-margin-top: calc(var(--strip-h) + 3.6rem); }
+.is-advance .order-bar { background: var(--adv-band); color: var(--adv-band-ink); }
+.is-advance .dash-count { background: var(--adv-band); color: var(--adv-band-ink); }
+/* The band starts at the very top of the window, as the site header does. */
+.is-advance main.container { padding-top: 0; }
+.is-advance .dash-sections a.is-current { border-bottom-color: var(--adv-band); }
+.is-advance .dash-layout article.is-active { box-shadow: 0 0 0 2px var(--adv-band), 0 0 0 6px color-mix(in srgb, var(--adv-band) 30%, transparent), var(--card-shadow); }
+
+/* Planning an advance order belongs to the advance order's session, so its
+   button and dialog wear the slate too, on the everyday page. The Pico
+   variables are re-pointed locally; the buttons inside resolve them. */
+:root:not([data-theme="dark"]) { --slate: #34505f; --slate-hover: #2a414d; --slate-ink: #f4f7f9; --slate-text: #34505f; --slate-band: #d6e2e9; --slate-card: #ffffff; --slate-muted: #4f6472; --slate-row: #f1f5f7; }
+:root[data-theme="dark"] { --slate: #3d5d6e; --slate-hover: #4a6d80; --slate-ink: #e6eef2; --slate-text: #9fb9c8; --slate-band: #24343e; --slate-card: #141c21; --slate-muted: #98aab5; --slate-row: rgba(42, 58, 68, 0.35); }
+.advance-ui {
+  --pico-primary-background: var(--slate);
+  --pico-primary-border: var(--slate);
+  --pico-primary-hover-background: var(--slate-hover);
+  --pico-primary-hover-border: var(--slate-hover);
+  --pico-primary-inverse: var(--slate-ink);
+  --pico-primary: var(--slate-ink);
+  --pico-primary-hover: var(--slate-ink);
+  --pico-secondary: var(--slate-text);
+  --pico-secondary-border: var(--slate-text);
+  --pico-secondary-hover: var(--slate-hover);
+  --pico-secondary-hover-border: var(--slate-hover);
+  --pico-secondary-background: var(--slate);
+  --pico-secondary-hover-background: var(--slate-hover);
+  --pico-secondary-inverse: var(--slate-ink);
+  --pico-card-sectioning-background-color: var(--slate-band);
+  --pico-form-element-active-border-color: var(--slate);
+  --pico-h2-color: var(--slate-text);
+  --pico-card-background-color: var(--slate-card);
+  --pico-muted-color: var(--slate-muted);
+  --ink-muted: var(--slate-muted);
+  --row-tint: var(--slate-row);
+  --accent: var(--slate-text);
+}
+.advance-ui > article > header h2 { color: var(--slate-text); }
+.advance-ui button.secondary.outline { background: color-mix(in srgb, var(--slate) 9%, transparent); }
+.advance-ui button.secondary.outline:hover { background: var(--slate); color: var(--slate-ink); }

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en"{% block html_class %}{% endblock %}>
   <head>
     <meta charset="utf-8" />
     <!-- interactive-widget=resizes-content: on Android the layout viewport
@@ -84,6 +84,7 @@
   </head>
   <body>
     <main class="container">
+      {% block brand %}
       <header class="brand">
         <img class="brand-mark" src="{{ asset('brand-mark.svg') }}" alt="" aria-hidden="true" width="48" height="48" />
         <div>
@@ -103,6 +104,7 @@
           <span class="theme-opt theme-opt-dark"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M235.54,150.21a104.84,104.84,0,0,1-37,52.91A104,104,0,0,1,32,120,103.09,103.09,0,0,1,52.88,57.48a104.84,104.84,0,0,1,52.91-37,8,8,0,0,1,10,10,88.08,88.08,0,0,0,109.8,109.8,8,8,0,0,1,10,10Z"/></svg> Dark</span>
         </button>
       </header>
+      {% endblock %}
       {% block content %}{% endblock %}
     </main>
   </body>

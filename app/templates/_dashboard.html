@@ -9,10 +9,20 @@
   <a href="/orders/{{ oid }}" role="button">Open the order</a>
 </article>
 {% endfor %}
+{# On a phone or tablet, a bar of the page's sections that stays at the top
+   and marks the one in view (coffee.js); tapping a label jumps to it. The
+   order's drink count and the shared order's dot are kept current by
+   coffee.js from the panels themselves. #}
+<nav class="dash-sections" aria-label="Sections">
+  <a href="#dash-you">You</a>
+  <a href="#order-list">Order <span class="dash-count" data-drink-count{% if not drink_count %} hidden{% endif %}>{{ drink_count }}</span></a>
+  <a href="#share-panel">Shared <span class="dash-live" aria-hidden="true"{% if not (share and not share.closed) %} hidden{% endif %}></span></a>
+  <a href="#roster-picker">Add</a>
+</nav>
 <div class="dash-layout">
 {# The left-hand column as one element, so that it can be held in view. #}
 <div class="dash-left">
-<article class="dash-top">
+<article class="dash-top" id="dash-you">
   {% include "_dash_header.html" %}
 
   {% include "_drink_card.html" %}

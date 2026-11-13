@@ -67,7 +67,7 @@ def test_duplicate_name_rejected_case_insensitive():
     assert r.status_code == 409
     # The list opens on Alice's card, to choose her or type another name.
     assert '"display_name": "Alice"' in r.text and "confirming: {" in r.text
-    assert "I am " in r.text
+    assert "I am " in r.text and "is already on the list." in r.text
 
 
 def test_choosing_a_name_on_the_list_shows_the_person_first():
@@ -75,8 +75,9 @@ def test_choosing_a_name_on_the_list_shows_the_person_first():
         alice.get("/")
         alice.post("/me/name", data={"display_name": "Alice"})
         page = visitor.get("/").text
-    assert '@click="confirming = u">That&apos;s me</button>' in page
+    assert '@click="confirming = u; typedTaken = false">That&apos;s me</button>' in page
     assert "confirming: null" in page and '@click="claim(confirming.id)"' in page
+    assert "'Continue as ' + confirming.display_name" in page
 
 
 def test_claim_existing_user_rebinds_cookie():

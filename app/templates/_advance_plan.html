@@ -1,5 +1,6 @@
 {# The "Plan an advance order" button where the advance orders are listed.
    The form opens in a dialog (_share_dialog.html). #}
-<div class="share-start">
-  <button type="button" class="secondary outline" hx-get="/orders/new" hx-target="#share-dialog" hx-swap="innerHTML">Plan an advance order</button>
+<div class="share-start share-option advance-ui">
+  <button type="button" class="secondary outline" hx-get="/orders/new" hx-target="#share-dialog" hx-swap="innerHTML" aria-describedby="share-option-plan">Plan an advance order</button>
+  <small id="share-option-plan">A separate order for later, such as a meeting or tomorrow's coffee run.</small>
 </div>

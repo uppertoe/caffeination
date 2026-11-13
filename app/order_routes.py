@@ -271,8 +271,11 @@ def register(app: FastAPI, templates: Jinja2Templates, page_ctx) -> None:
             return gone(request)
         if request.headers.get("HX-Request") == "true":
             return templates.TemplateResponse(request, "_order_section.html", ctx)
+        share = ctx["share"]
+        # The band's closing line (kept current by coffee.js from the panel).
+        closes = ("Locked" if share.closed else f"Closes {share.closes_label}") if share else ""
         return templates.TemplateResponse(
-            request, "order_page.html", {**page_ctx(session, user), **ctx}
+            request, "order_page.html", {**page_ctx(session, user), **ctx, "share_closes_text": closes}
         )
 
     # ---- The order section ------------------------------------------------
@@ -464,10 +467,18 @@ def register(app: FastAPI, templates: Jinja2Templates, page_ctx) -> None:
         form = dict(await request.form())
         order = live_order(session, user.id, order_id)
         status = form.get("status", "")
+        # The order as it stands, kept on screen once Ready completes it.
+        before = order_section_ctx(session, user, order_id) if order is not None else None
         sent = order is not None and order.code is not None and sharing.send_update(
             session, order, status, form.get("message")
         )
         completed = sent and status == "ready"
         if completed and order_id is not None:
             return templates.TemplateResponse(request, "_order_done.html", {})
+        if completed and request.headers.get("HX-Target") == "share-panel":
+            # The panel says the order is complete and the list stays as it
+            # was, without its buttons, so nothing on the page moves.
+            return templates.TemplateResponse(request, "_ready_done.html", {
+                **before, "ready_now": True, "ready_message": (form.get("message") or "").strip(),
+            })
         return section(request, session, user, order_id, {"completed": completed})
