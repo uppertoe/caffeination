@@ -1237,3 +1237,55 @@ def test_forms_leave_missing_fields_to_the_apps_own_messages():
     for path in templates.glob("*.html"):
         assert not re.search(r"<(input|select|textarea)\b[^>]*\srequired\b", path.read_text(), re.S), path.name
 
+
+
+def test_a_guest_changes_their_own_drink():
+    from app.db import get_engine
+    from app.models import SavedDrink
+
+    with _client() as sarah, _client() as tom:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        page = T(tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"}))
+        assert "Change my drink" in page and "Change to a one-off drink" not in page
+        form = T(tom.get(f"/j/{code}?mode=change"))
+        assert "Change to this drink" in form
+        r = T(tom.post(f"/j/{code}/one-off", data={"mode": "change", "base_id": "long_black"}))
+        assert "long black" in r and "Change to my usual drink" not in r
+        guest_id = next(i.target_user_id for i in _items() if i.joined_by is not None)
+        with Session(get_engine()) as s:
+            assert s.get(SavedDrink, guest_id).base_id == "long_black"
+        # Sarah's order shows the new drink.
+        assert "long black" in T(sarah.get("/"))
+
+
+def test_the_delivery_form_can_be_cancelled():
+    with _client() as sarah, _client() as tom:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
+        target = next(i.target_user_id for i in _items() if i.joined_by is not None)
+        form = T(tom.get(f"/j/{code}?mode=location&line={target}"))
+    after = form.split("Save where to deliver</button>", 1)[1]
+    assert f'hx-get="/j/{code}"' in after.split("</div>", 1)[0] and ">Cancel</button>" in after
+
+
+def test_a_joiner_changes_a_colleagues_drink():
+    from app.db import get_engine
+    from app.models import SavedDrink
+
+    with _client() as sarah, _client() as tom, _client() as other:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
+        page = T(tom.post(f"/j/{code}/guest", data={"display_name": "Ben", "base_id": "piccolo", "mode": "colleague"}))
+        assert "Change Ben's drink" in page
+        ben = _user_id_by_name("Ben")
+        form = T(tom.get(f"/j/{code}?mode=change&line={ben}"))
+        assert "<strong>Ben's drink</strong>" in form and 'name="line"' in form
+        tom.post(f"/j/{code}/one-off", data={"mode": "change", "line": ben, "base_id": "long_black"})
+        # Another device cannot change Ben's drink.
+        other.post(f"/j/{code}/one-off", data={"mode": "change", "line": ben, "base_id": "espresso"})
+    with Session(get_engine()) as s:
+        assert s.get(SavedDrink, ben).base_id == "long_black"
+        assert s.get(SavedDrink, _user_id_by_name("Tom")).base_id == "latte"
