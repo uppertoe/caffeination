@@ -2095,3 +2095,40 @@ html.save-failed .failed-note { color: var(--ink-strong); }
 .join-teaser { grid-template-areas: "title chev"; margin-bottom: 0; border-radius: 0; }
 .join-teaser + .stats-teaser { margin-top: 0; }
 @media (min-width: 1000px) { .dash-layout #advance-orders { margin-top: 0; } }
+
+/* Confirming "Replace the code": the dialog's text reads at body size,
+   not the muted small print of the row that opens it. */
+.share-replace-dialog { color: var(--pico-color); font-size: 1rem; text-align: left; }
+.share-replace-dialog h2 { font-size: 1.15rem; margin: 0; }
+
+/* "Save this as my usual drink" under a guest's line, and the sharing
+   panel's notification control under "Copy link". */
+.join-save-usual { margin: 0.6rem 0 0; font-size: 0.95rem; }
+.share-notify { margin-top: 0.5rem; font-size: 0.88rem; color: var(--ink-muted); }
+.share-notify p { margin: 0; }
+.share-notify .link-button { font-size: inherit; }
+
+/* A guest's name already on the roster (join_save.html): the person's
+   drink before and after, then the two ways on. */
+.join-save h1 { font-size: 1.25rem; margin: 0; }
+.join-save form button { width: 100%; margin-bottom: 0; }
+.join-save-new div[role="group"] { margin-bottom: 0.2rem; }
+.join-save-new div[role="group"] button { width: auto; }
+.join-save-or {
+  display: flex; align-items: center; gap: 0.75rem;
+  margin: 1rem 0; color: var(--ink-muted); font-size: 0.88rem;
+}
+.join-save-or::before, .join-save-or::after { content: ""; flex: 1; border-top: 1px solid var(--pico-muted-border-color); }
+.join-save .join-back { margin: 1rem 0 0; }
+
+/* A person at a glance in a confirmation (_person_card.html). */
+.person-card { grid-template-columns: 1fr; margin-bottom: 1rem; }
+.person-card-old { color: var(--ink-muted); }
+.taken-person { margin: -0.25rem 0 1rem; }
+.taken-person .person-card { margin-bottom: 0.6rem; }
+.taken-person > button { width: 100%; margin-bottom: 0; }
+
+/* A sticky column is its own stacking context, so a dialog opened inside
+   one (the Delete confirmation in the header) would sit under the other
+   column. The column holding an open dialog is lifted above it. */
+.dash-layout > :has(dialog[open]) { z-index: 20; }

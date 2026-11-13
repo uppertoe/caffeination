@@ -278,7 +278,7 @@ def test_sharing_and_planning_open_in_a_dialog_from_one_row():
         # Sharing empties the dialog and swaps the panel and the planning
         # button in out of band.
         shared = T(sarah.post("/order/share", data={"when": "soon"}))
-        assert "<dialog" not in shared
+        assert "new-person-dialog share-dialog" not in shared  # the sharing form is gone
         assert 'id="share-panel"' in shared and 'class="share-code-text"' in shared
         assert 'id="advance-orders" hx-swap-oob="true"' in shared and "Plan an advance order" in shared
         _plan(sarah)

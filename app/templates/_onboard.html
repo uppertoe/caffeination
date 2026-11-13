@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 <article
   class="onboard-card"
   x-data='{
@@ -13,10 +14,12 @@
       const needle = this.q.toLowerCase();
       return this.users.some(u => u.display_name.toLowerCase() === needle);
     },
+    confirming: {{ (confirm or none) | tojson }},
     claim(id) {
       htmx.ajax("POST", "/onboard/claim/" + id, { target: "#app", swap: "innerHTML" });
     }
   }'
+  @keydown.escape.window="confirming = null"
 >
   <header>
     <h1>Welcome to {{ app_name }}</h1>
@@ -59,7 +62,7 @@
         <li>
           <span class="who"><strong x-text="u.display_name"></strong><span x-text="u.drink_line ? ' — ' + u.drink_line : ''"></span></span>
           <span class="row-actions">
-            <button type="button" class="row-action" @click="claim(u.id)">That&apos;s me</button>
+            <button type="button" class="row-action" @click="confirming = u">That&apos;s me</button>
           </span>
         </li>
       </template>
@@ -93,6 +96,22 @@
       name and order you choose.</small>
     </p>
   </form>
+
+  {# Choosing a name signs this device in as that person, so the person
+     and their drink are shown first. A name typed in full that is already
+     on the list opens the same card (confirm, from POST /me/name). #}
+  <dialog :open="!!confirming" @click.self="confirming = null">
+    <article x-show="confirming">
+      <ul class="share-cells person-card">
+        <li>{{ icon("person") }}<span x-text="confirming && confirming.display_name"></span></li>
+        <li :class="{ 'is-missing': !(confirming && confirming.drink_line) }">{{ icon("cup") }}<span x-text="confirming && (confirming.drink_line || 'No usual drink yet')"></span></li>
+      </ul>
+      <footer>
+        <button type="button" class="secondary outline" @click="confirming = null">Cancel</button>
+        <button type="button" @click="claim(confirming.id)" x-text="confirming && 'I am ' + confirming.display_name"></button>
+      </footer>
+    </article>
+  </dialog>
 
   <p x-show="!q && users.length === 0" x-cloak class="muted">
     <small>No one&apos;s added a coffee yet. Type your name to get started.</small>

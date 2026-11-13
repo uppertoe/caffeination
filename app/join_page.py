@@ -19,10 +19,11 @@ from sqlmodel import Session
 from app import joining, sharing
 from app.config import get_settings
 from app.db import get_session
-from app.drinks import format_line, normalize
-from app.identity import read_identity
+from app.drinks import HISTORY_FIELDS, format_line, normalize, upsert_saved_drink
+from app.identity import read_identity, set_identity
 from app.joining import Joiner
 from app.models import Order, SavedDrink, User
+from app.users import create_named_user, find_user_by_display_name
 
 MODES = ("usual", "oneoff", "guest", "new_usual", "colleague", "change", "location")
 STATUS_TITLES = {"ordered": "Ordered", "on_the_way": "On the way", "ready": "Ready", "cancelled": "Cancelled"}
@@ -280,6 +281,91 @@ def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[
             return loaded
         order, joiner, cookie = loaded
         return _page(request, session, order, joiner, cookie, mode=mode or None, poll_version=v)
+
+    # ---- /join/save/<code>: a guest keeps their drink as their usual ---------
+    # Behind the gateway off the hospital network (unlike /j/), so only staff
+    # join the roster. The join link itself never gives an app identity.
+
+    def _saving_guest(request: Request, session: Session, code: str):
+        """(guest, their drink) for this device's own guest line in the
+        order, or None. None too once the device is signed in."""
+        if joining.identity_user(session, read_identity(request)) is not None:
+            return None
+        normal = sharing.normalise_code(code)
+        cookie = joining.read_join_cookie(request)
+        order = (
+            joining.find_order_by_code(session, normal, known=frozenset(cookie.orders))
+            if normal else None
+        )
+        self_id = cookie.self_for(order) if order is not None else None
+        guest = session.get(User, self_id) if self_id else None
+        drink = session.get(SavedDrink, self_id) if self_id else None
+        if guest is None or not guest.one_off or not guest.display_name or drink is None:
+            return None
+        return guest, drink
+
+    def _save_as(request: Request, session: Session, person: User, drink: SavedDrink):
+        upsert_saved_drink(session, person.id, {f: getattr(drink, f) for f in HISTORY_FIELDS})
+        set_identity(request, person.id)
+        return RedirectResponse("/", status_code=303)
+
+    def _name_taken(request, session, code, guest, drink, existing, *, typed=None, error=None, status=200):
+        """The guest's name is already on the roster: the existing person's
+        drink and the guest's side by side, to claim the name or choose
+        another."""
+        theirs = session.get(SavedDrink, existing.id)
+        same = theirs is not None and all(getattr(theirs, f) == getattr(drink, f) for f in HISTORY_FIELDS)
+        ctx = {
+            **_base_ctx(),
+            "page_title": "Save your usual drink",
+            "code": code,
+            "name": existing.display_name,
+            "old_drink": _line(theirs) if theirs else None,
+            "new_drink": _line(drink),
+            "same": same,
+            "typed": guest.display_name if typed is None else typed,
+            "error": error,
+        }
+        return templates.TemplateResponse(request, "join_save.html", ctx, status_code=status)
+
+    @app.get("/join/save/{code}")
+    def join_save_usual(request: Request, code: str, session: Session = Depends(get_session)):
+        found = _saving_guest(request, session, code)
+        if found is None:
+            return RedirectResponse("/", status_code=303)
+        guest, drink = found
+        existing = find_user_by_display_name(session, guest.display_name)
+        if existing is not None:
+            return _name_taken(request, session, code, guest, drink, existing)
+        return _save_as(request, session, create_named_user(session, guest.display_name), drink)
+
+    @app.post("/join/save/{code}/claim")
+    def join_save_claim(request: Request, code: str, session: Session = Depends(get_session)):
+        """"I am Tom": this device becomes the roster's Tom, whose usual drink
+        becomes the guest's. The old drink stays in the drink history."""
+        found = _saving_guest(request, session, code)
+        if found is None:
+            return RedirectResponse("/", status_code=303)
+        guest, drink = found
+        existing = find_user_by_display_name(session, guest.display_name)
+        if existing is None:
+            existing = create_named_user(session, guest.display_name)
+        return _save_as(request, session, existing, drink)
+
+    @app.post("/join/save/{code}/new")
+    async def join_save_new(request: Request, code: str, session: Session = Depends(get_session)):
+        found = _saving_guest(request, session, code)
+        if found is None:
+            return RedirectResponse("/", status_code=303)
+        guest, drink = found
+        typed = str((await request.form()).get("display_name", "")).strip()[:40]
+        existing = find_user_by_display_name(session, guest.display_name)
+        if not typed or find_user_by_display_name(session, typed) is not None:
+            if existing is None:  # the guest's own name came free meanwhile
+                return RedirectResponse(f"/join/save/{code}", status_code=303)
+            error = "Please enter your name." if not typed else "That name is already on the list."
+            return _name_taken(request, session, code, guest, drink, existing, typed=typed, error=error, status=422)
+        return _save_as(request, session, create_named_user(session, typed), drink)
 
     _REFUSALS = {
         "joiner_max": "Each person can add up to two drinks.",

@@ -96,6 +96,11 @@ def order_section_ctx(session: Session, user: User, order_id: Optional[int] = No
         # For the order bar pinned to the foot of the screen on a phone.
         "drink_count": drink_count,
         "share": share,
+        # Drinks added by code, for the tab's "has added a drink" notices.
+        "code_joins": [
+            {"id": row.user.id, "name": row.user.display_name or "A colleague", "drink": row.line}
+            for row in view.rows if row.via_code
+        ],
         "row_groups": _row_groups(view.rows, share),
         # Polled while the order is shared and open, so drinks added by code
         # appear without a reload (see GET /order/live).

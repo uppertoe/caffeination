@@ -1078,3 +1078,149 @@ def test_the_share_panel_offers_the_join_link_to_copy():
         home = sarah.get("/")
     assert "Copy link" in home.text and "Share link" in home.text
     assert f"http://testserver/j/{code}" in home.text
+
+
+# ---- A guest keeping their drink as their usual ----------------------------
+
+
+def test_a_guest_can_save_their_drink_as_their_usual():
+    from app.db import get_engine
+    from app.models import SavedDrink
+
+    with _client() as sarah, _client() as tom:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        page = tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "long_black"})
+        assert f'<a href="/join/save/{code}">Save this as my usual drink</a>' in page.text
+        r = tom.get(f"/join/save/{code}", follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/"
+        home = T(tom.get("/"))
+        tom_id = _user_id_by_name("Tom")
+        with Session(get_engine()) as s:
+            assert s.get(SavedDrink, tom_id).base_id == "long_black"
+        # Signed in as Tom now, so the join page offers his usual drink and
+        # no longer the link.
+        assert "Tom" in home
+        assert "Save this as my usual drink" not in tom.get(f"/j/{code}").text
+        again = tom.get(f"/join/save/{code}", follow_redirects=False)
+        assert again.headers["location"] == "/"
+    # The guest line in Sarah's order stays a guest.
+    assert len([i for i in _items() if i.joined_by is not None]) == 1
+
+
+def _taken_name_setup(sarah, tom, old_tom):
+    _onboard(old_tom, "Tom", base_id="flat_white")
+    _onboard(sarah, "Sarah", base_id="flat_white")
+    code = _share(sarah)
+    tom.post(f"/j/{code}/guest", data={"display_name": "tom", "base_id": "long_black"})
+    return code
+
+
+def test_a_taken_name_shows_the_drink_that_would_be_replaced():
+    with _client() as sarah, _client() as tom, _client() as old_tom:
+        code = _taken_name_setup(sarah, tom, old_tom)
+        r = tom.get(f"/join/save/{code}")
+    page = T(r)
+    assert r.status_code == 200 and "<h1>Tom is already on the list.</h1>" in page
+    assert '<s class="person-card-old">flat white</s>' in page and "long black" in page
+    assert "I am Tom, so replace the drink</button>" in page
+    assert 'value="tom"' in page and "Back to the order" in page
+
+
+def test_i_am_tom_replaces_the_existing_persons_drink():
+    from app.db import get_engine
+    from app.models import SavedDrink
+
+    with _client() as sarah, _client() as tom, _client() as old_tom:
+        code = _taken_name_setup(sarah, tom, old_tom)
+        r = tom.post(f"/join/save/{code}/claim", follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/"
+        assert "Hi, Tom" in T(tom.get("/"))
+    tom_id = _user_id_by_name("Tom")
+    with Session(get_engine()) as s:
+        assert s.get(SavedDrink, tom_id).base_id == "long_black"
+
+
+def test_a_different_tom_saves_under_another_name():
+    with _client() as sarah, _client() as tom, _client() as old_tom:
+        code = _taken_name_setup(sarah, tom, old_tom)
+        taken = tom.post(f"/join/save/{code}/new", data={"display_name": "TOM"})
+        assert taken.status_code == 422 and "That name is already on the list." in T(taken)
+        empty = tom.post(f"/join/save/{code}/new", data={"display_name": " "})
+        assert empty.status_code == 422 and "Please enter your name." in T(empty)
+        r = tom.post(f"/join/save/{code}/new", data={"display_name": "Tom B"}, follow_redirects=False)
+        assert r.headers["location"] == "/"
+        assert "Hi, Tom B" in T(tom.get("/"))
+    assert _user_id_by_name("Tom") != _user_id_by_name("Tom B")
+
+
+def test_a_matching_drink_only_asks_who_you_are():
+    with _client() as sarah, _client() as tom, _client() as old_tom:
+        _onboard(old_tom, "Tom", base_id="long_black")
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "long_black"})
+        page = T(tom.get(f"/join/save/{code}"))
+    assert "<s " not in page and "→" not in page and "I am Tom</button>" in page
+
+
+def test_saving_a_usual_needs_a_guest_line_on_this_device():
+    with _client() as sarah, _client() as stranger:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        r = stranger.get(f"/join/save/{code}", follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/"
+        assert stranger.get("/join/save/BKTWQV", follow_redirects=False).status_code == 303
+    from app.db import get_engine
+    from app.models import User
+
+    with Session(get_engine()) as s:
+        assert len(s.exec(select(User).where(User.display_name != None)).all()) == 1  # noqa: E711
+
+
+# ---- The buyer: replacing the code, and notices of new drinks ------------------
+
+
+def test_replacing_the_code_is_confirmed_in_a_dialog():
+    with _client() as sarah:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        _share(sarah)
+        panel = T(sarah.get("/"))
+    assert '@click="confirming = true"' in panel
+    assert "Colleagues who have not joined yet will no longer be able to use the current code or link." in panel
+    dialog = panel.split('class="share-replace-dialog"', 1)[1].split("</dialog>", 1)[0]
+    assert 'hx-post="/order/code/replace">Replace the code</button>' in dialog
+
+
+def test_the_share_panel_lists_drinks_added_by_code_for_notices():
+    import json
+
+    with _client() as sarah, _client() as tom:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        empty = sarah.get("/").text
+        assert "data-joins='[]'" in empty
+        assert "Notify me when a colleague adds a drink" in empty
+        tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "long_black"})
+        home = sarah.get("/").text
+    joins = json.loads(html.unescape(re.search(r"data-joins='([^']*)'", home).group(1)))
+    assert [(j["name"], "long black" in j["drink"].lower()) for j in joins] == [("Tom", True)]
+
+
+def test_the_service_worker_is_served_from_the_root():
+    with _client() as c:
+        r = c.get("/sw.js")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/javascript")
+    assert "showNotification" not in r.text and "notificationclick" in r.text
+
+
+def test_adding_someone_whose_name_is_taken_offers_that_person():
+    with _client() as sarah, _client() as tom:
+        _onboard(tom, "Tom", base_id="long_black")
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        page = sarah.get("/").text
+    import json
+
+    existing = json.loads(html.unescape(re.search(r"existing: (\{.*\}),\n", page).group(1)))
+    assert existing["tom"] == {"id": _user_id_by_name("Tom"), "name": "Tom", "drink": "long black"}
+    assert "' to the order'" in page and "/order/add/' + taken.id" in page

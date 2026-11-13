@@ -1,0 +1,10 @@
+{# Inside the Delete dialog of the dashboard header (GET /me/delete): the
+   person, their drink and the open orders they would leave. #}
+{% from "_person_card.html" import person_card %}
+<header><strong>Delete {{ user.display_name }}?</strong></header>
+{{ person_card(user.display_name, drink, extra=([("people", "Removed from " ~ number_word(open_orders) ~ " open " ~ ("order" if open_orders == 1 else "orders"))] if open_orders else [])) }}
+<p>It can't be undone.</p>
+<footer>
+  <button type="button" class="secondary outline" @click="confirmingDelete = false">Cancel</button>
+  <button type="button" class="danger-solid" hx-post="/me/delete" hx-target="#app" hx-swap="innerHTML">Delete</button>
+</footer>

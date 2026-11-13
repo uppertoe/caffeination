@@ -65,7 +65,18 @@ def test_duplicate_name_rejected_case_insensitive():
         wannabe.get("/")
         r = wannabe.post("/me/name", data={"display_name": "ALICE"})
     assert r.status_code == 409
-    assert "already taken" in r.text
+    # The list opens on Alice's card, to choose her or type another name.
+    assert '"display_name": "Alice"' in r.text and "confirming: {" in r.text
+    assert "I am " in r.text
+
+
+def test_choosing_a_name_on_the_list_shows_the_person_first():
+    with _client() as alice, _client() as visitor:
+        alice.get("/")
+        alice.post("/me/name", data={"display_name": "Alice"})
+        page = visitor.get("/").text
+    assert '@click="confirming = u">That&apos;s me</button>' in page
+    assert "confirming: null" in page and '@click="claim(confirming.id)"' in page
 
 
 def test_claim_existing_user_rebinds_cookie():
@@ -192,3 +203,25 @@ def test_init_db_purges_legacy_unnamed_rows():
         with Session(get_engine()) as s:
             assert [u.display_name for u in s.exec(select(User)).all()] == ["Sam"]
             assert s.get(SavedDrink, "legacy-ghost") is None
+
+
+def test_the_delete_dialog_shows_the_person_and_their_open_orders():
+    with _client() as alice, _client() as bob:
+        alice.get("/")
+        alice.post("/me/name", data={"display_name": "Alice"})
+        alice.post("/me/drink", data={"base_id": "latte"})
+        bob.get("/")
+        bob.post("/me/name", data={"display_name": "Bob"})
+        none = alice.get("/me/delete").text
+        assert "Delete Alice?" in none and "latte" in none and "open order" not in none
+        from sqlmodel import Session, select
+
+        from app.db import get_engine
+        from app.models import User
+
+        with Session(get_engine()) as s:
+            alice_id = s.exec(select(User).where(User.display_name == "Alice")).first().id
+        bob.post(f"/order/add/{alice_id}")
+        one = alice.get("/me/delete").text
+    assert "Removed from one open order" in one
+    assert 'hx-post="/me/delete"' in one

@@ -58,6 +58,7 @@
   id="share-panel"
   class="share-panel{% if share.placed %} is-placed{% elif share.closed %} is-closed{% elif share.full %} is-full{% endif %}"
   {% if oob %}hx-swap-oob="true"{% endif %}
+  {% if code_joins is defined %}data-joins='{{ code_joins | tojson }}' data-order="{{ ob }}"{% endif %}
   hx-target="#share-panel"
   hx-swap="outerHTML"
   x-data='{ changing: {{ (closing_error is defined and closing_error is not none) | tojson }} }'
@@ -101,6 +102,14 @@
       <span x-show="!sheet && !copied">Copy link</span>
       <span x-show="!sheet && copied" x-cloak>Copied ✓</span>
     </button>
+    {# Notices while this page is open (coffee.js). Hidden where the browser
+       has no notifications, such as Safari on an iPhone outside the home
+       screen app. #}
+    <div class="share-notify" x-data="caffeineNotify()" x-show="supported" x-cloak>
+      <button type="button" class="link-button" x-show="permission === 'default'" @click="ask()">Notify me when a colleague adds a drink</button>
+      <p x-show="permission === 'granted'">This tab will notify you when a colleague adds a drink.</p>
+      <p x-show="permission === 'denied'">Your browser is blocking notifications from this site.</p>
+    </div>
   </div>
   {% endif %}
   <ul class="share-cells">
@@ -157,15 +166,29 @@
   {% if share.by_code or share.kind == "advance" %}{{ update_form(share) }}{% endif %}
   {% if live %}
   {# The poll. It lives in this panel, so each swap brings a fresh version
-     and the poll stops when the order is no longer shared and open. #}
+     and the poll stops when the order is no longer shared and open. It
+     slows down rather than stopping in a background tab, so that the tab
+     title and notifications can tell the buyer about new drinks. #}
   <div hidden
     hx-get="{{ ob }}/live?v={{ live_version }}"
-    hx-trigger="every 5s [document.visibilityState === 'visible'], visibilitychange[document.visibilityState === 'visible'] from:document"
+    hx-trigger="every 5s [document.visibilityState === 'visible'], every 20s [document.visibilityState !== 'visible'], visibilitychange[document.visibilityState === 'visible'] from:document"
     hx-swap="none"></div>
   {% endif %}
-  <div class="share-replace">
+  <div class="share-replace" x-data="{ confirming: false }">
     <span id="share-replace-label">Replace the code</span>
-    <button type="button" class="secondary outline icon-circle" aria-labelledby="share-replace-label" hx-post="{{ ob }}/code/replace">{{ icon("refresh") }}</button>
+    <button type="button" class="secondary outline icon-circle" aria-labelledby="share-replace-label" @click="confirming = true">{{ icon("refresh") }}</button>
+    {# Replacing shuts out anyone who has the old code but has not joined,
+       so the buyer confirms first. #}
+    <dialog class="share-replace-dialog" :open="confirming" @click.self="confirming = false" @keydown.escape.window="confirming = false">
+      <article>
+        <header><h2>Replace the code</h2></header>
+        <p>Colleagues who have not joined yet will no longer be able to use the current code or link. Colleagues who have already joined keep their page. Once the code is replaced, you can share the new code or link.</p>
+        <footer>
+          <button type="button" class="secondary outline" @click="confirming = false">Cancel</button>
+          <button type="button" hx-post="{{ ob }}/code/replace">Replace the code</button>
+        </footer>
+      </article>
+    </dialog>
   </div>
   {% endif %}
 </article>

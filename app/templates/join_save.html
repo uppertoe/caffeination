@@ -1,0 +1,32 @@
+{#
+  A guest saving their drink as their usual (GET /join/save/<code>) when
+  their name is already on the roster. The existing person's drink and the
+  guest's are shown side by side: the guest either claims the name, which
+  replaces that drink, or saves under another name.
+#}
+{% extends "base.html" %}
+{% from "_person_card.html" import person_card %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<section class="join-body">
+  <article class="join-save">
+    <header><h1>{{ name }} is already on the list.</h1></header>
+    {{ person_card(name, old_drink, new_drink) }}
+    <form method="post" action="/join/save/{{ code }}/claim">
+      <button type="submit">{{ "I am " ~ name if same else "I am " ~ name ~ ", so replace the drink" }}</button>
+    </form>
+    <p class="join-save-or"><span>or</span></p>
+    <form method="post" action="/join/save/{{ code }}/new" class="join-save-new">
+      <label for="save-name">Your name:</label>
+      <div role="group">
+        <input id="save-name" name="display_name" value="{{ typed }}" maxlength="40" autocomplete="name"{% if error %} aria-invalid="true" aria-describedby="save-name-error"{% endif %}>
+        <button type="submit" class="secondary">Save</button>
+      </div>
+      {% if error %}<small id="save-name-error">{{ error }}</small>{% endif %}
+    </form>
+    <p class="join-back"><a href="/j/{{ code }}" class="back-link">Back to the order</a></p>
+  </article>
+</section>
+{% endblock %}
