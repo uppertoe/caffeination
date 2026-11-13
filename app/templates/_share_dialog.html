@@ -6,7 +6,7 @@
   this slot; planning goes to the new order's page.
 #}
 {% set advance = share_form.advance %}
-<dialog open class="new-person-dialog share-dialog"
+<dialog open class="new-person-dialog share-dialog{% if advance %} advance-ui{% endif %}"
   x-data='{ open: true, when: {{ share_form.when | tojson }} }'
   :open="open" @click.self="open = false" @keydown.escape.window="open = false">
   <article>

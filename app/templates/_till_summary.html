@@ -38,7 +38,7 @@
   {% if drink_count %}
   <div class="sheet-scrim" x-show="open" x-cloak @click="open = false"></div>
   <button type="button" class="order-bar" @click="open = !open" :aria-expanded="open.toString()" aria-controls="till-summary">
-    <span>This order: <strong>{{ drink_count }} {{ "drink" if drink_count == 1 else "drinks" }}</strong></span>
+    <span>{{ order.name ~ ":" if order_id is not none and order and order.name else "This order:" }} <strong>{{ drink_count }} {{ "drink" if drink_count == 1 else "drinks" }}</strong></span>
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 15 6-6 6 6" /></svg>
   </button>
   {% endif %}

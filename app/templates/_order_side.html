@@ -29,7 +29,7 @@
       return needle && this.names.concat(this.inactive).every(n => !n.includes(needle));
     }
   }'>
-    <header><h2>Add to your order</h2></header>
+    <header><h2>{{ "Add to the " ~ order.name ~ " order" if order_id is not none and order and order.name else "Add to your order" }}</h2></header>
     <button type="button" class="secondary outline add-new-btn" @click="$dispatch('open-new-person')">Add a person or a one-off order</button>
     {% if not roster and not roster_inactive %}
       <p><em>No one else has saved a drink yet.</em></p>

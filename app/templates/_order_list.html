@@ -1,8 +1,12 @@
 {# "Your order" — one of the two articles an Add re-renders out of band (see
  _roster_toggle.html), so it carries an id and an optional hx-swap-oob flag. #}
 {% from "_icons.html" import icon %}
-<article id="order-list"{% if oob %} hx-swap-oob="true"{% endif %}>
-  <header><h2>Your order</h2></header>
+{# frozen: the order just completed with Ready, kept on screen exactly as
+   it was (its buttons disabled, so nothing changes size) until the buyer
+   starts a new one. #}
+{% set frozen = frozen is defined and frozen %}
+<article id="order-list"{% if oob %} hx-swap-oob="true"{% endif %} data-drinks="{{ drink_count }}">
+  <header><h2>{{ order.name ~ " order" if order_id is not none and order and order.name else "Your order" }}</h2></header>
   {% if not rows and not self_excluded %}
     <p><em>Save your usual drink above, then add colleagues from the roster.</em></p>
   {% else %}
@@ -11,7 +15,7 @@
       <li>
         <span class="who muted"><em>You&rsquo;re not in this order.</em></span>
         <span class="row-actions">
-          <button
+          <button{% if frozen %} disabled{% endif %}
             type="button"
             class="row-action"
             hx-post="{{ ob }}/add/{{ user.id }}"
@@ -26,7 +30,7 @@
         <span class="who"><strong>{{ row.user.display_name }}</strong> — {{ row.line }}{% set one_off_tag = row.one_off_drink or (row.user.one_off and not row.via_code) %}{% if one_off_tag or row.via_code %} <span class="row-marks">{% if one_off_tag %}<small class="tag">one-off</small>{% endif %}{% if row.via_code %}<span class="via-code" title="Added with the join code">{{ icon("code") }}<span class="visually-hidden">Added with the join code</span></span>{% endif %}</span>{% endif %}</span>
         <span class="row-actions">
           {% if not row.is_self and row.can_edit %}
-          <button
+          <button{% if frozen %} disabled{% endif %}
             type="button"
             class="secondary outline row-action"
             hx-get="/people/{{ row.user.id }}/edit{{ oq }}"
@@ -35,7 +39,7 @@
           {# Swaps nothing in place: the order list, the till summary and the
              person's roster row come back out of band, so the rest of the
              page, roster included, stays exactly where it was. #}
-          <button
+          <button{% if frozen %} disabled{% endif %}
             type="button"
             class="secondary outline row-action"
             hx-post="{{ ob }}/remove/{{ row.user.id }}?from=list"
@@ -55,18 +59,18 @@
       {% if joined %}
       {# O6: people who joined by code will be told the order was cancelled,
          so clearing asks first, in the page rather than a browser dialog. #}
-      <button type="button" class="secondary outline row-action" x-show="!confirming" @click="confirming = true">Clear the order</button>
+      <button{% if frozen %} disabled{% endif %} type="button" class="secondary outline row-action" x-show="!confirming" @click="confirming = true">Clear the order</button>
       <div class="clear-confirm" x-show="confirming" x-cloak>
         <p class="share-note is-alert">
           {{- number_word(joined) | capitalize }} {{ "colleague has" if joined == 1 else "colleagues have" }} joined this order. If you clear it, they will see that the order has been cancelled.
         </p>
         <div class="share-actions">
-          <button type="button" class="danger" hx-post="{{ ob }}/clear">Clear the order</button>
-          <button type="button" class="secondary outline" @click="confirming = false">Keep the order</button>
+          <button{% if frozen %} disabled{% endif %} type="button" class="danger" hx-post="{{ ob }}/clear">Clear the order</button>
+          <button{% if frozen %} disabled{% endif %} type="button" class="secondary outline" @click="confirming = false">Keep the order</button>
         </div>
       </div>
       {% else %}
-      <button
+      <button{% if frozen %} disabled{% endif %}
         type="button"
         class="secondary outline row-action"
         hx-post="{{ ob }}/clear"

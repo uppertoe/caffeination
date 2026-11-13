@@ -464,3 +464,16 @@ def test_the_same_add_twice_at_once_adds_one_line(monkeypatch):
     assert r.status_code == 200
     with Session(get_engine()) as s:
         assert len(s.exec(select(OrderItem)).all()) == 1
+
+
+def test_the_dashboard_has_a_section_bar_with_the_drink_count():
+    with _client() as alice, _client() as bob:
+        _onboard(alice, "Alice", base_id="latte")
+        _onboard(bob, "Bob", base_id="flat_white")
+        bob.post(f"/order/add/{_user_id_by_name('Alice')}")
+        r = bob.get("/")
+    nav = r.text.split('<nav class="dash-sections"', 1)[1].split("</nav>", 1)[0]
+    for href, label in (("#dash-you", "You"), ("#order-list", "Order"), ("#share-panel", "Shared"), ("#roster-picker", "Add")):
+        assert f'<a href="{href}">{label}' in nav
+    assert 'data-drink-count>2</span>' in nav
+    assert 'id="dash-you"' in r.text and 'data-drinks="2"' in r.text

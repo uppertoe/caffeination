@@ -182,7 +182,7 @@ def test_closing_and_reopening_joins():
         closed = me.post("/order/joins/close")
         assert 'aria-current="step">Locked</li>' in closed.text
         assert "Closed at" in closed.text and "Reopen for 15 minutes" in closed.text
-        assert "Colleagues can add a drink with this code:" not in closed.text
+        assert 'class="share-code"' in closed.text
         reopened = me.post("/order/joins/extend")
     assert "Joins close at" in reopened.text
     closes = _order("Me").joins_close_at.replace(tzinfo=timezone.utc)

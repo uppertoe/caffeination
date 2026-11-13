@@ -95,7 +95,13 @@ def test_an_advance_order_has_its_own_page_and_leaves_the_everyday_order_alone()
         oid = _plan(sarah, location="Seminar room 2")
         page = T(sarah.get(f"/orders/{oid}"))
         assert "<h1>Tuesday education meeting</h1>" in page
-        assert "Back to the home page" in page
+        # A separate session: its own palette, the band with the way back,
+        # and headings that name the order.
+        assert '<html lang="en" class="is-advance">' in page
+        assert '<span>Back to your order</span>' in page and '<span class="advance-label">Advance order</span>' in page
+        assert "Closes " in page and "<h2>Tuesday education meeting order</h2>" in page
+        assert "Add to the Tuesday education meeting order" in page
+        assert '<nav class="dash-sections dash-sections-three"' in page and 'href="#dash-you"' not in page
         assert 'class="share-code-text"' in page
         assert "Change closing time" in page and "Allow 15 more minutes" not in page
         assert "Seminar room 2" in page
@@ -178,7 +184,7 @@ def test_ready_on_an_advance_order_completes_it_and_its_page_goes_home():
         oid = _plan(sarah)
         tom.post(f"/j/{_order(oid).code}/guest", data={"display_name": "Tom", "base_id": "latte"})
         page = T(sarah.get(f"/orders/{oid}"))
-        assert "Lock the order" in page and f'hx-post="/orders/{oid}/status"' not in page
+        assert "Lock the order" in page and '<form class="share-update is-off"' in page
         locked = T(sarah.post(f"/orders/{oid}/joins/close"))
         assert f'hx-post="/orders/{oid}/status"' in locked and "Tell colleagues it is ready" in locked
         done = T(sarah.post(f"/orders/{oid}/status", data={"status": "ready"}))

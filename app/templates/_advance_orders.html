@@ -3,7 +3,7 @@
    everyday order's section only. #}
 {% from "_icons.html" import icon %}
 {% if advance %}
-<article id="advance-orders"{% if oob %} hx-swap-oob="true"{% endif %}>
+<article id="advance-orders" class="advance-ui"{% if oob %} hx-swap-oob="true"{% endif %}>
   <header><h2>Advance orders</h2></header>
   <ul class="advance-list">
     {% for oid, a in advance %}

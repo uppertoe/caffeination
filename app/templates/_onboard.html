@@ -15,6 +15,7 @@
       return this.users.some(u => u.display_name.toLowerCase() === needle);
     },
     confirming: {{ (confirm or none) | tojson }},
+    typedTaken: {{ (confirm is defined and confirm is not none) | tojson }},
     claim(id) {
       htmx.ajax("POST", "/onboard/claim/" + id, { target: "#app", swap: "innerHTML" });
     }
@@ -62,7 +63,7 @@
         <li>
           <span class="who"><strong x-text="u.display_name"></strong><span x-text="u.drink_line ? ' — ' + u.drink_line : ''"></span></span>
           <span class="row-actions">
-            <button type="button" class="row-action" @click="confirming = u">That&apos;s me</button>
+            <button type="button" class="row-action" @click="confirming = u; typedTaken = false">That&apos;s me</button>
           </span>
         </li>
       </template>
@@ -102,6 +103,8 @@
      on the list opens the same card (confirm, from POST /me/name). #}
   <dialog :open="!!confirming" @click.self="confirming = null">
     <article x-show="confirming">
+      {# Chosen from the list, or a name typed in full that is taken. #}
+      <header><strong x-text="confirming && (typedTaken ? confirming.display_name + ' is already on the list.' : 'Continue as ' + confirming.display_name)"></strong></header>
       <ul class="share-cells person-card">
         <li>{{ icon("person") }}<span x-text="confirming && confirming.display_name"></span></li>
         <li :class="{ 'is-missing': !(confirming && confirming.drink_line) }">{{ icon("cup") }}<span x-text="confirming && (confirming.drink_line || 'No usual drink yet')"></span></li>

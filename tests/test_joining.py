@@ -573,18 +573,21 @@ def _set_closed_at(hours_ago: float):
         s.commit()
 
 
-def test_lock_then_tell_colleagues_once_someone_joins_by_code():
+def test_lock_then_tell_colleagues_steps_never_move():
+    """Both steps are always in the panel; the one that does not apply is
+    greyed out (disabled), so locking or reopening never moves the page."""
     with _client() as sarah, _client() as tom:
         _onboard(sarah, "Sarah", base_id="flat_white")
         code = _share(sarah)
         open_page = T(sarah.get("/"))
         assert 'aria-current="step">Taking drinks</li>' in open_page and "Lock the order" in open_page
-        assert "Tell colleagues it is ready" not in T(sarah.post("/order/joins/close"))
-        sarah.post("/order/joins/extend")
+        assert '<form class="share-update is-off"' in open_page and "<fieldset disabled>" in open_page
+        assert 'class="share-code"' in open_page
         tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
-        assert "Tell colleagues it is ready" not in T(sarah.get("/"))  # lock first
         locked = T(sarah.post("/order/joins/close"))
     assert 'aria-current="step">Locked</li>' in locked
+    assert '<form class="share-update"' in locked and "<fieldset>" in locked
+    assert 'class="share-code"' in locked  # kept, so locking never moves the page
     assert "Tell colleagues it is ready" in locked and "Reopen for 15 minutes" in locked
     assert "Ordered" not in locked.split('class="share-stages"')[1].split("</ol>")[0]
 
@@ -1192,7 +1195,8 @@ def test_replacing_the_code_is_confirmed_in_a_dialog():
         _share(sarah)
         panel = T(sarah.get("/"))
     assert '@click="confirming = true"' in panel
-    assert "Colleagues who have not joined yet will no longer be able to use the current code or link." in panel
+    assert "Colleagues who have not joined will need the new code." in panel
+    assert 'class="share-cells replace-old"' in panel and "<s>" in panel
     dialog = panel.split('class="share-replace-dialog"', 1)[1].split("</dialog>", 1)[0]
     assert 'hx-post="/order/code/replace">Replace the code</button>' in dialog
 
@@ -1294,3 +1298,20 @@ def test_a_joiner_changes_a_colleagues_drink():
     with Session(get_engine()) as s:
         assert s.get(SavedDrink, ben).base_id == "long_black"
         assert s.get(SavedDrink, _user_id_by_name("Tom")).base_id == "latte"
+
+
+def test_ready_keeps_the_order_on_screen():
+    with _client() as sarah, _client() as tom:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
+        sarah.post("/order/joins/close")
+        r = T(sarah.post("/order/status", data={"status": "ready"}, headers={"HX-Target": "share-panel", "HX-Request": "true"}))
+        assert 'aria-current="step">Ready</li>' in r and "<span>Close</span>" in r
+        assert 'hx-get="/order" hx-target="#order-section"' in r
+        frozen = r.split('<article id="order-list" hx-swap-oob="true"', 1)[1]
+        frozen = frozen.split("</article>", 1)[0]
+        assert "<strong>Tom</strong>" in frozen and "Remove" in frozen
+        assert frozen.count("<button") == frozen.count("<button disabled")  # kept, but inert
+        # The order itself is complete: the next page load starts afresh.
+        assert "<strong>Tom</strong>" not in T(sarah.get("/")).split('id="order-list"', 1)[1].split("</article>", 1)[0]
