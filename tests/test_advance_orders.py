@@ -169,7 +169,7 @@ def test_the_closing_time_can_be_moved_or_closed_at_once():
         r = sarah.post(f"/orders/{oid}/closing", data={"closes_at": too_far})
         assert r.status_code == 422 and "The closing time can be at most seven days ahead." in T(r)
         r = T(sarah.post(f"/orders/{oid}/closing", data={"closes_at": "2020-01-01T09:00"}))
-    assert "This order is closed to new drinks." in r
+    assert 'aria-current="step">Locked</li>' in r
 
 
 def test_ready_on_an_advance_order_completes_it_and_its_page_goes_home():
@@ -178,7 +178,9 @@ def test_ready_on_an_advance_order_completes_it_and_its_page_goes_home():
         oid = _plan(sarah)
         tom.post(f"/j/{_order(oid).code}/guest", data={"display_name": "Tom", "base_id": "latte"})
         page = T(sarah.get(f"/orders/{oid}"))
-        assert f'hx-post="/orders/{oid}/status"' in page
+        assert "Lock the order" in page and f'hx-post="/orders/{oid}/status"' not in page
+        locked = T(sarah.post(f"/orders/{oid}/joins/close"))
+        assert f'hx-post="/orders/{oid}/status"' in locked and "Tell colleagues it is ready" in locked
         done = T(sarah.post(f"/orders/{oid}/status", data={"status": "ready"}))
         assert "This order is complete." in done and "Back to the home page" in done
         assert _order(oid).status == "ready"
@@ -257,7 +259,9 @@ def test_an_advance_order_no_one_joined_can_still_be_placed_or_cleared():
         _onboard(sarah, "Sarah", base_id="flat_white")
         oid = _plan(sarah)
         page = T(sarah.get(f"/orders/{oid}"))
-    assert f'hx-post="/orders/{oid}/status"' in page
+        locked = T(sarah.post(f"/orders/{oid}/joins/close"))
+    assert f'hx-post="/orders/{oid}/joins/close"' in page
+    assert f'hx-post="/orders/{oid}/status"' in locked  # Ready, though no one joined
     assert f'hx-post="/orders/{oid}/clear"' in page
     assert "Drinks allowed:" in page  # the cap, before the order is full
 

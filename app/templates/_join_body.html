@@ -223,7 +223,7 @@
       {% elif full %}
       <p class="share-note">{{ owner_possessive }} order has reached its limit of drinks. {{ "Your drinks are" if lines | length > 1 else "Your drink is" }} still in the order.</p>
       {% elif not accepting %}
-      <p class="share-note">{{ owner_possessive }} order is closed to new drinks. {{ "Your drinks are" if lines | length > 1 else "Your drink is" }} still in the order.</p>
+      <p class="share-note">{{ owner_name }} has locked the order. {{ "Your drinks are" if lines | length > 1 else "Your drink is" }} in it.</p>
       {% elif self_line and self_line.added_by_buyer and not self_line.one_off_drink %}
       <p class="share-note is-ok">{{ owner_name }} has already added your usual drink to the order.</p>
       {% elif not self_line and lines | length == 1 %}

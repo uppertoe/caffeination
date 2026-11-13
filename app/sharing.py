@@ -179,6 +179,9 @@ def extend_joins(session: Session, order: Order) -> None:
 
 
 def close_joins(session: Session, order: Order) -> None:
+    """Lock the order: no new drinks, and no changes to those already in.
+    Usual drinks are fixed as they stand, as Ordered used to do."""
+    _fix_usual_drinks(session, order)
     order.joins_close_at = _now()
     session.add(order)
     session.commit()

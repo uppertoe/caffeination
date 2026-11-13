@@ -180,7 +180,7 @@ def test_closing_and_reopening_joins():
         _onboard(me, "Me", base_id="latte")
         me.post("/order/share", data={"when": "soon"})
         closed = me.post("/order/joins/close")
-        assert "This order is closed to new drinks." in closed.text
+        assert 'aria-current="step">Locked</li>' in closed.text
         assert "Closed at" in closed.text and "Reopen for 15 minutes" in closed.text
         assert "Colleagues can add a drink with this code:" not in closed.text
         reopened = me.post("/order/joins/extend")

@@ -352,9 +352,12 @@ def stop_sharing(session: Session, order: Order) -> bool:
         return True
 
 
-def lines_editable(order: Order) -> bool:
-    """Joiners can change or remove their lines until the buyer sends Ordered."""
-    return order.status == "open"
+def lines_editable(order: Order, now: Optional[datetime] = None) -> bool:
+    """Joiners can change or remove their lines until the order is locked:
+    by the buyer's "Lock the order", or when joins close at their time."""
+    if order.status != "open":
+        return False
+    return order.joins_close_at is None or _aware(order.joins_close_at) > (now or _now())
 
 
 class JoinRefused(Exception):
