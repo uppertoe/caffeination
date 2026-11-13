@@ -318,6 +318,20 @@ def register(app: FastAPI, templates: Jinja2Templates, page_ctx) -> None:
         remove_from_order(session, user.id, target_id, order_id)
         return change_response(request, session, user, target_id, order_id)
 
+    @app.get("/orders/{order_id}/delete", response_class=HTMLResponse)
+    def advance_delete_confirm(
+        order_id: int,
+        request: Request,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ):
+        """The Delete dialog of an advance order's band, with its counts as
+        they stand now."""
+        ctx = order_section_ctx(session, user, order_id)
+        if is_gone(ctx):
+            return gone(request)
+        return templates.TemplateResponse(request, "_advance_delete.html", ctx)
+
     @both("post", "/clear")
     def order_clear(
         request: Request,
@@ -409,19 +423,13 @@ def register(app: FastAPI, templates: Jinja2Templates, page_ctx) -> None:
         user: User = Depends(get_current_user),
         session: Session = Depends(get_session),
     ):
-        """Stop sharing the everyday order while nobody has joined it by code.
-        Answers into the dialog slot like sharing does, with the panel and
-        the advance orders out of band; refused, the panel says why."""
+        """The × on the everyday order's sharing panel, once confirmed: stop
+        sharing, taking out any drinks added by code. The whole section
+        comes back, since the order list may have changed."""
         order = live_order(session, user.id, None)
-        stopped = order is not None and order.code is not None and joining.stop_sharing(session, order)
-        ctx = {**order_section_ctx(session, user, None), "oob": True}
-        if is_gone(ctx):
-            return gone(request)
-        # Otherwise refused because the page was stale (placed, or already
-        # stopped); the fresh panel says enough.
-        share = ctx.get("share")
-        ctx["stop_refused"] = not stopped and share is not None and share.by_code > 0
-        return templates.TemplateResponse(request, "_share_done.html", ctx)
+        if order is not None and order.code is not None:
+            joining.stop_sharing(session, order)
+        return section(request, session, user, None)
 
     def shared_order_action(suffix: str, action):
         """A sharing control on one of the owner's shared, open orders; a

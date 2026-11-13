@@ -10,11 +10,19 @@
 {% block title %}{{ order_title }} · {{ app_name }}{% endblock %}
 
 {% block brand %}
-<header class="advance-band" id="advance-band">
+<header class="advance-band" id="advance-band" x-data="{ deleting: false }" @keydown.escape.window="deleting = false">
   <div class="advance-band-top">
     <a href="/" class="advance-back">{{ icon("back") }}<span>Back to your order</span></a>
-    <span class="advance-label">Advance order</span>
+    <span class="advance-band-end">
+      <span class="advance-label">Advance order</span>
+      {# Delete, confirmed in a dialog whose counts are fetched as it opens. #}
+      <button type="button" class="advance-delete"
+        @click="deleting = true" hx-get="/orders/{{ order_id }}/delete" hx-target="#advance-delete-body" hx-swap="innerHTML">Delete order</button>
+    </span>
   </div>
+  <dialog :open="deleting" @click.self="deleting = false">
+    <article id="advance-delete-body"></article>
+  </dialog>
   <h1>{{ order_title }}</h1>
   <p class="advance-closes">{{ icon("clock") }}<span data-advance-closes>{% if share %}{{ share_closes_text }}{% endif %}</span></p>
 </header>

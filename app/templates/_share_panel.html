@@ -78,11 +78,36 @@
   x-data='{ changing: {{ (closing_error is defined and closing_error is not none) | tojson }} }'
 >
   {# An advance order's page already leads with its name. #}
-  <header><h2>{{ share.name if share.name and order_id is none else "Shared order" }}</h2></header>
-  {# Stop sharing (everyday orders only) while nobody has joined by code;
-     after that, their page depends on the code. #}
-  {% set stoppable = share.kind != "advance" and not share.by_code and not share.placed %}
-  {% if stop_refused is defined and stop_refused %}<p class="share-error" role="alert">A colleague has joined the order, so the order is still shared. You can lock the order instead.</p>{% endif %}
+  {# The × (everyday orders only) stops sharing. Once the order is ready it
+     only puts the panel away, as Close does; otherwise it asks first and
+     says what will happen. #}
+  {% set stoppable = share.kind != "advance" and not share.placed %}
+  <header class="share-head" x-data="{ stopping: false }" @keydown.escape.window="stopping = false">
+    <h2>{{ share.name if share.name and order_id is none else "Shared order" }}</h2>
+    {% if stoppable and done %}
+    <button type="button" class="share-x" aria-label="Close" title="Close" hx-get="{{ ob }}" hx-target="#order-section" hx-swap="outerHTML show:window:top">{{ icon("close") }}</button>
+    {% elif stoppable %}
+    <button type="button" class="share-x" aria-label="Stop sharing" title="Stop sharing" @click="stopping = true">{{ icon("close") }}</button>
+    <dialog :open="stopping" @click.self="stopping = false">
+      <article>
+        <header><strong>Stop sharing</strong></header>
+        <ul class="share-cells advance-delete-facts">
+          <li>{{ icon("cup") }}<span>{{ share.drink_count }} {{ "drink" if share.drink_count == 1 else "drinks" }}</span></li>
+          {% if share.by_code %}<li>{{ icon("code") }}<span>{{ share.by_code }} by code</span></li>{% endif %}
+        </ul>
+        <ul class="stop-effects">
+          <li>The code and link will stop working.</li>
+          {% if share.by_code %}<li>{{ "The drink" if share.by_code == 1 else "The " ~ number_word(share.by_code) ~ " drinks" }} added by code will be removed from your order, and those colleagues will see that their drink was removed.</li>{% endif %}
+          <li>Your own order stays as it is.</li>
+        </ul>
+        <footer>
+          <button type="button" class="secondary outline" @click="stopping = false">Keep sharing</button>
+          <button type="button" class="danger-solid" hx-post="/order/share/stop" hx-target="#order-section" hx-swap="outerHTML">Stop sharing</button>
+        </footer>
+      </article>
+    </dialog>
+    {% endif %}
+  </header>
   {% if share.placed %}
   {# Ordered or on the way: joins are over, so only the update remains. #}
   <ul class="share-cells">
@@ -156,9 +181,6 @@
     {% endif %}
     {% if share.kind == "advance" and not done %}
     <button type="button" class="link-button" @click="changing = true" x-show="!changing">Change closing time</button>
-    {% endif %}
-    {% if stoppable and not done %}
-    <button type="button" class="link-button" hx-post="/order/share/stop" hx-target="#share-dialog" hx-swap="innerHTML">Stop sharing</button>
     {% endif %}
   </div>
   {% if share.kind == "advance" %}{{ closing_form(share) }}{% endif %}

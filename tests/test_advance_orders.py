@@ -268,7 +268,8 @@ def test_an_advance_order_no_one_joined_can_still_be_placed_or_cleared():
         locked = T(sarah.post(f"/orders/{oid}/joins/close"))
     assert f'hx-post="/orders/{oid}/joins/close"' in page
     assert f'hx-post="/orders/{oid}/status"' in locked  # Ready, though no one joined
-    assert f'hx-post="/orders/{oid}/clear"' in page
+    # Deleted from the × in the band, whose dialog is fetched as it opens.
+    assert f'hx-get="/orders/{oid}/delete"' in page and "Clear the order" not in page
     assert "Drinks allowed:" in page  # the cap, before the order is full
 
 
@@ -326,3 +327,17 @@ def test_an_advance_order_is_never_offered_stop_sharing():
         oid = _plan(sarah)
         page = sarah.get(f"/orders/{oid}")
     assert page.status_code == 200 and "Stop sharing" not in page.text
+
+
+def test_the_delete_dialog_counts_the_order_and_its_joiners():
+    with _client() as sarah, _client() as tom:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        oid = _plan(sarah)
+        alone = T(sarah.get(f"/orders/{oid}/delete"))
+        assert "<strong>Delete Tuesday education meeting</strong>" in alone
+        assert "1 drink" in alone and "joined by code" not in alone and "cancelled" not in alone
+        assert f'hx-post="/orders/{oid}/clear">Delete order</button>' in alone
+        tom.post(f"/j/{_order(oid).code}/guest", data={"display_name": "Tom", "base_id": "latte"})
+        joined = T(sarah.get(f"/orders/{oid}/delete"))
+    assert "2 drinks" in joined and "1 joined by code" in joined
+    assert "Colleagues who joined will see that the order has been cancelled." in joined
