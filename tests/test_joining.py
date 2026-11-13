@@ -290,7 +290,7 @@ def test_a_joiner_can_change_their_location_and_remove_their_drink():
     assert _items() == []
 
 
-def test_after_joins_close_the_drink_stays_and_can_still_be_removed():
+def test_a_locked_order_keeps_the_drink_and_freezes_it():
     with _client() as sarah, _client() as priya:
         _onboard(sarah, "Sarah", base_id="flat_white")
         _onboard(priya, "Priya", base_id="latte")
@@ -298,8 +298,8 @@ def test_after_joins_close_the_drink_stays_and_can_still_be_removed():
         priya.post(f"/j/{code}/usual")
         sarah.post("/order/joins/close")
         r = priya.get(f"/j/{code}")
-    assert "Sarah's order is closed to new drinks. Your drink is still in the order." in T(r)
-    assert "Remove my drink" in T(r) and "Add a drink for a colleague" not in T(r)
+    assert "Sarah has locked the order. Your drink is in it." in T(r)
+    assert "Remove my drink" not in T(r) and "Add a drink for a colleague" not in T(r)
 
 
 def test_someone_the_buyer_already_added_is_told_so():
@@ -478,7 +478,7 @@ def test_the_buyers_poll_notices_joins_closing_on_the_clock():
             s.add(order)
             s.commit()
         r = sarah.get(url)
-    assert r.status_code == 200 and "This order is closed to new drinks." in T(r)
+    assert r.status_code == 200 and 'aria-current="step">Locked</li>' in T(r)
 
 
 def test_an_unshared_order_is_not_polled():
@@ -499,7 +499,7 @@ def test_the_joiners_page_follows_the_buyer():
         assert tom.get(url, headers={"HX-Request": "true"}).status_code == 204
         sarah.post("/order/joins/close")
         closed = tom.get(url, headers={"HX-Request": "true"})
-        assert "Sarah's order is closed to new drinks. Your drink is still in the order." in T(closed)
+        assert "Sarah has locked the order. Your drink is in it." in T(closed)
         assert "<html" not in T(closed)  # just the body, for the swap
         sarah.post(f"/order/remove/{_user_id_by_name('Tom')}")
         removed = tom.get(_poll_url(T(closed)), headers={"HX-Request": "true"})
@@ -573,15 +573,20 @@ def _set_closed_at(hours_ago: float):
         s.commit()
 
 
-def test_the_update_form_appears_once_someone_joins_by_code():
+def test_lock_then_tell_colleagues_once_someone_joins_by_code():
     with _client() as sarah, _client() as tom:
         _onboard(sarah, "Sarah", base_id="flat_white")
         code = _share(sarah)
-        assert "Send an update to everyone who joined:" not in T(sarah.get("/"))
+        open_page = T(sarah.get("/"))
+        assert 'aria-current="step">Taking drinks</li>' in open_page and "Lock the order" in open_page
+        assert "Tell colleagues it is ready" not in T(sarah.post("/order/joins/close"))
+        sarah.post("/order/joins/extend")
         tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
-        page = T(sarah.get("/"))
-    assert "Send an update to everyone who joined:" in page
-    assert "Marking the order as ready also completes it." in page
+        assert "Tell colleagues it is ready" not in T(sarah.get("/"))  # lock first
+        locked = T(sarah.post("/order/joins/close"))
+    assert 'aria-current="step">Locked</li>' in locked
+    assert "Tell colleagues it is ready" in locked and "Reopen for 15 minutes" in locked
+    assert "Ordered" not in locked.split('class="share-stages"')[1].split("</ol>")[0]
 
 
 def test_ordered_closes_joins_locks_lines_and_reaches_the_joiner():
@@ -1024,10 +1029,10 @@ def test_once_someone_joins_by_code_the_buyer_closes_joins_instead():
         code = _share(sarah)
         tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
         home = sarah.get("/")
-        assert "Stop sharing" not in home.text and "Close to new drinks" in home.text
+        assert "Stop sharing" not in home.text and "Lock the order" in home.text
         # A page shown before Tom joined still offers it; the server refuses.
         r = sarah.post("/order/share/stop", headers=HX)
-        assert "A colleague has joined the order, so the order is still shared. You can close the order to new drinks instead." in T(r)
+        assert "A colleague has joined the order, so the order is still shared. You can lock the order instead." in T(r)
         assert tom.get(f"/j/{code}").status_code == 200
     assert len(_items()) == 1
 

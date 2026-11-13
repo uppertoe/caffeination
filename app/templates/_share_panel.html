@@ -10,28 +10,26 @@
   The buyer's update form (O5) shows once anyone has joined by code.
 #}
 {% from "_icons.html" import icon %}
-{% macro update_form(share) -%}
-{# O5. Re-renders the whole order section: Ready completes the order. Once
-   placed, the next update is chosen; the current one can be sent again
-   with a new message. #}
-{% set chosen = share.update_options[1][0] if share.placed and share.update_options | length > 1 else share.update_options[0][0] %}
-<form class="share-update" hx-post="{{ ob }}/status" hx-target="#order-section" hx-swap="outerHTML"
-  x-data='{ status: {{ chosen | tojson }} }'>
-  <fieldset>
-    <legend>Send an update to everyone who joined:</legend>
-    <div class="pill-row">
-      {% for value, label in share.update_options %}
-      <label><input type="radio" name="status" value="{{ value }}" x-model="status"{% if value == chosen %} checked{% endif %}> {{ label }}</label>
-      {% endfor %}
-    </div>
-  </fieldset>
+{% macro ready_form(share) -%}
+{# Telling everyone the drinks are ready, with an optional message. Ready
+   completes the order, so the whole order section is re-rendered. #}
+<form class="share-update" hx-post="{{ ob }}/status" hx-target="#order-section" hx-swap="outerHTML">
+  <input type="hidden" name="status" value="ready">
   <label>
     Message (optional):
     <input type="text" name="message" maxlength="140" autocomplete="off">
   </label>
-  <p class="share-help" x-show="status === 'ready'"{% if chosen != "ready" %} x-cloak{% endif %}>Marking the order as ready also completes it.</p>
-  <button type="submit">Send update</button>
+  <button type="submit" class="share-step">{{ icon("send") }}<span>Tell colleagues it is ready</span></button>
 </form>
+{%- endmacro %}
+{% macro stages(share) -%}
+{# Where the order stands: taking drinks, then locked, then ready. #}
+{% set locked = share.closed %}
+<ol class="share-stages" aria-label="Order progress">
+  <li class="is-done{% if not locked %} is-current{% endif %}"{% if not locked %} aria-current="step"{% endif %}>Taking drinks</li>
+  <li class="{% if locked %}is-done is-current{% endif %}"{% if locked %} aria-current="step"{% endif %}>Locked</li>
+  <li>Ready</li>
+</ol>
 {%- endmacro %}
 {% macro closing_form(share) -%}
 {# O2b: moving an advance order's closing time. A time already past closes
@@ -68,7 +66,7 @@
   {# Stop sharing (everyday orders only) while nobody has joined by code;
      after that, their page depends on the code. #}
   {% set stoppable = share.kind != "advance" and not share.by_code and not share.placed %}
-  {% if stop_refused is defined and stop_refused %}<p class="share-error" role="alert">A colleague has joined the order, so the order is still shared. You can close the order to new drinks instead.</p>{% endif %}
+  {% if stop_refused is defined and stop_refused %}<p class="share-error" role="alert">A colleague has joined the order, so the order is still shared. You can lock the order instead.</p>{% endif %}
   {% if share.placed %}
   {# Ordered or on the way: joins are over, so only the update remains. #}
   <ul class="share-cells">
@@ -83,7 +81,8 @@
     <p>{{ share.status_message }}</p>
   </div>
   {% endif %}
-  {{ update_form(share) }}
+  {{ stages(share) }}
+  {{ ready_form(share) }}
   {% else %}
   {# Hidden while joins are closed: the code would not let anyone add a drink. #}
   {% if not share.closed %}
@@ -118,15 +117,19 @@
     <li>{{ icon("code") }}<span>{{ share.by_code }} by code</span></li>
     <li{% if not share.location %} class="is-missing"{% endif %}>{{ icon("pin") }}<span>{{ "Deliver to " ~ share.location if share.location else "Each colleague chooses where to deliver" }}</span></li>
   </ul>
+  {{ stages(share) }}
   {% if share.closed %}
-    <p class="share-note">This order is closed to new drinks.</p>
-    <div class="share-actions">
-      <button type="button" class="secondary outline" hx-post="{{ ob }}/joins/extend" x-show="!changing">Reopen for 15 minutes</button>
+    {# Locked: the next step is telling colleagues the drinks are ready
+       (always offered for an advance order, which has no other way to
+       finish). #}
+    {% if share.by_code or share.kind == "advance" %}{{ ready_form(share) }}{% endif %}
+    <div class="share-links">
+      <button type="button" class="link-button" hx-post="{{ ob }}/joins/extend" x-show="!changing">Reopen for 15 minutes</button>
       {% if stoppable %}
-      <button type="button" class="secondary outline" hx-post="/order/share/stop" hx-target="#share-dialog" hx-swap="innerHTML">Stop sharing</button>
+      <button type="button" class="link-button" hx-post="/order/share/stop" hx-target="#share-dialog" hx-swap="innerHTML">Stop sharing</button>
       {% endif %}
       {% if share.kind == "advance" %}
-      <button type="button" class="secondary outline" @click="changing = true" x-show="!changing">Change closing time</button>
+      <button type="button" class="link-button" @click="changing = true" x-show="!changing">Change closing time</button>
       {% endif %}
     </div>
     {% if share.kind == "advance" %}{{ closing_form(share) }}{% endif %}
@@ -140,16 +143,15 @@
       {%- endif -%}
     </p>
     {% endif %}
-    <div class="share-actions">
+    <button type="button" class="share-step" hx-post="{{ ob }}/joins/close" x-show="!changing">{{ icon("lock") }}<span>Lock the order</span></button>
+    <div class="share-links">
       {% if share.kind == "advance" %}
-      <button type="button" class="secondary outline" @click="changing = true" x-show="!changing">Change closing time</button>
+      <button type="button" class="link-button" @click="changing = true" x-show="!changing">Change closing time</button>
       {% else %}
-      <button type="button" class="secondary outline" hx-post="{{ ob }}/joins/extend">Allow 15 more minutes</button>
+      <button type="button" class="link-button" hx-post="{{ ob }}/joins/extend">Allow 15 more minutes</button>
       {% endif %}
       {% if stoppable %}
-      <button type="button" class="secondary outline" hx-post="/order/share/stop" hx-target="#share-dialog" hx-swap="innerHTML">Stop sharing</button>
-      {% else %}
-      <button type="button" class="secondary outline" hx-post="{{ ob }}/joins/close" x-show="!changing">Close to new drinks</button>
+      <button type="button" class="link-button" hx-post="/order/share/stop" hx-target="#share-dialog" hx-swap="innerHTML">Stop sharing</button>
       {% endif %}
     </div>
     {% if share.kind == "advance" %}{{ closing_form(share) }}{% endif %}
@@ -161,9 +163,6 @@
       <span class="share-stepper-value">{{ share.max_drinks }} {{ "drink" if share.max_drinks == 1 else "drinks" }}</span>
       <button type="button" class="secondary outline icon-circle" aria-label="Allow one more drink" hx-post="{{ ob }}/cap" hx-vals='{"max_drinks": {{ share.max_drinks + 1 }}}'{% if share.max_drinks >= 40 %} disabled{% endif %}>{{ icon("plus") }}</button>
     </div>
-  {# An advance order is shared from the start, so its buyer always needs a
-     way to place it, whether or not anyone has joined yet. #}
-  {% if share.by_code or share.kind == "advance" %}{{ update_form(share) }}{% endif %}
   {% if live %}
   {# The poll. It lives in this panel, so each swap brings a fresh version
      and the poll stops when the order is no longer shared and open. It

@@ -2133,3 +2133,38 @@ html.save-failed .failed-note { color: var(--ink-strong); }
    one (the Delete confirmation in the header) would sit under the other
    column. The column holding an open dialog is lifted above it. */
 .dash-layout > :has(dialog[open]) { z-index: 20; }
+
+/* The buyer's progress through a shared order (_share_panel.html): the
+   stages in a strip, the next step as one prominent button, and the
+   lesser actions as links under it. */
+.share-stages {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.3rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: stage;
+}
+.share-stages li {
+  margin: 0;
+  padding: 0.4rem 0.3rem 0.35rem;
+  border-top: 3px solid var(--soft-line);
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  text-align: center;
+  list-style: none;
+}
+.share-stages li.is-done { border-top-color: var(--accent); }
+.share-stages li.is-current { color: var(--ink-strong); font-weight: 600; }
+.share-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0 0 0.6rem;
+}
+.share-step .share-icon { stroke: currentColor; }
+.share-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem 1.2rem; margin: 0 0 1rem; font-size: 0.9rem; }
+.share-update .share-step { margin-top: 0.2rem; }
