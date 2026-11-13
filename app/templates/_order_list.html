@@ -6,7 +6,33 @@
    starts a new one. #}
 {% set frozen = frozen is defined and frozen %}
 <article id="order-list"{% if oob %} hx-swap-oob="true"{% endif %} data-drinks="{{ drink_count }}">
-  <header><h2>{{ order.name ~ " order" if order_id is not none and order and order.name else "Your order" }}</h2></header>
+  {# Clearing the everyday order sits in its title row and asks first, in a
+     dialog that counts what would go. An advance order is deleted from its
+     band instead. #}
+  {% set clearable = order_id is none and rows %}
+  {# People who joined, not drinks: a joiner may have added a colleague's too. #}
+  {% set joined = rows | selectattr("via_code") | map(attribute="joined_by") | unique | list | length %}
+  <header class="order-list-head" x-data="{ clearing: false }" @keydown.escape.window="clearing = false">
+    <h2>{{ order.name ~ " order" if order_id is not none and order and order.name else "Your order" }}</h2>
+    {% if clearable %}
+    <button{% if frozen %} disabled{% endif %} type="button" class="secondary outline order-clear" @click="clearing = true">Clear the order</button>
+    <dialog :open="clearing" @click.self="clearing = false">
+      <article>
+        <header><strong>Clear the order</strong></header>
+        <ul class="share-cells advance-delete-facts">
+          <li>{{ icon("cup") }}<span>{{ drink_count }} {{ "drink" if drink_count == 1 else "drinks" }}</span></li>
+          {% if joined %}<li>{{ icon("code") }}<span>{{ joined }} joined by code</span></li>{% endif %}
+        </ul>
+        {# O6: people who joined by code will be told it was cancelled. #}
+        {% if joined %}<p>Colleagues who joined will see that the order has been cancelled.</p>{% endif %}
+        <footer>
+          <button{% if frozen %} disabled{% endif %} type="button" class="secondary outline" @click="clearing = false">Keep the order</button>
+          <button{% if frozen %} disabled{% endif %} type="button" class="danger-solid" hx-post="{{ ob }}/clear">Clear the order</button>
+        </footer>
+      </article>
+    </dialog>
+    {% endif %}
+  </header>
   {% if not rows and not self_excluded %}
     <p><em>Save your usual drink above, then add colleagues from the roster.</em></p>
   {% else %}
@@ -50,33 +76,5 @@
       {% endfor %}
       {% endfor %}
     </ul>
-    {# An advance order can always be cleared: it has its own page, which
-       would otherwise have no way to end an order no one has joined. #}
-    {% if rows | rejectattr("is_self") | list or order_id is not none %}
-    {# People who joined, not drinks: a joiner may have added a colleague's too. #}
-    {% set joined = rows | selectattr("via_code") | map(attribute="joined_by") | unique | list | length %}
-    <footer x-data="{ confirming: false }">
-      {% if joined %}
-      {# O6: people who joined by code will be told the order was cancelled,
-         so clearing asks first, in the page rather than a browser dialog. #}
-      <button{% if frozen %} disabled{% endif %} type="button" class="secondary outline row-action" x-show="!confirming" @click="confirming = true">Clear the order</button>
-      <div class="clear-confirm" x-show="confirming" x-cloak>
-        <p class="share-note is-alert">
-          {{- number_word(joined) | capitalize }} {{ "colleague has" if joined == 1 else "colleagues have" }} joined this order. If you clear it, they will see that the order has been cancelled.
-        </p>
-        <div class="share-actions">
-          <button{% if frozen %} disabled{% endif %} type="button" class="danger" hx-post="{{ ob }}/clear">Clear the order</button>
-          <button{% if frozen %} disabled{% endif %} type="button" class="secondary outline" @click="confirming = false">Keep the order</button>
-        </div>
-      </div>
-      {% else %}
-      <button{% if frozen %} disabled{% endif %}
-        type="button"
-        class="secondary outline row-action"
-        hx-post="{{ ob }}/clear"
-      >Clear the order</button>
-      {% endif %}
-    </footer>
-    {% endif %}
   {% endif %}
 </article>

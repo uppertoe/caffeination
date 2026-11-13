@@ -367,7 +367,7 @@ def test_the_buyer_sees_drinks_grouped_by_location():
         a.post(f"/j/{code}/guest", data={"display_name": "Ann", "base_id": "latte", "location": "Theatre 3"})
         b.post(f"/j/{code}/guest", data={"display_name": "Bo", "base_id": "latte"})
         r = sarah.get("/")
-    listing = T(r).split('id="order-list"')[1].split("</article>")[0]
+    listing = T(r).split('<ul class="order-list">')[1].split("</ul>")[0]
     assert (
         listing.index("Theatre 3")
         < listing.index("<strong>Ann</strong>")
@@ -545,16 +545,18 @@ def test_clearing_an_order_people_joined_asks_first():
         _onboard(b, "Bea", base_id="latte")
         sarah.post(f"/order/add/{_user_id_by_name('Bea')}")
         plain = T(sarah.get("/"))
-        assert "Keep the order" not in plain  # nobody joined by code yet
+        # Always confirmed, in a dialog in the title row that counts what goes.
+        assert '@click="clearing = true">Clear the order</button>' in plain
+        assert "2 drinks" in plain and "joined by code" not in plain.split("Clear the order</strong>")[1].split("</dialog>")[0]
         code = _share(sarah)
         a.post(f"/j/{code}/guest", data={"display_name": "Ann", "base_id": "latte"})
         one = T(sarah.get("/"))
-        assert "One colleague has joined this order. If you clear it, they will see that the order has been cancelled." in one
-        assert "Clear the order" in one and "Keep the order" in one
+        assert "1 joined by code" in one
+        assert "Colleagues who joined will see that the order has been cancelled." in one and "Keep the order" in one
         with _client() as c:
             c.post(f"/j/{code}/guest", data={"display_name": "Cy", "base_id": "latte"})
         two = T(sarah.get("/"))
-    assert "Two colleagues have joined this order." in two
+    assert "2 joined by code" in two
 
 
 # ---- O5, O7, J11 to J13: the buyer's updates --------------------------------
@@ -892,7 +894,7 @@ def test_the_clear_warning_counts_people_and_guests_by_code_are_not_tagged():
         tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
         tom.post(f"/j/{code}/guest", data={"display_name": "Ben", "base_id": "piccolo", "mode": "colleague"})
         page = T(sarah.get("/"))
-    assert "One colleague has joined this order." in page
+    assert "1 joined by code" in page  # people, not drinks
     assert 'class="tag">one-off' not in page
     assert "Clear the order" in page and ">Clear order<" not in page
 
@@ -1026,18 +1028,23 @@ def test_stopping_sharing_before_anyone_joins_takes_the_order_back_to_private():
     assert order.name is None and order.location is None and order.max_drinks == 8
 
 
-def test_once_someone_joins_by_code_the_buyer_closes_joins_instead():
+def test_stopping_sharing_after_joins_removes_their_drinks_and_tells_them():
     with _client() as sarah, _client() as tom:
         _onboard(sarah, "Sarah", base_id="latte")
         code = _share(sarah)
         tom.post(f"/j/{code}/guest", data={"display_name": "Tom", "base_id": "latte"})
-        home = sarah.get("/")
-        assert "Stop sharing" not in home.text and "Lock the order" in home.text
-        # A page shown before Tom joined still offers it; the server refuses.
-        r = sarah.post("/order/share/stop", headers=HX)
-        assert "A colleague has joined the order, so the order is still shared. You can lock the order instead." in T(r)
-        assert tom.get(f"/j/{code}").status_code == 200
-    assert len(_items()) == 1
+        home = T(sarah.get("/"))
+        # The × asks first and says what will happen.
+        assert 'aria-label="Stop sharing"' in home
+        assert "The code and link will stop working." in home
+        assert "The drink added by code will be removed from your order, and those colleagues will see that their drink was removed." in home
+        assert "Your own order stays as it is." in home
+        r = T(sarah.post("/order/share/stop", headers=HX))
+        assert "Share this order" in r and "<strong>Tom</strong>" not in r
+        # Tom's page still finds the order, and says his drink was removed.
+        told = T(tom.get(f"/j/{code}"))
+        assert "Sarah has removed your drink from the order." in told
+    assert _items() == []  # Sarah's own line is implicit; Tom's guest line is gone
 
 
 def test_stop_sharing_is_offered_after_closing_while_nobody_has_joined():
@@ -1310,7 +1317,7 @@ def test_ready_keeps_the_order_on_screen():
         assert 'aria-current="step">Ready</li>' in r and "<span>Close</span>" in r
         assert 'hx-get="/order" hx-target="#order-section"' in r
         frozen = r.split('<article id="order-list" hx-swap-oob="true"', 1)[1]
-        frozen = frozen.split("</article>", 1)[0]
+        frozen = frozen.split('<section id="till-summary"', 1)[0].split('<article id="till-summary"', 1)[0]
         assert "<strong>Tom</strong>" in frozen and "Remove" in frozen
         assert frozen.count("<button") == frozen.count("<button disabled")  # kept, but inert
         # The order itself is complete: the next page load starts afresh.

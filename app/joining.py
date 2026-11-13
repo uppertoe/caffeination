@@ -328,21 +328,27 @@ def join_state(order: Order, count: int, now: Optional[datetime] = None) -> str:
 
 def stop_sharing(session: Session, order: Order) -> bool:
     """Take an open everyday order back to private: no code, no closing time,
-    and the sharing settings forgotten, so Share starts afresh. Refused
-    (False) once anyone has added a drink by code, because their page finds
-    the order by its code; the buyer closes joins or clears the order
-    instead. Under the join lock, so a join can't land in between."""
+    and the sharing settings forgotten, so Share starts afresh. Drinks added
+    by code are taken out (a guest goes with their drink); the buyer's own
+    lines stay. The old code is kept as previous_code when anyone had
+    joined, so that their page still finds the order and tells them their
+    drink was removed. Under the join lock, so a join can't land in between.
+    False if the order isn't an open everyday one (a stale page)."""
     with _join_lock:
         session.refresh(order)
-        joined = session.exec(
-            select(func.count())
-            .select_from(OrderItem)
-            .where(OrderItem.order_id == order.id, OrderItem.joined_by.is_not(None))
-        ).one()
-        if joined or order.status != "open" or order.kind != "everyday":
+        if order.status != "open" or order.kind != "everyday":
             return False
+        joined_items = session.exec(
+            select(OrderItem).where(OrderItem.order_id == order.id, OrderItem.joined_by.is_not(None))
+        ).all()
+        for item in joined_items:
+            target = session.get(User, item.target_user_id)
+            session.delete(item)
+            if target is not None and target.one_off:
+                session.exec(delete(SavedDrink).where(SavedDrink.user_id == target.id))
+                session.delete(target)
+        order.previous_code = order.code if joined_items else None
         order.code = None
-        order.previous_code = None
         order.joins_close_at = None
         order.name = None
         order.location = None

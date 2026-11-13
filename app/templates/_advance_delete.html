@@ -1,0 +1,15 @@
+{# Inside the Delete dialog of an advance order's band (GET
+   /orders/<id>/delete): the order's drinks and, if any, how many joined by
+   code, then the confirmation. Deleting is the order's Clear: it is
+   recorded as cancelled, joiners are told, and the page goes home. #}
+{% from "_icons.html" import icon %}
+<header><strong>Delete {{ share.name if share and share.name else "this order" }}</strong></header>
+<ul class="share-cells advance-delete-facts">
+  <li>{{ icon("cup") }}<span>{{ drink_count }} {{ "drink" if drink_count == 1 else "drinks" }}</span></li>
+  {% if share and share.by_code %}<li>{{ icon("code") }}<span>{{ share.by_code }} joined by code</span></li>{% endif %}
+</ul>
+{% if share and share.by_code %}<p>Colleagues who joined will see that the order has been cancelled.</p>{% endif %}
+<footer>
+  <button type="button" class="secondary outline" @click="deleting = false">Cancel</button>
+  <button type="button" class="danger-solid" hx-post="/orders/{{ order_id }}/clear">Delete order</button>
+</footer>
