@@ -43,9 +43,9 @@
 {%- endmacro %}
 {% macro location_field(id) -%}
 {% if order_location %}
-<ul class="share-cells join-cells-one"><li>{{ icon("pin") }}<span>{{ order_location }}</span></li></ul>
+<ul class="share-cells join-cells-one"><li>{{ icon("pin") }}<span>Deliver to {{ order_location }}</span></li></ul>
 {% else %}
-<label for="{{ id }}">Location:</label>
+<label for="{{ id }}">Deliver to:</label>
 <input id="{{ id }}" type="text" name="location" maxlength="60" autocomplete="off"
   value="{{ form.location if form.location is defined else last_location }}"
   placeholder="Theatre 3, tearoom, office" x-ref="loc" aria-describedby="{{ id }}-help">
@@ -56,9 +56,9 @@
 {% endif %}
 <small id="{{ id }}-help">
   {%- if mode == "colleague" -%}
-  If you leave the location blank, your colleague can collect the drink from {{ owner_name }}.
+  If you leave this blank, your colleague can collect the drink from {{ owner_name }}.
   {%- else -%}
-  If you leave the location blank, you can collect your drink from {{ owner_name }}.
+  If you leave this blank, you can collect your drink from {{ owner_name }}.
   {%- endif -%}
 </small>
 {% endif %}
@@ -75,7 +75,7 @@
 <ul class="share-cells">
   {% if not line.is_self %}<li class="join-who">{{ icon("guest") }}<span>{{ line.name }}{% if line.guest %} (guest){% endif %}</span></li>{% endif %}
   <li>{{ icon("cup") }}<span>{% if line.one_off_drink %}One-off: {% endif %}{{ line.drink }}</span></li>
-  <li{% if not line.location %} class="is-missing"{% endif %}>{{ icon("pin") }}<span>{{ line.location or "Collected from " ~ owner_name }}</span></li>
+  <li{% if not line.location %} class="is-missing"{% endif %}>{{ icon("pin") }}<span>{{ "Deliver to " ~ line.location if line.location else "Collect from " ~ owner_name }}</span></li>
 </ul>
 {%- endmacro %}
 {% macro error_note() -%}
@@ -126,7 +126,7 @@
     <p>{{ owner_name }} is taking orders until {{ until }}.</p>
     {% if order_location %}
     <ul class="share-cells">
-      <li>{{ icon("pin") }}<span>{{ order_location }}</span></li>
+      <li>{{ icon("pin") }}<span>Deliver to {{ order_location }}</span></li>
       <li>{{ icon("cup") }}<span>{{ count }} of {{ max_drinks }} {{ "drink" if max_drinks == 1 else "drinks" }}</span></li>
     </ul>
     {% endif %}
@@ -239,12 +239,12 @@
           {% if mode == "location" and not order_location and request.query_params.get("line") == line.target_id %}
           <form hx-post="{{ join_path }}/line/{{ line.target_id }}/location" {{ hx | safe }} class="join-form">
             <div class="join-field">{{ location_field("loc-" ~ loop.index) }}</div>
-            <button type="submit">Save location</button>
+            <button type="submit">Save where to deliver</button>
           </form>
           {% else %}
           <div class="join-line-actions">
             {% if not order_location %}
-            <button type="button" class="secondary outline" hx-get="{{ join_path }}?mode=location&amp;line={{ line.target_id }}" {{ hx | safe }}>{{ "Change location" if line.location else "Add a location" }}</button>
+            <button type="button" class="link-button" hx-get="{{ join_path }}?mode=location&amp;line={{ line.target_id }}" {{ hx | safe }}>{{ "Change where to deliver" if line.location else "Add where to deliver" }}</button>
             {% endif %}
             {% if line.is_self %}
               {% if line.one_off_drink %}
@@ -261,12 +261,6 @@
         {% endif %}
       </div>
       {% endfor %}
-      {# A guest who wants the app for themselves, through a signed-in page:
-         the join link itself never gives an app identity. #}
-      {% if me is none and self_line and self_line.guest %}
-      <p class="join-save-usual"><a href="/join/save/{{ code }}">Save this as my usual drink</a></p>
-      {% endif %}
-
       {% if editable %}
       <ul class="share-cells">
         {% set taking = accepting or full %}
@@ -280,6 +274,15 @@
         {% else %}
         <button type="button" class="secondary outline" hx-get="{{ join_path }}?mode=colleague" {{ hx | safe }}>Add a drink for a colleague</button>
         {% endif %}
+      {% endif %}
+      {# A guest who wants the app for themselves, through a signed-in page
+         (the join link itself never gives an app identity): a row at the
+         foot of the card, like the home page's. #}
+      {% if me is none and self_line and self_line.guest %}
+      <a class="stats-teaser join-save-usual" href="/join/save/{{ code }}">
+        <span class="teaser-title">Save this as my usual drink</span>
+        <svg class="teaser-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 5 7 7-7 7" /></svg>
+      </a>
       {% endif %}
     {% endif %}
   {% endif %}

@@ -75,7 +75,7 @@
     <li>{{ icon("send") }}<span>{{ share.status_label }}</span></li>
     <li>{{ icon("cup") }}<span>{{ share.drink_count }} {{ "drink" if share.drink_count == 1 else "drinks" }}</span></li>
     <li>{{ icon("code") }}<span>{{ share.by_code }} by code</span></li>
-    <li{% if not share.location %} class="is-missing"{% endif %}>{{ icon("pin") }}<span>{{ share.location or "Location chosen by each colleague" }}</span></li>
+    <li{% if not share.location %} class="is-missing"{% endif %}>{{ icon("pin") }}<span>{{ "Deliver to " ~ share.location if share.location else "Each colleague chooses where to deliver" }}</span></li>
   </ul>
   {% if share.status_message %}
   <div class="share-message">
@@ -116,7 +116,7 @@
     <li>{{ icon("lock" if share.closed else "clock") }}<span>{{ "Closed at" if share.closed else "Joins close at" }} {{ share.closes_label }}</span></li>
     <li{% if share.full %} class="is-alert"{% endif %}>{{ icon("cup") }}<span>{{ share.drink_count }} of {{ share.max_drinks }} {{ "drink" if share.max_drinks == 1 else "drinks" }}</span></li>
     <li>{{ icon("code") }}<span>{{ share.by_code }} by code</span></li>
-    <li{% if not share.location %} class="is-missing"{% endif %}>{{ icon("pin") }}<span>{{ share.location or "Location chosen by each colleague" }}</span></li>
+    <li{% if not share.location %} class="is-missing"{% endif %}>{{ icon("pin") }}<span>{{ "Deliver to " ~ share.location if share.location else "Each colleague chooses where to deliver" }}</span></li>
   </ul>
   {% if share.closed %}
     <p class="share-note">This order is closed to new drinks.</p>

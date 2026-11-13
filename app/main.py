@@ -581,7 +581,9 @@ def create_app() -> FastAPI:
                 request, "_new_person_slot.html", ctx, status_code=status
             )
 
-        if not (1 <= len(name) <= 40):
+        if not name:
+            return _err("Please enter their name.", 422)
+        if len(name) > 40:
             return _err("Name must be 1–40 characters.", 422)
         if not one_off and find_user_by_display_name(session, name) is not None:
             return _err(f"“{name}” is already on the list — pick another name.", 409)

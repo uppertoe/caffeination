@@ -9,7 +9,7 @@
   {{ error_note() }}
   <label for="guest-name">{{ "Your colleague's name:" if state == "joined" else "Your name:" }}</label>
   <input id="guest-name" type="text" name="display_name" maxlength="40" autocomplete="off"
-    value="{{ form.display_name or '' }}" required>
+    value="{{ form.display_name or '' }}">
   {% include "_drink_fields.html" %}
   <div class="join-field">{{ location_field("loc-guest") }}</div>
   {{ offline_note() }}

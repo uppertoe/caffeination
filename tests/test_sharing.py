@@ -104,7 +104,7 @@ def test_sharing_at_once_gives_a_code_and_a_thirty_minute_window():
     assert "<svg" in r.text  # the QR code, inline
     assert "1 of 8 drinks" in r.text  # the owner's own drink
     assert "0 by code" in r.text
-    assert "Location chosen by each colleague" in r.text
+    assert "Each colleague chooses where to deliver" in r.text
     order = _order("Me")
     assert order.code == code.replace(" ", "")
     closes = order.joins_close_at.replace(tzinfo=timezone.utc)
@@ -136,7 +136,7 @@ def test_sharing_with_a_chosen_time_name_location_and_cap():
             },
         )
     assert "<h2>Tuesday education meeting</h2>" in r.text
-    assert "Seminar room 2" in r.text and "Location chosen by each colleague" not in r.text
+    assert "Seminar room 2" in r.text and "Each colleague chooses where to deliver" not in r.text
     assert "1 of 12 drinks" in r.text
     # Not today, so the day is shown with the time.
     assert re.search(r"Joins close at \d{1,2}:\d{2} [ap]m, \w{3} \d{1,2} \w{3}", r.text)
