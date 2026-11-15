@@ -1322,3 +1322,22 @@ def test_ready_keeps_the_order_on_screen():
         assert frozen.count("<button") == frozen.count("<button disabled")  # kept, but inert
         # The order itself is complete: the next page load starts afresh.
         assert "<strong>Tom</strong>" not in T(sarah.get("/")).split('id="order-list"', 1)[1].split("</article>", 1)[0]
+
+
+# ---- "Something else": a drink named in free text ---------------------------
+
+
+def test_a_joiner_names_their_own_drink_and_locking_keeps_the_name():
+    with _client() as sarah, _client() as priya:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        _onboard(priya, "Priya", base_id="other", drink_name="Lemon, lime and bitters")
+        code = _share(sarah)
+        blank = priya.post(f"/j/{code}/one-off", data={"base_id": "other", "drink_name": "", "mode": "oneoff"})
+        assert blank.status_code == 422 and "Enter the name of the drink." in T(blank)
+        priya.post(f"/j/{code}/usual")
+        sarah.post("/order/joins/close")
+        # Changing the usual after the lock leaves the order as it was.
+        priya.post("/me/drink", data={"base_id": "other", "drink_name": "Kombucha"})
+        buyer = T(sarah.get("/"))
+    till = buyer.split('id="till-summary"')[1].split("</textarea>")[0]
+    assert "1x Lemon, lime and bitters" in till and "Kombucha" not in till

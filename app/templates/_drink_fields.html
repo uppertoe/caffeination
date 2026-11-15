@@ -17,6 +17,16 @@
   </select>
 </label>
 
+{# "Something else": the person names the drink. Disabled while hidden, so
+   another drink's form never sends it. #}
+<label x-show="rule.named" x-cloak>
+  Name of the drink
+  <input type="text" name="drink_name" maxlength="40"
+         value="{{ initial.drink_name or '' }}"
+         placeholder="For example, Coke Zero or peppermint tea"
+         :disabled="!rule.named">
+</label>
+
 <fieldset x-show="rule.shotChoices.length" x-cloak>
   <legend>Shots</legend>
   <div class="pill-row">
@@ -69,7 +79,7 @@
   </select>
 </label>
 
-<label>
+<label x-show="rule.allowsSweetener" x-cloak>
   Sweetener
   <select name="sweetener" x-model="sweetener">
     {% for value, label in sweetener_options %}

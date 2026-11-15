@@ -21,6 +21,7 @@ class Family(str, Enum):
     SPICE = "spice"
     SPICE_ESP = "spice_esp"
     TEA = "tea"
+    OTHER = "other"  # a drink named in free text
 
 
 class MilkPolicy(str, Enum):
@@ -121,6 +122,10 @@ class Drink:
     shot_choices: tuple[int, ...] = ()
     # Friendly note shown under the form when an axis is hidden by rule
     served_note: Optional[str] = None
+    # A drink the person names in free text ("Something else"): the name is
+    # the till line, and no other option applies.
+    named: bool = False
+    allows_sweetener: bool = True
 
     @property
     def allows_extra_hot(self) -> bool:
@@ -140,6 +145,8 @@ class Drink:
             "shotChoices": list(self.shot_choices),
             "defaultSize": self.default_size.value if self.default_size else None,
             "servedNote": self.served_note,
+            "named": self.named,
+            "allowsSweetener": self.allows_sweetener,
         }
 
 
@@ -315,7 +322,23 @@ DRINKS: tuple[Drink, ...] = (
         allows_iced=True,
         default_size=Size.SMALL,
     ),
+    # Last, so the menu's own drinks are found first. What people name here
+    # shows which drinks to add to the menu properly.
+    Drink(
+        id="other",
+        display="Something else",
+        family=Family.OTHER,
+        milk_policy=MilkPolicy.NONE,
+        sized=False,
+        has_length=False,
+        allows_strength=False,
+        allows_iced=False,
+        named=True,
+        allows_sweetener=False,
+    ),
 )
+
+OTHER_ID = "other"
 
 DRINKS_BY_ID: dict[str, Drink] = {d.id: d for d in DRINKS}
 
@@ -369,7 +392,10 @@ def caffeine_parts(
 ) -> tuple[float, float]:
     """A drink's caffeine as (espresso shots, other milligrams), so that the
     uncertainty in a café shot can be applied to the shots alone. A decaf
-    shot counts as 3% of a shot."""
+    shot counts as 3% of a shot. A drink named in free text counts as none:
+    the statistics leave those drinks out."""
+    if base_id == OTHER_ID:
+        return 0.0, 0.0
     if base_id in _NON_ESPRESSO_MG:
         return 0.0, _NON_ESPRESSO_MG[base_id]
     if base_id == "espresso":

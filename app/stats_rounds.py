@@ -78,7 +78,8 @@ def load_rounds(session: Session) -> list[LoggedRound]:
         if rid not in rounds:
             local = _as_naive_utc(placed).replace(tzinfo=timezone.utc).astimezone(tz)
             rounds[rid] = LoggedRound(local, size, [])
-        if get_drink(drink[0]) is None:
+        d = get_drink(drink[0])
+        if d is None or d.named:
             continue
         opts = as_options(*drink)
         rounds[rid].drinks.append(LoggedDrink(uid or f"drink-{did}", opts, shots_of(opts), bool(guest)))

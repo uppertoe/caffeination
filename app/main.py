@@ -18,6 +18,7 @@ from app import join_page, order_routes, sharing
 from app.config import DEV_SECRET_KEY, get_settings
 from app.db import get_engine, get_session, init_db
 from app.drinks import (
+    drink_error,
     format_drink,
     get_saved_drink,
     normalize,
@@ -200,7 +201,9 @@ def _drink_card_ctx(session: Session, user: User) -> dict:
     return {"saved": saved, "till_line": till_line}
 
 
-def _drink_form_ctx(saved: SavedDrink | None) -> dict:
+def _drink_form_ctx(saved: SavedDrink | None, submitted: Optional[dict] = None) -> dict:
+    """The drink builder's context, starting from a saved drink. submitted is
+    a form being shown again with its error: it keeps the chosen drink."""
     initial = {
         "base_id": saved.base_id if saved else DRINKS[0].id,
         "temp": saved.temp if saved else "hot",
@@ -212,7 +215,11 @@ def _drink_form_ctx(saved: SavedDrink | None) -> dict:
         "shots": saved.shots if saved else None,
         "own_cup": saved.own_cup if saved else False,
         "notes": saved.notes if saved else "",
+        "drink_name": saved.drink_name if saved else "",
     }
+    if submitted and get_drink(submitted.get("base_id", "")) is not None:
+        initial["base_id"] = submitted["base_id"]
+        initial["drink_name"] = submitted.get("drink_name") or ""
     return {
         "rules": rules_for_template(),
         "initial": initial,
@@ -256,6 +263,8 @@ def _unusual_form_ctx(chosen: dict) -> dict:
     scored. Options that do not apply keep the form's usual defaults."""
     ctx = _drink_form_ctx(None)
     ctx["initial"].update({k: v for k, v in chosen.items() if v is not None})
+    # The statistics leave out drinks named in free text.
+    ctx["drinks"] = [d for d in DRINKS if not d.named]
     return ctx
 
 
@@ -543,7 +552,7 @@ def create_app() -> FastAPI:
             return templates.TemplateResponse(
                 request,
                 "_drink_form.html",
-                {**_drink_form_ctx(saved), "error": "Unknown drink."},
+                {**_drink_form_ctx(saved, dict(form)), "error": drink_error(dict(form), "Unknown drink.")},
                 status_code=422,
             )
         upsert_saved_drink(session, user.id, normalized)
@@ -571,6 +580,7 @@ def create_app() -> FastAPI:
         def _err(message: str, status: int):
             ctx = {
                 **_new_person_ctx(session),
+                **_drink_form_ctx(None, dict(form)),
                 "order_id": order_id,
                 "error": message,
                 "open": True,
@@ -590,7 +600,7 @@ def create_app() -> FastAPI:
 
         normalized = normalize(form.get("base_id", ""), dict(form))
         if normalized is None:
-            return _err("Unknown drink.", 422)
+            return _err(drink_error(dict(form), "Unknown drink."), 422)
 
         new_user = create_named_user(
             session, name, created_by=user.id, one_off=one_off
@@ -658,8 +668,8 @@ def create_app() -> FastAPI:
             return templates.TemplateResponse(
                 request,
                 "_person_edit.html",
-                {**_drink_form_ctx(saved), **_edit_ctx(order_id), "person": target,
-                 "error": "Unknown drink."},
+                {**_drink_form_ctx(saved, dict(form)), **_edit_ctx(order_id), "person": target,
+                 "error": drink_error(dict(form), "Unknown drink.")},
                 status_code=422,
             )
         upsert_saved_drink(session, person_id, normalized, changed_by=user.id)

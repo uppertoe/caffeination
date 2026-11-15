@@ -40,6 +40,7 @@ class SavedDrink(SQLModel, table=True):
     shots: Optional[int] = None  # only for drinks with shot choices (espresso)
     own_cup: bool = False
     notes: Optional[str] = None
+    drink_name: Optional[str] = None  # the "Something else" drink, as typed
     updated_at: datetime = Field(default_factory=utcnow)
 
 
@@ -123,6 +124,7 @@ class OrderItem(SQLModel, table=True):
     shots: Optional[int] = None
     own_cup: Optional[bool] = None
     notes: Optional[str] = None
+    drink_name: Optional[str] = None
     # Set when the buyer sent Ordered and this line's usual drink was copied
     # into the fields above, so a later change to the usual can't change
     # what was ordered. Such a line is still shown as the person's usual.
@@ -197,3 +199,4 @@ class DrinkChange(SQLModel, table=True):
     length: Optional[str] = None
     shots: Optional[int] = None
     own_cup: bool = False
+    drink_name: Optional[str] = None

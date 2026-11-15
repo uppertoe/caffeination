@@ -44,14 +44,14 @@ from app.users import ROSTER_FILTER, _as_naive_utc
 MIN_ROUNDS = 5  # round charts appear from this many rounds
 MIN_FOR_PAIRING = 12  # drinks needed before a pairing is tested
 
-DRINK_LABELS = {d.id: d.display for d in DRINKS}
+DRINK_LABELS = {d.id: d.display for d in DRINKS if not d.named}  # as DOMAINS
 
 # The options a drink is made of, with every value each can take. A drink
 # carries None for an option that does not apply to it (milk on a long
 # black, size on a piccolo), and such drinks are left out of that option's
 # shares and pairings.
 DOMAINS: dict[str, tuple] = {
-    "base_id": tuple(d.id for d in DRINKS),
+    "base_id": tuple(d.id for d in DRINKS if not d.named),  # free-text drinks are left out
     "temp": tuple(t.value for t in Temp),
     "size": tuple(s.value for s in Size),
     "milk": tuple(m.value for m in Milk),
@@ -126,8 +126,9 @@ def load_usuals(session: Session, who: str) -> list[Usual]:
         active = _as_naive_utc(last_active or created) >= cutoff
         if who == "active" and not active:
             continue
-        if get_drink(drink[0]) is None:
-            continue  # a drink since removed from the menu
+        d = get_drink(drink[0])
+        if d is None or d.named:
+            continue  # a drink since removed from the menu, or named in free text
         opts = as_options(*drink)
         usuals.append(Usual(uid, opts, line_for(opts), active))
     return usuals
@@ -279,7 +280,7 @@ def build_unusual(usuals: list[Usual], chosen: dict, viewer_id: str) -> Unusual:
 def chosen_from_form(form: dict) -> Optional[dict]:
     """The drink picked in the panel, normalised by the same rules as a save."""
     norm = normalize(form.get("base_id", ""), form)
-    if norm is None:
+    if norm is None or get_drink(norm["base_id"]).named:
         return None
     return as_options(*(norm[a] for a in DOMAINS))
 
