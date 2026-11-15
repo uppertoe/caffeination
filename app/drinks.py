@@ -39,7 +39,9 @@ VALID_LENGTHS = _enum_values(Length)
 def normalize(base_id: str, form: dict) -> Optional[dict]:
     """Coerce raw form fields into a stored shape, honouring per-drink rules.
 
-    Returns None if the base_id is unknown.
+    Returns None if the base_id is unknown, or if the drink is one the
+    person names ("Something else") and the name is blank: drink_error says
+    which, for the form's message.
     """
     drink = get_drink(base_id)
     if drink is None:
@@ -75,7 +77,11 @@ def normalize(base_id: str, form: dict) -> Optional[dict]:
         if drink.allows_strength
         else Strength.REGULAR.value
     )
-    out["sweetener"] = _pick("sweetener", VALID_SWEETENERS, Sweetener.NONE.value)
+    out["sweetener"] = (
+        _pick("sweetener", VALID_SWEETENERS, Sweetener.NONE.value)
+        if drink.allows_sweetener
+        else Sweetener.NONE.value
+    )
     out["length"] = (
         _pick("length", VALID_LENGTHS, Length.SHORT.value)
         if drink.has_length
@@ -91,12 +97,30 @@ def normalize(base_id: str, form: dict) -> Optional[dict]:
     out["own_cup"] = form.get("own_cup") in ("1", "on", "true")
     notes = (form.get("notes") or "").strip()
     out["notes"] = notes[:80] or None
+    out["drink_name"] = None
+    if drink.named:
+        name = " ".join((form.get("drink_name") or "").split())[:DRINK_NAME_MAX]
+        if not name:
+            return None
+        out["drink_name"] = name
     return out
+
+
+DRINK_NAME_MAX = 40
+DRINK_NAME_MISSING = "Enter the name of the drink."
+
+
+def drink_error(form: dict, fallback: str) -> str:
+    """The message for a drink normalize() refused: a blank name for a
+    drink the person names, otherwise the form's own message."""
+    drink = get_drink(form.get("base_id", ""))
+    return DRINK_NAME_MISSING if drink is not None and drink.named else fallback
 
 
 # The options a DrinkChange records: everything ordered, minus the notes.
 HISTORY_FIELDS = (
     "base_id", "temp", "size", "milk", "strength", "sweetener", "length", "shots", "own_cup",
+    "drink_name",
 )
 
 
@@ -144,7 +168,7 @@ def get_saved_drink(session: Session, user_id: str) -> Optional[SavedDrink]:
 # SavedDrink object. Keep in sync with the SavedDrink model.
 LINE_FIELDS = (
     "base_id", "length", "size", "temp", "strength", "milk", "sweetener", "notes",
-    "shots", "own_cup",
+    "shots", "own_cup", "drink_name",
 )
 
 _ICED = Temp.ICED.value
@@ -158,7 +182,7 @@ def format_drink(drink: Drink, sd: SavedDrink) -> str:
     """Render one till-summary line for a saved drink."""
     return format_line(
         drink.id, sd.length, sd.size, sd.temp, sd.strength, sd.milk, sd.sweetener, sd.notes,
-        sd.shots, sd.own_cup,
+        sd.shots, sd.own_cup, sd.drink_name,
     )
 
 
@@ -174,12 +198,15 @@ def format_line(
     notes: Optional[str],
     shots: Optional[int] = None,
     own_cup: bool = False,
+    drink_name: Optional[str] = None,
 ) -> str:
     """Render one till-summary line — lowercase, ordered like a barista call.
 
     Memoised on the field tuple: an office has far fewer distinct drinks than
     people, and a full-roster render formats every one of them. An unknown
-    base_id (a drink retired from the menu) renders as the raw id.
+    base_id (a drink retired from the menu) renders as the raw id. A drink
+    the person named ("Something else") is its name as typed; without one
+    (the statistics keep no names) it is "something else".
     """
     drink = get_drink(base_id)
     if drink is None:
@@ -212,7 +239,10 @@ def format_line(
     if drink.shot_choices and shots == 2:
         parts.append("double")
 
-    parts.append(drink.display.lower())
+    if drink.named and drink_name:
+        parts.append(drink_name)
+    else:
+        parts.append(drink.display.lower())
     line = " ".join(parts)
 
     extras: list[str] = []
@@ -236,7 +266,7 @@ def format_line(
 # The drink options an OrderItem can carry as a one-off (the SavedDrink fields).
 DRINK_OPTION_FIELDS = (
     "base_id", "temp", "size", "milk", "strength", "sweetener", "length", "shots",
-    "own_cup", "notes",
+    "own_cup", "notes", "drink_name",
 )
 
 

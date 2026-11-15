@@ -46,6 +46,7 @@ that apply depend on the base. The axes are:
 | `chai_latte`    | Chai latte        | spice     | yes       | yes    | no               | No coffee. Hide shots and strength. |
 | `dirty_chai`    | Dirty chai        | spice+esp | yes       | yes    | yes              | Chai latte + 1–2 shots. |
 | `matcha_latte`  | Matcha latte      | tea       | yes       | yes    | no               | No coffee. |
+| `other`         | Something else    | other     | no        | no     | no               | Free text: the person names the drink (`drink_name`, ≤40 chars) and that name is the till line, as typed. Only own cup and notes apply. Same name in any case merges at the till. Left out of the statistics. Added 2026-11 so people can order soft drinks and the like; promote common names to real menu entries. |
 
 **Iced variants.** Anything with `family in {milk, milk+choc, choc, spice, tea, black}`
 supports `temp = iced`. Espresso-family drinks are hot-only in the scaffold

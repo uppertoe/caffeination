@@ -99,6 +99,10 @@ _COLUMNS = (
     ("orderitem", "notes", "VARCHAR", None),
     ("orderitem", "drink_fixed", "BOOLEAN NOT NULL DEFAULT 0", None),
     ("grouporder", "status_at", "TIMESTAMP", None),
+    # The "Something else" drink's name.
+    ("saveddrink", "drink_name", "VARCHAR", None),
+    ("orderitem", "drink_name", "VARCHAR", None),
+    ("drinkchange", "drink_name", "VARCHAR", None),
 )
 
 

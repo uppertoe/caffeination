@@ -509,8 +509,8 @@ def till_summary(rows: list[OrderRow]) -> list[str]:
 
     Drinks with free-text notes never merge — each is its own line. Drinks
     without notes group by every ordered option (base, size, milk,
-    strength, temp, sweetener, length, shots, own cup) per the
-    coffee-taxonomy skill.
+    strength, temp, sweetener, length, shots, own cup, and the name of a
+    drink named in free text, ignoring case) per the coffee-taxonomy skill.
     """
     groups: "OrderedDict[tuple, dict]" = OrderedDict()
     standalone: list[str] = []
@@ -532,6 +532,8 @@ def till_summary(rows: list[OrderRow]) -> list[str]:
             sd.length,
             sd.shots,
             sd.own_cup,
+            # "Coke Zero" and "coke zero" are one drink.
+            (sd.drink_name or "").casefold(),
         )
         if key not in groups:
             groups[key] = {"count": 0, "line": row.line}

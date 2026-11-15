@@ -19,7 +19,7 @@ from sqlmodel import Session
 from app import joining, sharing
 from app.config import get_settings
 from app.db import get_session
-from app.drinks import HISTORY_FIELDS, format_line, normalize, upsert_saved_drink
+from app.drinks import HISTORY_FIELDS, drink_error, format_line, normalize, upsert_saved_drink
 from app.identity import read_identity, set_identity
 from app.joining import Joiner
 from app.models import Order, SavedDrink, User
@@ -38,7 +38,7 @@ def _line(drink: Optional[SavedDrink]) -> str:
         return "(no drink saved yet)"
     return format_line(
         drink.base_id, drink.length, drink.size, drink.temp, drink.strength, drink.milk,
-        drink.sweetener, drink.notes, drink.shots, drink.own_cup,
+        drink.sweetener, drink.notes, drink.shots, drink.own_cup, drink.drink_name,
     )
 
 
@@ -58,7 +58,7 @@ def _version(ctx: dict) -> str:
     return hashlib.sha1(repr(facts).encode()).hexdigest()[:12]
 
 
-def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[[Optional[SavedDrink]], dict]) -> None:
+def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[..., dict]) -> None:
     attempts = joining.CodeAttempts()
     settings = get_settings()
 
@@ -230,7 +230,7 @@ def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[
             title = f"{title_status} · {title}"
         ctx = {
             **_base_ctx(),
-            **drink_form_ctx(builder_drink),
+            **drink_form_ctx(builder_drink, form),
             "page_title": title,
             "status": order.status,
             "status_message": order.status_message if order.status != "cancelled" else None,
@@ -436,7 +436,7 @@ def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[
         if mode == "change" and colleague:
             # "Change Ben's drink": a guest this device added for a colleague.
             if drink is None:
-                return _page(request, session, order, joiner, cookie, mode=mode, error="Please choose a drink.", status=422, form=form)
+                return _page(request, session, order, joiner, cookie, mode=mode, error=drink_error(form, "Please choose a drink."), status=422, form=form)
             joining.set_guest_drink(session, order, joiner, colleague, drink)
             return _after_change(request, session, order, joiner, cookie)
         if joiner.user is None:
@@ -444,11 +444,11 @@ def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[
             if mode != "change" or joiner.self_id is None:
                 return _page(request, session, order, joiner, cookie)
             if drink is None:
-                return _page(request, session, order, joiner, cookie, mode=mode, error="Please choose a drink.", status=422, form=form)
+                return _page(request, session, order, joiner, cookie, mode=mode, error=drink_error(form, "Please choose a drink."), status=422, form=form)
             joining.set_guest_drink(session, order, joiner, joiner.self_id, drink)
             return _after_change(request, session, order, joiner, cookie)
         if drink is None:
-            return _page(request, session, order, joiner, cookie, mode=mode, error="Please choose a drink.", status=422, form=form)
+            return _page(request, session, order, joiner, cookie, mode=mode, error=drink_error(form, "Please choose a drink."), status=422, form=form)
         location = joining.clean_location(form.get("location"))
         existing = [line for line in joining.own_lines(session, order, joiner) if line.is_self]
         if existing:
@@ -477,7 +477,7 @@ def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[
             return _page(request, session, order, joiner, cookie, mode=mode, error="Please enter your colleague's name." if mode == "colleague" else "Please enter your name.", status=422, form=form)
         drink = normalize(form.get("base_id", ""), form)
         if drink is None:
-            return _page(request, session, order, joiner, cookie, mode=mode, error="Please choose a drink.", status=422, form=form)
+            return _page(request, session, order, joiner, cookie, mode=mode, error=drink_error(form, "Please choose a drink."), status=422, form=form)
         if joiner.key is None:
             # A device with no joiner id yet uses the one its form was given.
             joiner = Joiner(
