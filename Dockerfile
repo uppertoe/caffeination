@@ -41,5 +41,11 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # proxy's X-Forwarded-Proto/For (only the proxy can reach this port). This lets
 # request.url.scheme resolve to https behind Caddy, so the identity cookie is
 # correctly marked Secure.
+#
+# --timeout-keep-alive 130: Caddy keeps an idle connection to the app for up
+# to 2 minutes (its reverse_proxy default) and reuses it for the next request.
+# Uvicorn's own default closes it after 5 seconds, so Caddy sometimes sent a
+# request down a connection the app had just closed, and answered 502. The
+# app must hold idle connections longer than Caddy does.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--proxy-headers", "--forwarded-allow-ips", "*"]
+     "--proxy-headers", "--forwarded-allow-ips", "*", "--timeout-keep-alive", "130"]

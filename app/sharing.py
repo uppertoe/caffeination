@@ -397,6 +397,15 @@ def share_view(
     )
 
 
+def next_quarter_hour(when: datetime) -> datetime:
+    """The time rounded up to the quarter hour: 3:37 pm gives 3:45 pm, and
+    3:45 pm stays as it is."""
+    minute = when.replace(second=0, microsecond=0)
+    if minute < when:
+        minute += timedelta(minutes=1)
+    return minute + timedelta(minutes=-minute.minute % 15)
+
+
 def local_input_value(when: datetime) -> str:
     """A datetime as a datetime-local input value, in local time."""
     local = _aware(when).astimezone(ZoneInfo(get_settings().timezone))
