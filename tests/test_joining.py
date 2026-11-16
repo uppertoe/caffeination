@@ -1091,8 +1091,48 @@ def test_the_share_panel_offers_the_join_link_to_copy():
         _onboard(sarah, "Sarah", base_id="flat_white")
         code = _share(sarah)
         home = sarah.get("/")
-    assert "Copy link" in home.text and "Share link" in home.text
+    assert "Copy invitation" in home.text and "Share link" in home.text
     assert f"http://testserver/j/{code}" in home.text
+    # The sentence that goes with the link, ending in a colon before it.
+    assert re.search(r"text: &#34;Sarah is ordering coffee\. You can add your drink here until \d+:\d\d [ap]m:&#34;", home.text) \
+        or re.search(r'text: "Sarah is ordering coffee\. You can add your drink here until \d+:\d\d [ap]m:"', T(home))
+
+
+def test_the_invitation_names_the_occasion():
+    from app.sharing import invitation
+
+    assert invitation("Sarah", None, "9:40 am") == (
+        "Sarah is ordering coffee. You can add your drink here until 9:40 am")
+    assert invitation("Sarah", "Friday meeting", "4:00 pm on Sunday 15 November") == (
+        "Sarah is ordering coffee for the Friday meeting. "
+        "You can add your drink here until 4:00 pm on Sunday 15 November")
+    assert invitation("Sarah", "The Friday meeting", "9:40 am").startswith(
+        "Sarah is ordering coffee for the Friday meeting.")
+
+
+def _preview(page: str) -> dict:
+    head = page.split("</head>")[0]
+    return dict(re.findall(r'<meta (?:property|name)="((?:og|twitter):[^"]+)" content="([^"]*)"', head))
+
+
+def test_a_join_link_previews_the_invitation_while_it_takes_drinks():
+    with _client() as sarah, _client() as bot:
+        _onboard(sarah, "Sarah", base_id="flat_white")
+        code = _share(sarah)
+        open_page = T(bot.get(f"/j/{code}"))
+        sarah.post("/order/joins/close")
+        locked_page = T(bot.get(f"/j/{code}"))
+        unknown = T(bot.get("/j/ZZZZZZ"))
+    tags = _preview(open_page)
+    assert tags["og:title"] == "Add your drink to Sarah's order"
+    assert re.fullmatch(r"Sarah is ordering coffee\. You can add your drink here until \d+:\d\d [ap]m", tags["og:description"])
+    assert tags["og:image"].startswith("http://testserver/static/share-card.png")
+    assert tags["twitter:card"] == "summary_large_image"
+    # Once the order stops taking drinks, and for an unknown code, the plain preview.
+    for page in (locked_page, unknown):
+        tags = _preview(page)
+        assert "og:image" not in tags and "og:description" not in tags
+        assert tags.get("og:title", "").startswith("caffeine")
 
 
 # ---- A guest keeping their drink as their usual ----------------------------

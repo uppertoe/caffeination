@@ -41,6 +41,12 @@
       })();
     </script>
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
+    {# What a chat app shows for a link to this page. The join page
+       overrides it while its order takes drinks. #}
+    {% block preview %}
+    <meta property="og:site_name" content="{{ app_name }}" />
+    <meta property="og:title" content="{{ app_name }}" />
+    {% endblock %}
 
     <!-- Icons & PWA manifest -->
     <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml" />
