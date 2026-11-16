@@ -79,10 +79,12 @@ def is_gone(ctx: dict) -> bool:
 def order_section_ctx(session: Session, user: User, order_id: Optional[int] = None) -> dict:
     view = load_order_view(session, user, order_id)
     drink_count = sum(1 for row in view.rows if row.saved is not None)
+    owner_name = user.display_name or "The buyer"
     share = sharing.share_view(
-        view.order, drink_count, by_code=sum(1 for row in view.rows if row.via_code)
+        view.order, drink_count, by_code=sum(1 for row in view.rows if row.via_code),
+        owner_name=owner_name,
     )
-    advance = [sharing.share_view(a.order, a.drink_count) for a in view.advance]
+    advance = [sharing.share_view(a.order, a.drink_count, owner_name=owner_name) for a in view.advance]
     advance = [(a.order.id, s) for a, s in zip(view.advance, advance) if s is not None]
     ctx = {
         "rows": view.rows,

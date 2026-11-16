@@ -302,6 +302,17 @@ def format_until(when: datetime, now: Optional[datetime] = None) -> str:
     return f"{clock} on {local:%A} {local.day} {local:%B}"
 
 
+def invitation(owner_name: str, order_name: Optional[str], until: str) -> str:
+    """The sentence that goes with a shared link, in the group chat and in
+    the link's preview: "Sarah is ordering coffee for the Friday meeting.
+    You can add your drink here until 4:00 pm on Sunday 15 November"."""
+    occasion = ""
+    if order_name:
+        name = order_name[4:] if order_name.lower().startswith("the ") else order_name
+        occasion = f" for the {name}"
+    return f"{owner_name} is ordering coffee{occasion}. You can add your drink here until {until}"
+
+
 _NUMBER_WORDS = (
     "no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
     "ten", "eleven", "twelve",
@@ -335,6 +346,7 @@ class ShareView:
     status_message: Optional[str] = None
     # The updates the buyer can still send: the current status and later ones.
     update_options: tuple = ()
+    invite: str = ""  # the sentence copied with the link (invitation())
 
     @property
     def accepting(self) -> bool:
@@ -347,7 +359,8 @@ class ShareView:
 
 
 def share_view(
-    order: Optional[Order], drink_count: int, by_code: int = 0, now: Optional[datetime] = None
+    order: Optional[Order], drink_count: int, by_code: int = 0, now: Optional[datetime] = None,
+    owner_name: str = "The buyer",
 ) -> Optional[ShareView]:
     """The sharing panel's facts for an order, or None if it isn't shared."""
     if order is None or order.code is None or order.joins_close_at is None:
@@ -372,6 +385,7 @@ def share_view(
         join_path=join_path(order.code),
         closes_label=format_time(order.joins_close_at, now),
         closes_sentence=format_until(order.joins_close_at, now),
+        invite=invitation(owner_name, order.name, format_until(order.joins_close_at, now)),
         drink_count=drink_count,
         max_drinks=order.max_drinks,
         by_code=by_code,

@@ -248,6 +248,11 @@ def register(app: FastAPI, templates: Jinja2Templates, drink_form_ctx: Callable[
             "order_location": order.location,
             "until": sharing.format_until(order.joins_close_at) if order.joins_close_at else "",
             "until_short": sharing.format_time(order.joins_close_at) if order.joins_close_at else "",
+            # The link's preview (join.html), in the words the buyer copied.
+            "invite": (
+                sharing.invitation(owner_name, order.name, sharing.format_until(order.joins_close_at))
+                if order.joins_close_at else ""
+            ),
             "count": count,
             "max_drinks": order.max_drinks,
             "default_cap": order.max_drinks == sharing.DEFAULT_MAX_DRINKS,

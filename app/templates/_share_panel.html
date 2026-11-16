@@ -134,15 +134,26 @@
     <p class="share-code-text" aria-label="Code {{ share.code | join(' ') }}">{{ share.code_display }}</p>
     {% if request is defined %}<p class="share-code-help">Colleagues can also enter the code at {{ request.base_url.netloc }}/join.</p>{% endif %}
     {# For a group chat: on a phone, the phone's own share sheet; elsewhere,
-       the link copied. The link works without signing in. #}
+       the invitation copied, a sentence and then the link. The link works
+       without signing in. #}
+    <div class="share-link-row">
     <button type="button" class="secondary outline share-link"
-      x-data='{ copied: false, sheet: !!navigator.share && matchMedia("(pointer: coarse)").matches, url: {{ join_url | tojson }}, title: {{ (share.name or "") | tojson }} }'
-      @click="sheet ? navigator.share(title ? { title, url } : { url }).catch(() => {}) : navigator.clipboard.writeText(url).then(() => { copied = true; setTimeout(() => copied = false, 2000) })">
-      {{ icon("link") }}
+      x-data='{ copied: false, sheet: !!navigator.share && matchMedia("(pointer: coarse)").matches, url: {{ join_url | tojson }}, title: {{ (share.name or "") | tojson }}, text: {{ (share.invite ~ ":") | tojson }} }'
+      @click="sheet ? navigator.share(title ? { title, text, url } : { text, url }).catch(() => {}) : navigator.clipboard.writeText(text + '\n' + url).then(() => { copied = true; setTimeout(() => copied = false, 2000) })">
+      {{ icon("message") }}
       <span x-show="sheet" x-cloak>Share link</span>
-      <span x-show="!sheet && !copied">Copy link</span>
+      <span x-show="!sheet && !copied">Copy invitation</span>
       <span x-show="!sheet && copied" x-cloak>Copied ✓</span>
     </button>
+    {# The bare link, for an email or a calendar invite. #}
+    <button type="button" class="secondary outline icon-circle share-link-only"
+      x-data='{ copied: false, url: {{ join_url | tojson }} }'
+      :aria-label='copied ? "Link copied" : "Copy the link only"' aria-label="Copy the link only" title="Copy the link only"
+      @click="navigator.clipboard.writeText(url).then(() => { copied = true; setTimeout(() => copied = false, 2000) })">
+      <span x-show="!copied">{{ icon("link") }}</span>
+      <span x-show="copied" x-cloak>{{ icon("check") }}</span>
+    </button>
+    </div>
     {# Notices while this page is open (coffee.js). Hidden where the browser
        has no notifications, such as Safari on an iPhone outside the home
        screen app. #}
