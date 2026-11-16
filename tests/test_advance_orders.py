@@ -341,3 +341,27 @@ def test_the_delete_dialog_counts_the_order_and_its_joiners():
         joined = T(sarah.get(f"/orders/{oid}/delete"))
     assert "2 drinks" in joined and "1 joined by code" in joined
     assert "Colleagues who joined will see that the order has been cancelled." in joined
+
+
+def test_closing_times_round_up_to_the_quarter_hour():
+    from app.sharing import next_quarter_hour
+
+    t = datetime(2026, 11, 16, 15, 37, 12, tzinfo=timezone.utc)
+    assert next_quarter_hour(t) == t.replace(minute=45, second=0)
+    assert next_quarter_hour(t.replace(minute=45, second=0)) == t.replace(minute=45, second=0)
+    assert next_quarter_hour(t.replace(minute=45, second=1)) == t.replace(hour=16, minute=0, second=0)
+    assert next_quarter_hour(t.replace(minute=59)) == t.replace(hour=16, minute=0, second=0)
+
+
+def test_default_closing_times():
+    """An advance order starts at this time tomorrow, an everyday order's
+    chosen time an hour from now, both on a quarter hour."""
+    from app import sharing
+    from app.order_routes import share_form_ctx
+
+    now = datetime.now(timezone.utc)
+    for advance, ahead in ((True, timedelta(days=1)), (False, timedelta(hours=1))):
+        value = share_form_ctx(advance=advance)["share_form"]["closes_at"]
+        assert int(value[-2:]) % 15 == 0
+        when = sharing.parse_closing_time(value)
+        assert now + ahead <= when + timedelta(minutes=1) and when < now + ahead + timedelta(minutes=15)

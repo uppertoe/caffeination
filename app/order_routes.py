@@ -164,8 +164,13 @@ def share_form_ctx(
         "share_form": {
             "advance": advance,
             "when": "chosen" if advance or form.get("when") == "chosen" else "soon",
+            # An advance order starts at this time tomorrow; a closing time
+            # chosen for an everyday order, an hour from now. Both are
+            # rounded up to the quarter hour.
             "closes_at": form.get("closes_at")
-            or sharing.local_input_value(now + timedelta(days=1)),
+            or sharing.local_input_value(
+                sharing.next_quarter_hour(now + (timedelta(days=1) if advance else timedelta(hours=1)))
+            ),
             "min": sharing.local_input_value(now),
             "max": sharing.local_input_value(now + sharing.MAX_AHEAD),
             "name": form.get("name", ""),
