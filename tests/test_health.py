@@ -33,6 +33,15 @@ def test_index_configures_htmx_to_swap_4xx_responses():
     assert '{"code":"[4]..","swap":true}' in r.text
 
 
+def test_htmx_does_not_settle_style():
+    """Alpine's x-show owns the style attribute. If htmx settles it, a
+    whole-section re-render leaves the collapsed inactive roster rows shown
+    and ignoring the filter."""
+    with _client() as client:
+        r = client.get("/")
+    assert '"attributesToSettle":["class","width","height"]' in r.text
+
+
 def test_webmanifest_uses_app_name(monkeypatch):
     monkeypatch.setenv("APP_NAME", "caffeine@Annex")
     from app.config import get_settings

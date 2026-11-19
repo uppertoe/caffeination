@@ -76,8 +76,13 @@
     <!-- htmx 2 refuses to swap 4xx responses by default, but our validation
          errors (409 name taken, 422 bad input, 404 stale claim) come back as
          re-rendered fragments that must reach the DOM. Swap 4xx; keep 5xx as
-         errors. -->
-    <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[4]..","swap":true},{"code":"[5]..","swap":false,"error":true}]}' />
+         errors.
+         style is left out of attributesToSettle because Alpine owns it:
+         htmx would copy the old row's x-show display:none onto the new row,
+         Alpine would take the row as already hidden, and the settle would
+         then strip the style, leaving collapsed inactive roster rows shown
+         and deaf to the filter after every whole-section re-render. -->
+    <meta name="htmx-config" content='{"attributesToSettle":["class","width","height"],"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[4]..","swap":true},{"code":"[5]..","swap":false,"error":true}]}' />
 
     <!-- Vendored bundles — no external CDN (works on locked-down networks).
          All three scripts are deferred so they never block first paint;
